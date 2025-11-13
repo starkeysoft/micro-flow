@@ -1,0 +1,26 @@
+{
+  "name": "frontend-flow",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "node build.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "pipeline": "npm test && npm run build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "date-fns": "^4.1.0",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.0",
+    "happy-dom": "^20.0.10",
+    "vitest": "^4.0.8"
+  }
+}
