@@ -16,9 +16,11 @@
   "type": "module",
   "dependencies": {
     "date-fns": "^4.1.0",
+    "node-schedule": "^2.1.1",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.0.8",
     "esbuild": "^0.27.0",
     "happy-dom": "^20.0.10",
     "vitest": "^4.0.8"

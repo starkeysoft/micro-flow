@@ -14,7 +14,7 @@ export default class ActionStep extends Step {
    * @constructor
    * @param {Object} options - Configuration options for the action step.
    * @param {string} [options.name=''] - The name of the action step.
-   * @param {Step | Workflow | Function} [options.callable=()=>{}] - The function to execute when this step runs.
+   * @param {Step | Workflow | Function} [options.callable=()=>{}] - The step, workflow, or function to execute when this step runs.
    */
   constructor({ name = '', callable = async () => {} } = {}) {
     super({

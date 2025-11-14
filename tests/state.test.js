@@ -63,4 +63,56 @@ describe('State', () => {
       state.set('id', 'new-id');
     }).toThrow();
   });
+
+  it('should return the entire state object with getState', () => {
+    state.set('id', '123');
+    state.set('name', 'test');
+    
+    const stateObj = state.getState();
+    
+    expect(stateObj).toHaveProperty('id', '123');
+    expect(stateObj).toHaveProperty('name', 'test');
+    expect(stateObj).toHaveProperty('exit_on_failure', true);
+  });
+
+  it('should handle setting undefined and null values', () => {
+    state.set('custom_field', undefined);
+    state.set('another_field', null);
+    
+    expect(state.get('custom_field')).toBe(undefined);
+    expect(state.get('another_field')).toBe(null);
+  });
+
+  it('should initialize with custom initial state', () => {
+    const customState = new State({ 
+      id: 'custom-id', 
+      name: 'custom-workflow',
+      custom_prop: 'custom-value'
+    });
+    
+    expect(customState.get('id')).toBe('custom-id');
+    expect(customState.get('name')).toBe('custom-workflow');
+    expect(customState.get('custom_prop')).toBe('custom-value');
+    // Default values should still be present
+    expect(customState.get('exit_on_failure')).toBe(true);
+  });
+
+  it('should not modify original when modifying cloned state', () => {
+    const nestedObj = { nested: { value: 'original' } };
+    state.set('data', nestedObj);
+    
+    const clone = state.getStateClone();
+    clone.data.nested.value = 'modified';
+    
+    expect(state.get('data').nested.value).toBe('original');
+  });
+
+  it('should freeze state making it immutable', () => {
+    state.set('value', 'original');
+    state.freeze();
+    
+    expect(() => {
+      state.set('value', 'modified');
+    }).toThrow();
+  });
 });

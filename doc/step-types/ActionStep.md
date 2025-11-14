@@ -33,7 +33,7 @@ Creates a new ActionStep instance.
 
 - `options` (Object) *[optional]* - Configuration options for the action step
   - `name` (string) *[optional]* - The name of the action step (default: `''`)
-  - `callable` (Function) *[optional]* - The function to execute when this step runs (default: `async () => {}`)
+  - `callable` (Step | Workflow | Function) *[optional]* - The step, workflow, or function to execute when this step runs (default: `async () => {}`)
 
 **Example:**
 
@@ -55,7 +55,7 @@ Sets the callable function for this action step. This is the only step that can 
 
 **Parameters:**
 
-- `callable` (Function) - The function to execute when this step runs
+- `callable` (Step | Workflow | Function) - The step, workflow, or function to execute when this step runs
 
 **Returns:** `void`
 

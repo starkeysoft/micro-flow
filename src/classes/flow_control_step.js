@@ -38,8 +38,8 @@ export default class FlowControlStep extends LogicStep {
       type: logic_step_types.FLOW_CONTROL,
       name,
       callable: flow_control_type === flow_control_types.BREAK
-        ? this.should_breakFlow.bind(this)
-        : this.should_continueFlow.bind(this)
+        ? this.shouldBreakFlow.bind(this)
+        : this.shouldContinueFlow.bind(this)
     });
   }
 
@@ -48,7 +48,7 @@ export default class FlowControlStep extends LogicStep {
    * @async
    * @returns {Promise<boolean>} True if the loop should break, false otherwise.
    */
-  async should_breakFlow() {
+  async shouldBreakFlow() {
     if (this.checkCondition()) {
       this.logStep(`Flow control condition met for step: ${this.name}`);
       this.should_break = true;
@@ -65,7 +65,7 @@ export default class FlowControlStep extends LogicStep {
    * @async
    * @returns {Promise<boolean>} True if the loop should continue, false otherwise.
    */
-  async should_continueFlow() {
+  async shouldContinueFlow() {
     if (this.checkCondition()) {
       this.logStep(`Flow control condition met for step: ${this.name}`);
       this.should_continue = false;

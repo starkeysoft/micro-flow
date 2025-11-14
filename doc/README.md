@@ -198,7 +198,6 @@ Enumeration constants used throughout the workflow system for type safety and co
 - `conditional_step_comparators` - Comparison operators
 - `delay_types` - Delay types (relative/absolute)
 - `loop_types` - Loop types (while/for-each)
-- `flow_control_types` - Flow control (break/continue)
 - `step_event_names` - Step lifecycle events
 - `workflow_event_names` - Workflow lifecycle events
 - `sub_step_types` - Dynamic step class mappings

@@ -22,7 +22,6 @@ class FlowControlStep extends LogicStep
 | `step_name` | `string` (static) | `'flow_control'` | Static identifier |
 | `should_break` | `boolean` | `false` | Flag indicating if loop should break |
 | `should_continue` | `boolean` | `false` | Flag indicating if loop should continue |
-| `flow_control_type` | `string` | `flow_control_types.BREAK` | Type of flow control |
 
 *Inherits all properties from [LogicStep](LogicStep.md)*
 
@@ -38,20 +37,18 @@ Creates a new FlowControlStep instance.
   - `subject` (*) - The value to compare against
   - `operator` (string) - The comparison operator
   - `value` (*) - The value to compare the subject with
-  - `flow_control_type` (string) *[optional]* - BREAK or CONTINUE (default: BREAK)
   - `name` (string) *[optional]* - The name of the step (default: `''`)
 
 **Example:**
 
 ```javascript
-import { FlowControlStep, flow_control_types } from './classes';
+import { FlowControlStep } from './classes';
 
 const breakStep = new FlowControlStep({
   name: 'Break on Error',
   subject: (context) => context.errorCount,
   operator: '>=',
-  value: 3,
-  flow_control_type: flow_control_types.BREAK
+  value: 3
 });
 ```
 
@@ -65,14 +62,6 @@ Determines whether to break the loop based on the condition.
 
 **Async:** Yes
 
-### `should_continueFlow()`
-
-Determines whether to continue the loop based on the condition.
-
-**Returns:** `Promise<boolean>` - True if loop should continue
-
-**Async:** Yes
-
 ## Usage Examples
 
 ### Break on Condition
@@ -82,8 +71,7 @@ import {
   LoopStep, 
   FlowControlStep, 
   Workflow, 
-  ActionStep,
-  flow_control_types 
+  ActionStep
 } from './classes';
 
 const loopWorkflow = new Workflow([
@@ -101,8 +89,7 @@ const loopWorkflow = new Workflow([
     name: 'Break on Too Many Errors',
     subject: (context) => context.errorCount,
     operator: '>=',
-    value: 3,
-    flow_control_type: flow_control_types.BREAK
+    value: 3
   })
 ]);
 
@@ -121,8 +108,7 @@ import {
   LoopStep, 
   FlowControlStep, 
   Workflow, 
-  ActionStep,
-  flow_control_types 
+  ActionStep
 } from './classes';
 
 const loopWorkflow = new Workflow([
@@ -137,8 +123,7 @@ const loopWorkflow = new Workflow([
     name: 'Skip Invalid Items',
     subject: (context) => context.currentItem.isValid,
     operator: '===',
-    value: false,
-    flow_control_type: flow_control_types.CONTINUE
+    value: false
   }),
   new ActionStep({
     name: 'Process Valid Item',

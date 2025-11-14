@@ -278,7 +278,6 @@ import flow_control_types from './enums/flow_control_types.js';
 
 const breakStep = new FlowControlStep({
   name: 'Break if error',
-  flow_control_type: flow_control_types.BREAK,
   subject: (context) => context.hasError,
   operator: '===',
   value: true
@@ -286,7 +285,6 @@ const breakStep = new FlowControlStep({
 
 const continueStep = new FlowControlStep({
   name: 'Skip invalid items',
-  flow_control_type: flow_control_types.CONTINUE,
   subject: (context) => context.current.isValid,
   operator: '===',
   value: false
@@ -431,7 +429,6 @@ const step = new ActionStep({
 ✅ **DO:**
 ```javascript
 import loop_types from './enums/loop_types.js';
-import flow_control_types from './enums/flow_control_types.js';
 ```
 
 ❌ **DON'T:**
