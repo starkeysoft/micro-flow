@@ -172,7 +172,7 @@ export default class Step {
 
     this.context.steps_by_id = {};
 
-    this.context.steps.forEach(step => {
+    this.context?.steps.forEach(step => {
       this.context.steps_by_id[step.id] = step;
     });
   }
