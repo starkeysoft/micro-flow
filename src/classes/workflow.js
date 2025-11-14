@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import WorkflowEvents from './workflow_event.js';
-import step_types from '../enums/step_types';
+import step_types from '../enums/step_types.js';
 import WorkflowState from './state.js';
 
 /**
@@ -87,6 +87,16 @@ export default class Workflow {
     let iterator = 0;
     const steps = this.state.get('steps');
     for await (const step of steps) {
+      if (this.state.get('should_break')) {
+        break;
+      }
+
+      if (this.state.get('should_skip')) {
+        this.state.set('should_skip', false);
+        iterator++;
+        continue;
+      }
+
       this.state.set('current_step_index', iterator++);
 
       try {
@@ -173,7 +183,7 @@ export default class Workflow {
 
     this.state.set('current_step', step);
 
-    if (step.step_type === step_types.DELAY) {
+    if (step.type === step_types.DELAY) {
       this.state.get('steps')[0].markAsPending();
       step.markAsWaiting();
     } else {

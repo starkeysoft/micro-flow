@@ -57,7 +57,11 @@ export default class Step {
     try {
       // Steps can be instances of workflows
       if (this.callable instanceof Workflow) {
-        result = await this.callable.execute(this.context);
+        // Don't pass context.steps to avoid overwriting the workflow's own steps
+        const { steps, steps_by_id, ...contextWithoutSteps } = this.context || {};
+        result = await this.callable.execute(contextWithoutSteps);
+        this.markAsComplete();
+        return result;
       }
 
       // or they can be simple functions
