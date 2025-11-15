@@ -1,7 +1,8 @@
 import LogicStep from './logic_step';
 import logic_step_types from '../enums/logic_step_types.js';
+import step_types from '../enums/step_types.js';
 import Workflow from './workflow.js';
-import SubflowStep from './subflow_step.js';
+import Step from './step.js';
 
 /**
  * Represents a switch step that evaluates multiple cases and executes the matched one.
@@ -27,11 +28,12 @@ export default class SwitchStep extends LogicStep {
     super({
       type: logic_step_types.SWITCH,
       name,
-      callable: this.getMatchedCase.bind(this)
+      callable: async () => {}
     });
 
-    this.default_case = default_case;
-    this.cases = cases;
+    this.state.set('default_case', default_case);
+    this.state.set('cases', cases);
+    this.state.set('callable', this.getMatchedCase.bind(this));
   }
 
   /**
@@ -40,26 +42,29 @@ export default class SwitchStep extends LogicStep {
    * @returns {Promise<*>} The result of the matched case or default case.
    */
   async getMatchedCase() {
-    const switch_workflow = new Workflow(this.cases, `Switch Step Workflow: ${this.id}` );
-    console.log('Executing SwitchStep with cases:', this.cases.length);
+    const cases = this.state.get('cases');
+    const default_case = this.state.get('default_case');
+    const switch_workflow = new Workflow({ steps: cases, name: `Switch Step Workflow: ${this.state.get('id')}` });
+    console.log('Executing SwitchStep with cases:', cases.length);
 
-    if (this.default_case) {
-      if (!(this.default_case instanceof Workflow)) {
+    if (default_case) {
+      if (!(default_case instanceof Workflow)) {
         console.log('Adding default case as step.');
 
-        switch_workflow.pushStep(this.default_case);
+        switch_workflow.pushStep(default_case);
 
         return await switch_workflow.execute();
       }
 
-      console.log('Adding default case as sub-workflow.');
+      console.log('Adding default case as workflow.');
 
-      const sub_workflow_step = new SubflowStep({
-        subflow: this.default_case,
-        name: this.default_case.name ? `${this.default_case.name} Subflow` : 'Default Case Subflow'
+      const workflow_step = new Step({
+        type: step_types.ACTION,
+        callable: default_case,
+        name: default_case.state.get('name') ? `${default_case.state.get('name')} Workflow` : 'Default Case Workflow'
       });
 
-      switch_workflow.pushStep(sub_workflow_step);
+      switch_workflow.pushStep(workflow_step);
 
       return await switch_workflow.execute();
     }

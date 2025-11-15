@@ -10,7 +10,7 @@ describe('DelayStep', () => {
   let delayStep;
 
   afterEach(() => {
-    if (delayStep && delayStep.scheduled_job) {
+    if (delayStep && delayStep.state.get('scheduled_job')) {
       delayStep.cancel();
     }
   });
@@ -19,31 +19,31 @@ describe('DelayStep', () => {
     it('should initialize with default properties', () => {
       delayStep = new DelayStep();
       
-      expect(delayStep.name).toBe('');
-      expect(delayStep.type).toBe(step_types.DELAY);
-      expect(delayStep.delay_duration).toBe(1000);
-      expect(delayStep.delay_type).toBe(delay_types.ABSOLUTE);
-      expect(delayStep.scheduled_job).toBe(null);
-      expect(delayStep.callable).toBeDefined();
+      expect(delayStep.state.get('name')).toBe('');
+      expect(delayStep.state.get('type')).toBe(step_types.DELAY);
+      expect(delayStep.state.get('delay_duration')).toBe(1000);
+      expect(delayStep.state.get('delay_type')).toBe(delay_types.ABSOLUTE);
+      expect(delayStep.state.get('scheduled_job')).toBe(null);
+      expect(delayStep.state.get('callable')).toBeDefined();
       expect(typeof delayStep.callable).toBe('function');
     });
 
     it('should initialize with custom name', () => {
       delayStep = new DelayStep({ name: 'custom-delay' });
       
-      expect(delayStep.name).toBe('custom-delay');
+      expect(delayStep.state.get('name')).toBe('custom-delay');
     });
 
     it('should initialize with custom delay_duration', () => {
       delayStep = new DelayStep({ delay_duration: 5000 });
       
-      expect(delayStep.delay_duration).toBe(5000);
+      expect(delayStep.state.get('delay_duration')).toBe(5000);
     });
 
     it('should initialize with RELATIVE delay_type', () => {
       delayStep = new DelayStep({ delay_type: delay_types.RELATIVE });
       
-      expect(delayStep.delay_type).toBe(delay_types.RELATIVE);
+      expect(delayStep.state.get('delay_type')).toBe(delay_types.RELATIVE);
     });
 
     it('should bind callable to the correct delay method based on delay_type', () => {
@@ -129,7 +129,7 @@ describe('DelayStep', () => {
       const promise = delayStep.absolute(futureDate);
       
       // Check that a job was scheduled
-      expect(delayStep.scheduled_job).toBeDefined();
+      expect(delayStep.state.get('scheduled_job')).toBeDefined();
       
       await promise;
     });
@@ -200,7 +200,7 @@ describe('DelayStep', () => {
       expect(elapsed).toBeLessThan(duration + 100);
       
       // Should not have created a scheduled job for short durations
-      expect(delayStep.scheduled_job).toBeNull();
+      expect(delayStep.state.get('scheduled_job')).toBeNull();
     });
 
     it('should use node-schedule for durations 100ms or longer', async () => {
@@ -210,7 +210,7 @@ describe('DelayStep', () => {
       const promise = delayStep.relative(duration);
       
       // Should have created a scheduled job
-      expect(delayStep.scheduled_job).toBeDefined();
+      expect(delayStep.state.get('scheduled_job')).toBeDefined();
       
       await promise;
       
@@ -288,22 +288,22 @@ describe('DelayStep', () => {
       const futureDate = addSeconds(new Date(), 10);
       const promise = delayStep.absolute(futureDate);
       
-      expect(delayStep.scheduled_job).toBeDefined();
+      expect(delayStep.state.get('scheduled_job')).toBeDefined();
       
       delayStep.cancel();
       
-      expect(delayStep.scheduled_job).toBe(null);
+      expect(delayStep.state.get('scheduled_job')).toBe(null);
     });
 
     it('should do nothing if no scheduled job exists', () => {
       delayStep = new DelayStep();
       
-      expect(delayStep.scheduled_job).toBe(null);
+      expect(delayStep.state.get('scheduled_job')).toBe(null);
       
       // Should not throw error
       delayStep.cancel();
       
-      expect(delayStep.scheduled_job).toBe(null);
+      expect(delayStep.state.get('scheduled_job')).toBe(null);
     });
 
     it('should cancel job for relative delays', async () => {
@@ -314,11 +314,11 @@ describe('DelayStep', () => {
       
       const promise = delayStep.relative(5000);
       
-      expect(delayStep.scheduled_job).toBeDefined();
+      expect(delayStep.state.get('scheduled_job')).toBeDefined();
       
       delayStep.cancel();
       
-      expect(delayStep.scheduled_job).toBe(null);
+      expect(delayStep.state.get('scheduled_job')).toBe(null);
     });
   });
 
@@ -330,20 +330,20 @@ describe('DelayStep', () => {
         delay_type: delay_types.RELATIVE
       });
       
-      delayStep.setContext({ steps: [] });
+      delayStep.state.set('steps', []);
       
       const startTime = Date.now();
       await delayStep.execute();
       const elapsed = Date.now() - startTime;
       
-      expect(delayStep.status).toBe(step_statuses.COMPLETE);
+      expect(delayStep.state.get('status')).toBe(step_statuses.COMPLETE);
       expect(elapsed).toBeGreaterThanOrEqual(30);
     });
 
     it('should have correct step type', () => {
       delayStep = new DelayStep();
       
-      expect(delayStep.type).toBe(step_types.DELAY);
+      expect(delayStep.state.get('type')).toBe(step_types.DELAY);
     });
 
     it('should execute absolute delay through callable', async () => {
@@ -353,13 +353,13 @@ describe('DelayStep', () => {
         delay_type: delay_types.ABSOLUTE
       });
       
-      delayStep.setContext({ steps: [] });
+      delayStep.state.set('steps', []);
       
       const startTime = Date.now();
       await delayStep.execute();
       const elapsed = Date.now() - startTime;
       
-      expect(delayStep.status).toBe(step_statuses.COMPLETE);
+      expect(delayStep.state.get('status')).toBe(step_statuses.COMPLETE);
       expect(elapsed).toBeGreaterThanOrEqual(50);
     });
 
@@ -369,12 +369,12 @@ describe('DelayStep', () => {
         delay_type: delay_types.ABSOLUTE
       });
       
-      delayStep.setContext({ steps: [] });
+      delayStep.state.set('steps', []);
       
       await expect(delayStep.execute())
         .rejects.toThrow('Invalid timestamp format');
       
-      expect(delayStep.status).toBe(step_statuses.FAILED);
+      expect(delayStep.state.get('status')).toBe(step_statuses.FAILED);
     });
 
     it('should handle errors in relative delay', async () => {
@@ -383,12 +383,12 @@ describe('DelayStep', () => {
         delay_type: delay_types.RELATIVE
       });
       
-      delayStep.setContext({ steps: [] });
+      delayStep.state.set('steps', []);
       
       await expect(delayStep.execute())
         .rejects.toThrow('Duration must be a positive number');
       
-      expect(delayStep.status).toBe(step_statuses.FAILED);
+      expect(delayStep.state.get('status')).toBe(step_statuses.FAILED);
     });
   });
 
@@ -428,10 +428,10 @@ describe('DelayStep', () => {
         delay_type: delay_types.RELATIVE
       });
       
-      expect(delayStep.name).toBe('full-config-delay');
-      expect(delayStep.delay_duration).toBe(2500);
-      expect(delayStep.delay_type).toBe(delay_types.RELATIVE);
-      expect(delayStep.type).toBe(step_types.DELAY);
+      expect(delayStep.state.get('name')).toBe('full-config-delay');
+      expect(delayStep.state.get('delay_duration')).toBe(2500);
+      expect(delayStep.state.get('delay_type')).toBe(delay_types.RELATIVE);
+      expect(delayStep.state.get('type')).toBe(step_types.DELAY);
     });
 
     it('should handle past timestamp as number', async () => {

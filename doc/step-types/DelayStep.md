@@ -105,9 +105,10 @@ await delayStep.relative(3000); // Wait 3 seconds
 ### Relative Delay
 
 ```javascript
-import { DelayStep, Workflow, ActionStep, delay_types } from './classes';
+import { DelayStep, Workflow, Step, step_types, delay_types } from './classes';
 
-const step1 = new ActionStep({
+const step1 = new Step({
+  type: step_types.ACTION,
   name: 'Start Process',
   callable: async () => {
     console.log('Process started');
@@ -121,7 +122,8 @@ const delay = new DelayStep({
   delay_type: delay_types.RELATIVE
 });
 
-const step2 = new ActionStep({
+const step2 = new Step({
+  type: step_types.ACTION,
   name: 'Continue Process',
   callable: async () => {
     console.log('Process continued after delay');
@@ -136,7 +138,7 @@ await workflow.execute();
 ### Absolute Delay (Scheduled Execution)
 
 ```javascript
-import { DelayStep, ActionStep, Workflow, delay_types } from './classes';
+import { DelayStep, Step, step_types, Workflow, delay_types } from './classes';
 
 // Schedule execution for a specific time
 const scheduledTime = new Date('2025-12-25T12:00:00');
@@ -147,7 +149,8 @@ const scheduleDelay = new DelayStep({
   delay_type: delay_types.ABSOLUTE
 });
 
-const holidayAction = new ActionStep({
+const holidayAction = new Step({
+  type: step_types.ACTION,
   name: 'Send Holiday Greetings',
   callable: async () => {
     console.log('Merry Christmas!');
@@ -163,14 +166,15 @@ await workflow.execute();
 ### Rate Limiting
 
 ```javascript
-import { DelayStep, ActionStep, delay_types } from './classes';
+import { DelayStep, Step, step_types, delay_types } from './classes';
 
 async function processWithRateLimit(items) {
   const steps = [];
   
   for (const item of items) {
     // Add processing step
-    steps.push(new ActionStep({
+    steps.push(new Step({
+      type: step_types.ACTION,
       name: `Process ${item.id}`,
       callable: async () => await processItem(item)
     }));
@@ -191,13 +195,14 @@ async function processWithRateLimit(items) {
 ### Retry with Backoff
 
 ```javascript
-import { DelayStep, ActionStep, delay_types } from './classes';
+import { DelayStep, Step, step_types, delay_types } from './classes';
 
 async function retryWithBackoff(operation, maxRetries = 3) {
   const steps = [];
   
   for (let i = 0; i < maxRetries; i++) {
-    steps.push(new ActionStep({
+    steps.push(new Step({
+      type: step_types.ACTION,
       name: `Attempt ${i + 1}`,
       callable: async (context) => {
         try {
@@ -264,5 +269,5 @@ new DelayStep({
 ## Related Classes
 
 - [Step](../base-classes/Step.md) - Base step class
-- [ActionStep](ActionStep.md) - Execute actions
+
 - [Workflow](../base-classes/Workflow.md) - Orchestrate steps

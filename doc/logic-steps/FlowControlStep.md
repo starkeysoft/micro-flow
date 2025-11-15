@@ -20,6 +20,7 @@ class FlowControlStep extends LogicStep
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `step_name` | `string` (static) | `'flow_control'` | Static identifier |
+| `flow_control_type` | `string` | `flow_control_types.BREAK` | Type of flow control ('break' or 'continue') |
 | `should_break` | `boolean` | `false` | Flag indicating if loop should break |
 | `should_continue` | `boolean` | `false` | Flag indicating if loop should continue |
 
@@ -37,28 +38,40 @@ Creates a new FlowControlStep instance.
   - `subject` (*) - The value to compare against
   - `operator` (string) - The comparison operator
   - `value` (*) - The value to compare the subject with
+  - `flow_control_type` (string) *[optional]* - The type of flow control from flow_control_types enum: 'break' or 'continue' (default: `'break'`)
   - `name` (string) *[optional]* - The name of the step (default: `''`)
 
 **Example:**
 
 ```javascript
-import { FlowControlStep } from './classes';
+import { FlowControlStep, flow_control_types } from './classes';
 
 const breakStep = new FlowControlStep({
   name: 'Break on Error',
   subject: (context) => context.errorCount,
   operator: '>=',
-  value: 3
+  value: 3,
+  flow_control_type: flow_control_types.BREAK
 });
 ```
 
 ## Methods
 
-### `should_breakFlow()`
+### `shouldBreakFlow()`
 
 Determines whether to break the loop based on the condition.
 
-**Returns:** `Promise<boolean>` - True if loop should break
+**Returns:** `Promise<boolean>` - True if the loop should break, false otherwise
+
+**Async:** Yes
+
+---
+
+### `shouldContinueFlow()`
+
+Determines whether to continue the loop based on the condition.
+
+**Returns:** `Promise<boolean>` - True if the loop should continue, false otherwise
 
 **Async:** Yes
 
@@ -71,12 +84,14 @@ import {
   LoopStep, 
   FlowControlStep, 
   Workflow, 
-  ActionStep
+  Step,
+  step_types
 } from './classes';
 
 const loopWorkflow = new Workflow([
-  new ActionStep({
+  new Step({
     name: 'Process Item',
+    type: step_types.ACTION,
     callable: async (context) => {
       const item = context.items[context.index];
       if (!item.isValid) {
@@ -108,12 +123,14 @@ import {
   LoopStep, 
   FlowControlStep, 
   Workflow, 
-  ActionStep
+  Step,
+  step_types
 } from './classes';
 
 const loopWorkflow = new Workflow([
-  new ActionStep({
+  new Step({
     name: 'Get Item',
+    type: step_types.ACTION,
     callable: async (context) => {
       context.currentItem = context.items[context.index];
       context.index++;
@@ -125,8 +142,9 @@ const loopWorkflow = new Workflow([
     operator: '===',
     value: false
   }),
-  new ActionStep({
+  new Step({
     name: 'Process Valid Item',
+    type: step_types.ACTION,
     callable: async (context) => {
       return await processItem(context.currentItem);
     }

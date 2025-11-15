@@ -9,7 +9,7 @@ import loop_types from '../enums/loop_types.js';
  * @extends LogicStep
  */
 export default class LoopStep extends LogicStep {
-  static step_name = 'loop';
+  static step_name = logic_step_types.LOOP;
   /**
    * Creates a new LoopStep instance.
    * @constructor
@@ -36,29 +36,35 @@ export default class LoopStep extends LogicStep {
     if (!sub_workflow || !(sub_workflow instanceof Workflow)) {
       throw new Error('sub_workflow must be an instance of Workflow');
     }
-    this.sub_workflow = sub_workflow;
-
-    this.subject = subject;
-    this.operator = operator
-    this.loop_type = loop_type;
-    this.iterable = iterable;
-    this.value = value
-    this.max_iterations = max_iterations;
-
     super({
       type: logic_step_types.LOOP,
       name,
-      callable: this[this.loop_type === loop_types.WHILE ? 'whileLoopStep' : 'forEachLoopStep'].bind(this)
     });
+
+    this.state.set('sub_workflow', sub_workflow);
+    this.state.set('subject', subject);
+    this.state.set('operator', operator);
+    this.state.set('loop_type', loop_type);
+    this.state.set('iterable', iterable);
+    this.state.set('value', value);
+    this.state.set('max_iterations', max_iterations);
+    this.state.set('should_break', false);
+    
+    this.state.set('callable', this[loop_type === loop_types.WHILE ? 'whileLoopStep' : 'forEachLoopStep'].bind(this));
   }
 
   /**
-   * Executes the sub-workflow associated with this loop step.
+   * Executes the sub-workflow associated with this loop step. Resets the sub-workflow's current step index after execution.
    * @async
    * @returns {Promise<*>} The result of the sub-workflow execution.
    */
   async runSubWorkflow() {
-    return await this.sub_workflow.execute();
+    const sub_workflow = this.state.get('sub_workflow');
+    const result = await sub_workflow.execute();
+
+    sub_workflow.state.set('current_step_index', 0);
+
+    return result;
   }
 
   /**
@@ -69,26 +75,33 @@ export default class LoopStep extends LogicStep {
    * @returns {Promise<void>}
    */
   async whileLoopStep() {
-    if (!this.subject || !this.operator || this.value === undefined) {
+    const subject = this.state.get('subject');
+    const operator = this.state.get('operator');
+    const value = this.state.get('value');
+    const max_iterations = this.state.get('max_iterations');
+    const sub_workflow = this.state.get('sub_workflow');
+    
+    if (!subject || !operator || value === undefined) {
       throw new Error('Invalid configuration for while loop step');
     }
 
-    this.logStep(`Starting while loop step: ${this.name}`);
+    this.logStep(`Starting while loop step: ${this.state.get('name')}`);
 
     let iterations = 0;
 
     while (this.checkCondition()) {
-      const break_on_iteration = this.max_iterations <= iterations;
-      const break_on_signal = this.sub_workflow.state.get('should_break');
-      this.should_break = break_on_iteration || break_on_signal;
+      const break_on_iteration = max_iterations <= iterations;
+      const break_on_signal = sub_workflow.state.get('should_break');
+      const should_break = break_on_iteration || break_on_signal;
+      this.state.set('should_break', should_break);
 
-      if (this.should_break) {
-        this.logStep(`Breaking out of while loop step: ${this.name} due to ${break_on_iteration ? 'max iterations reached' : 'break signal received'}`);
-        this.context.set('should_break', true);
+      if (should_break) {
+        this.logStep(`Breaking out of while loop step: ${this.state.get('name')} due to ${break_on_iteration ? 'max iterations reached' : 'break signal received'}`);
+        this.state.set('should_break', true);
         break;
       }
 
-      this.logStep(`Iteration ${iterations + 1} for loop step: ${this.name}`);
+      this.logStep(`Iteration ${iterations + 1} for loop step: ${this.state.get('name')}`);
 
       const result = await this.runSubWorkflow();
 
@@ -105,26 +118,31 @@ export default class LoopStep extends LogicStep {
    * @returns {Promise<*>}
    */
   async forEachLoopStep() {
-    if (!this.iterable || typeof this.iterable[Symbol.iterator] !== 'function') {
+    const iterable = this.state.get('iterable');
+    const max_iterations = this.state.get('max_iterations');
+    const sub_workflow = this.state.get('sub_workflow');
+    
+    if (!iterable || typeof iterable[Symbol.iterator] !== 'function') {
       throw new Error('Invalid configuration for for_each loop step');
     }
 
-    this.logStep(`Starting for_each loop step: ${this.name}`);
+    this.logStep(`Starting for_each loop step: ${this.state.get('name')}`);
 
     let iterations = 0;
 
-    for await (item of this.iterable) {
-      const break_on_iteration = this.max_iterations <= iterations;
-      const break_on_signal = this.sub_workflow.state.get('should_break');
-      this.should_break = break_on_iteration || break_on_signal;
+    for await (const item of iterable) {
+      const break_on_iteration = max_iterations <= iterations;
+      const break_on_signal = sub_workflow.state.get('should_break');
+      const should_break = break_on_iteration || break_on_signal;
+      this.state.set('should_break', should_break);
 
-      if (this.should_break) {
-        this.logStep(`Breaking out of while loop step: ${this.name} due to ${break_on_iteration ? 'max iterations reached' : 'break signal received'}`);
-        this.context.set('should_break', true);
+      if (should_break) {
+        this.logStep(`Breaking out of while loop step: ${this.state.get('name')} due to ${break_on_iteration ? 'max iterations reached' : 'break signal received'}`);
+        this.state.set('should_break', true);
         break;
       }
 
-      this.logStep(`Iteration ${iterations + 1} for loop step: ${this.name}`);
+      this.logStep(`Iteration ${iterations + 1} for loop step: ${this.state.get('name')}`);
 
       const result = await this.runSubWorkflow();
 

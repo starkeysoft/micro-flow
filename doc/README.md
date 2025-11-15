@@ -40,11 +40,12 @@ Node Workflow is a robust workflow orchestration library that enables you to bui
 ## Quick Start
 
 ```javascript
-import { Workflow, ActionStep } from './classes';
+import { Workflow, Step, step_types } from './classes';
 
 // Create steps
-const step1 = new ActionStep({
+const step1 = new Step({
   name: 'Fetch Data',
+  type: step_types.ACTION,
   callable: async (context) => {
     const data = await fetchData();
     context.data = data;
@@ -52,8 +53,9 @@ const step1 = new ActionStep({
   }
 });
 
-const step2 = new ActionStep({
+const step2 = new Step({
   name: 'Process Data',
+  type: step_types.ACTION,
   callable: async (context) => {
     return processData(context.data);
   }
@@ -107,15 +109,12 @@ Specialized step implementations for common workflow patterns.
 
 | Class | Description | Documentation |
 |-------|-------------|---------------|
-| **[ActionStep](step-types/ActionStep.md)** | Execute custom async functions | [View →](step-types/ActionStep.md) |
 | **[DelayStep](step-types/DelayStep.md)** | Pause execution for relative or absolute durations | [View →](step-types/DelayStep.md) |
-| **[SubflowStep](step-types/SubflowStep.md)** | Execute nested workflows for composition | [View →](step-types/SubflowStep.md) |
 
 **Key Features:**
 
-- **ActionStep**: Most flexible, executes any async function
+- **Step**: Base class for all steps, most flexible, executes any async function or workflow
 - **DelayStep**: Supports both relative delays (duration) and absolute delays (timestamp)
-- **SubflowStep**: Enables workflow composition and reusability
 
 ---
 
@@ -129,6 +128,7 @@ Advanced step types for implementing complex control flow logic.
 | **[ConditionalStep](logic-steps/ConditionalStep.md)** | If/else branching based on conditions | [View →](logic-steps/ConditionalStep.md) |
 | **[LoopStep](logic-steps/LoopStep.md)** | While and for-each loops | [View →](logic-steps/LoopStep.md) |
 | **[SwitchStep](logic-steps/SwitchStep.md)** | Multi-way branching (switch/case) | [View →](logic-steps/SwitchStep.md) |
+| **[SkipStep](logic-steps/SkipStep.md)** | Conditionally skip step execution | [View →](logic-steps/SkipStep.md) |
 | **[FlowControlStep](logic-steps/FlowControlStep.md)** | Break and continue for flows and loops | [View →](logic-steps/FlowControlStep.md) |
 | **[Case](logic-steps/Case.md)** | Individual case for switch statements | [View →](logic-steps/Case.md) |
 
@@ -209,24 +209,27 @@ Enumeration constants used throughout the workflow system for type safety and co
 ### Example 1: Simple Sequential Workflow
 
 ```javascript
-import { Workflow, ActionStep } from './classes';
+import { Workflow, Step, step_types } from './classes';
 
 const workflow = new Workflow([
-  new ActionStep({
+  new Step({
     name: 'Initialize',
+    type: step_types.ACTION,
     callable: async (context) => {
       context.initialized = true;
       return 'initialized';
     }
   }),
-  new ActionStep({
+  new Step({
     name: 'Process',
+    type: step_types.ACTION,
     callable: async (context) => {
       return 'processed';
     }
   }),
-  new ActionStep({
+  new Step({
     name: 'Finalize',
+    type: step_types.ACTION,
     callable: async (context) => {
       return 'complete';
     }
@@ -239,11 +242,12 @@ await workflow.execute();
 ### Example 2: Conditional Workflow
 
 ```javascript
-import { Workflow, ActionStep, ConditionalStep } from './classes';
+import { Workflow, Step, step_types, ConditionalStep } from './classes';
 
 const workflow = new Workflow([
-  new ActionStep({
+  new Step({
     name: 'Get User',
+    type: step_types.ACTION,
     callable: async (context) => {
       context.user = await getUser(context.userId);
     }
@@ -253,14 +257,16 @@ const workflow = new Workflow([
     subject: (context) => context.user.isPremium,
     operator: '===',
     value: true,
-    step_left: new ActionStep({
+    step_left: new Step({
       name: 'Premium Features',
+      type: step_types.ACTION,
       callable: async (context) => {
         return await enablePremiumFeatures(context.user);
       }
     }),
-    step_right: new ActionStep({
+    step_right: new Step({
       name: 'Standard Features',
+      type: step_types.ACTION,
       callable: async (context) => {
         return await enableStandardFeatures(context.user);
       }
@@ -274,11 +280,12 @@ await workflow.execute({ userId: 123 });
 ### Example 3: Loop Processing
 
 ```javascript
-import { LoopStep, Workflow, ActionStep, loop_types } from './classes';
+import { LoopStep, Workflow, Step, step_types, loop_types } from './classes';
 
 const itemProcessor = new Workflow([
-  new ActionStep({
+  new Step({
     name: 'Process Item',
+    type: step_types.ACTION,
     callable: async (context) => {
       const item = context.queue.shift();
       await processItem(item);
@@ -304,7 +311,7 @@ await workflow.execute({ queue: [1, 2, 3, 4, 5] });
 ### Example 4: Error Handling
 
 ```javascript
-import { Workflow, ActionStep } from './classes';
+import { Workflow, Step, step_types } from './classes';
 
 const workflow = new Workflow([], 'Error Handling Example');
 
@@ -313,8 +320,9 @@ workflow.events.on(workflow.events.event_names.WORKFLOW_ERRORED, (data) => {
   // Handle error, send notification, etc.
 });
 
-workflow.pushStep(new ActionStep({
+workflow.pushStep(new Step({
   name: 'Risky Operation',
+  type: step_types.ACTION,
   callable: async (context) => {
     try {
       return await riskyOperation();
@@ -335,35 +343,40 @@ try {
 ### Example 5: Nested Workflows
 
 ```javascript
-import { Workflow, SubflowStep, ActionStep } from './classes';
+import { Workflow, Step, step_types } from './classes';
 
 // Reusable sub-workflow
 const validationWorkflow = new Workflow([
-  new ActionStep({
+  new Step({
     name: 'Validate Email',
+    type: step_types.ACTION,
     callable: async (context) => validateEmail(context.email)
   }),
-  new ActionStep({
+  new Step({
     name: 'Validate Age',
+    type: step_types.ACTION,
     callable: async (context) => validateAge(context.age)
   })
 ], 'Validation');
 
-// Main workflow
+// Main workflow - pass workflow as callable to Step
 const mainWorkflow = new Workflow([
-  new ActionStep({
+  new Step({
     name: 'Fetch User Data',
+    type: step_types.ACTION,
     callable: async (context) => {
       const user = await fetchUser(context.userId);
       Object.assign(context, user);
     }
   }),
-  new SubflowStep({
+  new Step({
     name: 'Validate User',
-    subflow: validationWorkflow
+    type: step_types.ACTION,
+    callable: validationWorkflow
   }),
-  new ActionStep({
+  new Step({
     name: 'Save User',
+    type: step_types.ACTION,
     callable: async (context) => await saveUser(context)
   })
 ]);
@@ -422,7 +435,7 @@ await mainWorkflow.execute({ userId: 123 });
 
 ✅ **DO:**
 - Break complex workflows into reusable sub-workflows
-- Use SubflowStep for modular design
+- Pass workflows as callables to Step for modular design
 - Document workflow dependencies
 - Keep workflow hierarchy reasonable (3-4 levels max)
 
@@ -490,12 +503,11 @@ await mainWorkflow.execute({ userId: 123 });
 │  State Management │ Event Emission │ Error Handling        │
 └─────────────────────────────────────────────────────────────┘
                            │
-                           ├─→ ActionStep (execute functions)
+                           ├─→ Step (execute functions/workflows)
                            ├─→ DelayStep (timing)
                            ├─→ ConditionalStep (branching)
                            ├─→ LoopStep (iteration)
                            ├─→ SwitchStep (multi-branch)
-                           ├─→ SubflowStep (composition)
                            └─→ FlowControlStep (break/continue)
 ```
 

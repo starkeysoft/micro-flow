@@ -1,4 +1,4 @@
-import deep_clone from '../helpers/deep_clone';
+import deep_clone from '../helpers/deep_clone.js';
 
 /**
  * Class representing the state of a workflow or process.
@@ -31,8 +31,8 @@ export default class State {
    * @param {string} key - The key of the state property to get.
    * @returns {*} The value of the state property.
    */
-  get(key) {
-    return this.state[key];
+  get(key, default_value = null) {
+    return this.state[key] ?? default_value;
   }
 
   /**
@@ -79,8 +79,11 @@ export default class State {
    * Prepares the state by calculating execution time and freezing the state.
    * @param {number} start_time - The start time of the execution.
    */
-  prepare(start_time) {
+  prepare(start_time, freeze = true) {
     this.state.execution_time_ms = Date.now() - start_time;
-    this.freeze();
+
+    if (freeze) {
+      this.freeze();
+    }
   }
 }

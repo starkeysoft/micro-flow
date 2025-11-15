@@ -55,7 +55,7 @@ Registers all workflow event names defined in the workflow_event_names enum.
 ## Usage Example
 
 ```javascript
-import { Workflow, ActionStep } from './classes';
+import { Workflow, Step, step_types } from './classes';
 
 const workflow = new Workflow([], 'My Workflow');
 
@@ -73,7 +73,10 @@ workflow.events.on(workflow.events.event_names.WORKFLOW_ERRORED, (data) => {
 });
 
 // Add steps and execute
-workflow.pushStep(new ActionStep({ 
+import { Workflow, Step, step_types } from './classes';
+
+workflow.pushStep(new Step({
+  type: step_types.ACTION, 
   name: 'Step 1', 
   callable: async () => {} 
 }));

@@ -135,6 +135,59 @@ console.log('Workflow completed:', finalState);
 
 ---
 
+### `continue()`
+
+Continues execution of a paused workflow. Resets the should_pause flag and resumes execution from the current step index.
+
+**Returns:** `Promise<State>` - The final workflow state after execution
+
+**Async:** Yes
+
+**Example:**
+
+```javascript
+// Pause workflow during execution
+// ... workflow pauses at some step ...
+
+// Continue from where it paused
+const finalState = await workflow.continue();
+console.log('Workflow resumed and completed:', finalState);
+```
+
+---
+
+### `incrementStepIndex()`
+
+Increments the current step index by 1. Used internally to track workflow progress through steps.
+
+**Returns:** `void`
+
+**Note:** This is an internal method primarily used by the workflow execution engine.
+
+**Example:**
+
+```javascript
+workflow.incrementStepIndex();
+```
+
+---
+
+### `decrementStepIndex()`
+
+Decrements the current step index by 1. Used internally when stepping backward through the workflow.
+
+**Returns:** `void`
+
+**Note:** This is an internal method primarily used by the workflow execution engine.
+
+**Example:**
+
+```javascript
+workflow.decrementStepIndex();
+```
+
+---
+
 ### `getSteps()`
 
 Retrieves all steps in the workflow.
@@ -241,19 +294,21 @@ const result = await workflow.step();
 ## Usage Example
 
 ```javascript
-import { Workflow, ActionStep } from './classes';
+import { Workflow, Step, step_types } from './classes';
 
 // Create steps
-const step1 = new ActionStep({
+const step1 = new Step({
   name: 'Initialize',
+  type: step_types.ACTION,
   callable: async (context) => {
     console.log('Initializing...');
     return { initialized: true };
   }
 });
 
-const step2 = new ActionStep({
+const step2 = new Step({
   name: 'Process',
+  type: step_types.ACTION,
   callable: async (context) => {
     console.log('Processing...');
     return { processed: true };
@@ -286,6 +341,7 @@ The Workflow class emits the following events:
 - `WORKFLOW_CREATED` - Emitted when a workflow is created
 - `WORKFLOW_STARTED` - Emitted when workflow execution begins
 - `WORKFLOW_COMPLETED` - Emitted when workflow execution completes successfully
+- `WORKFLOW_PAUSED` - Emitted when workflow execution is paused
 - `WORKFLOW_ERRORED` - Emitted when an error occurs during execution
 - `WORKFLOW_STEP_ADDED` - Emitted when a step is added
 - `WORKFLOW_STEPS_ADDED` - Emitted when multiple steps are added

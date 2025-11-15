@@ -9,9 +9,6 @@ import conditional_step_comparators from '../enums/conditional_step_comparators.
  */
 export default class LogicStep extends Step {
   static step_name = 'logic';
-  subject;
-  operator;
-  value;
 
   /**
    * Creates a new LogicStep instance.
@@ -31,6 +28,10 @@ export default class LogicStep extends Step {
       name,
       callable,
     });
+    
+    this.state.set('subject', undefined);
+    this.state.set('operator', undefined);
+    this.state.set('value', undefined);
   }
 
   /**
@@ -40,33 +41,37 @@ export default class LogicStep extends Step {
    * @throws {Error} Throws an error if the this.operator is unknown.
    */
   checkCondition() {
-    switch (this.operator) {
+    const subject = this.state.get('subject');
+    const operator = this.state.get('operator');
+    const value = this.state.get('value');
+    
+    switch (operator) {
       case conditional_step_comparators.STRICT_EQUALS:
       case conditional_step_comparators.SIGN_STRICT_EQUALS:
-        return this.subject === this.value;
+        return subject === value;
       case conditional_step_comparators.SIGN_EQUALS:
       case conditional_step_comparators.EQUALS:
-        return this.subject == this.value;
+        return subject == value;
       case conditional_step_comparators.NOT_EQUALS:
       case conditional_step_comparators.SIGN_NOT_EQUALS:
-        return this.subject != this.value;
+        return subject != value;
       case conditional_step_comparators.STRICT_NOT_EQUALS:
       case conditional_step_comparators.SIGN_STRICT_NOT_EQUALS:
-        return this.subject !== this.value;
+        return subject !== value;
       case conditional_step_comparators.GREATER_THAN:
       case conditional_step_comparators.SIGN_GREATER_THAN:
-        return this.subject > this.value;
+        return subject > value;
       case conditional_step_comparators.LESS_THAN:
       case conditional_step_comparators.SIGN_LESS_THAN:
-        return this.subject < this.value;
+        return subject < value;
       case conditional_step_comparators.GREATER_THAN_OR_EQUAL:
       case conditional_step_comparators.SIGN_GREATER_THAN_OR_EQUAL:
-        return this.subject >= this.value;
+        return subject >= value;
       case conditional_step_comparators.LESS_THAN_OR_EQUAL:
       case conditional_step_comparators.SIGN_LESS_THAN_OR_EQUAL:
-        return this.subject <= this.value;
+        return subject <= value;
       default:
-        throw new Error(`Unknown operator: ${this.operator}`);
+        throw new Error(`Unknown operator: ${operator}`);
     }
   }
 
@@ -79,8 +84,8 @@ export default class LogicStep extends Step {
    * @returns {void}
    */
   setConditional({ subject, operator, value }) {
-    this.subject = subject;
-    this.operator = operator;
-    this.value = value;
+    this.state.set('subject', subject);
+    this.state.set('operator', operator);
+    this.state.set('value', value);
   }
 }

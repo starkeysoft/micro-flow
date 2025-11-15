@@ -26,19 +26,15 @@ import step_types from './enums/step_types.js';
 | `ACTION` | `'action'` | Step that executes an action or function |
 | `LOGIC` | `'logic'` | Step that implements control flow logic |
 | `DELAY` | `'delay'` | Step that introduces a time delay |
-| `SUBFLOW` | `'subflow'` | Step that executes a nested sub-workflow |
 
 **Example:**
 
 ```javascript
-import { ActionStep } from './classes';
+import { Step } from './classes';
 import step_types from './enums/step_types.js';
 
-const step = new ActionStep({
+const step = new Step({
   name: 'Process Data',
-  type: step_types.ACTION,
-  callable: async (context) => { /* ... */ }
-});
 ```
 
 ---
@@ -59,6 +55,7 @@ import logic_step_types from './enums/logic_step_types.js';
 | `LOOP` | `'loop'` | Loop iteration (while/for-each) |
 | `FLOW_CONTROL` | `'flow_control'` | Flow control (break/continue) |
 | `SWITCH` | `'switch'` | Multi-way branching (switch/case) |
+| `SKIP` | `'skip'` | Conditional step skipping |
 
 **Example:**
 
@@ -293,6 +290,47 @@ const continueStep = new FlowControlStep({
 
 ---
 
+## Workflow Statuses
+
+**Location:** `src/enums/workflow_statuses.js`
+
+Represents the execution status of a workflow during its lifecycle.
+
+```javascript
+import workflow_statuses from './enums/workflow_statuses.js';
+```
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `PENDING` | `'pending'` | Workflow is pending execution |
+| `RUNNING` | `'running'` | Workflow is currently executing |
+| `COMPLETED` | `'completed'` | Workflow has completed successfully |
+| `FAILED` | `'failed'` | Workflow has failed with an error |
+| `PAUSED` | `'paused'` | Workflow execution is paused |
+| `SKIPPED` | `'skipped'` | Workflow was skipped |
+| `CANCELLED` | `'cancelled'` | Workflow was cancelled |
+
+**Status Lifecycle:**
+
+```
+PENDING → RUNNING → COMPLETED
+                 ↘ FAILED
+                 ↘ PAUSED → RUNNING (continue)
+                 ↘ CANCELLED
+```
+
+**Example:**
+
+```javascript
+import workflow_statuses from './enums/workflow_statuses.js';
+
+workflow.events.on('WORKFLOW_COMPLETED', ({ workflow }) => {
+  console.log(workflow.status === workflow_statuses.COMPLETED); // true
+});
+```
+
+---
+
 ## Step Event Names
 
 **Location:** `src/enums/step_event_names.js`
@@ -384,13 +422,13 @@ import sub_step_types from './enums/sub_step_types.js';
 
 ```javascript
 {
-  "ActionStep": "action",
+  "Step": null,
   "ConditionalStep": "conditional",
   "DelayStep": "delay",
   "FlowControlStep": "flow_control",
   "LogicStep": "logic",
   "LoopStep": "loop",
-  "SubflowStep": "subflow",
+  "SkipStep": "skip",
   "SwitchStep": "switch",
   "Step": null,
   "Case": null,
@@ -410,7 +448,8 @@ import sub_step_types from './enums/sub_step_types.js';
 ```javascript
 import step_types from './enums/step_types.js';
 
-const step = new ActionStep({
+const step = new Step({
+  type: step_types.ACTION,
   type: step_types.ACTION,
   // ...
 });
@@ -418,7 +457,8 @@ const step = new ActionStep({
 
 ❌ **DON'T:**
 ```javascript
-const step = new ActionStep({
+const step = new Step({
+  type: step_types.ACTION,
   type: 'action', // String literal, prone to typos
   // ...
 });
@@ -482,4 +522,4 @@ if (step.status === 'complete') {
 
 ---
 
-**Last Updated:** November 13, 2025
+**Last Updated:** November 15, 2025

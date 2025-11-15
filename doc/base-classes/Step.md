@@ -229,7 +229,5 @@ try {
 
 ## Related Classes
 
-- [ActionStep](../step-types/ActionStep.md) - Specialized step for executing actions
 - [DelayStep](../step-types/DelayStep.md) - Step for adding delays
-- [SubflowStep](../step-types/SubflowStep.md) - Step for executing sub-workflows
 - [LogicStep](../logic-steps/LogicStep.md) - Base class for logic-based steps

@@ -44,19 +44,21 @@ Creates a new ConditionalStep instance.
 **Example:**
 
 ```javascript
-import { ConditionalStep, ActionStep } from './classes';
+import { ConditionalStep, Step, step_types } from './classes';
 
 const conditional = new ConditionalStep({
   name: 'Age Check',
   subject: user.age,
   operator: '>=',
   value: 18,
-  step_left: new ActionStep({
+  step_left: new Step({
     name: 'Adult Path',
+    type: step_types.ACTION,
     callable: async () => console.log('User is an adult')
   }),
-  step_right: new ActionStep({
+  step_right: new Step({
     name: 'Minor Path',
+    type: step_types.ACTION,
     callable: async () => console.log('User is a minor')
   })
 });
@@ -85,22 +87,24 @@ const result = await conditional.conditional();
 ### Basic Conditional
 
 ```javascript
-import { ConditionalStep, ActionStep, Workflow } from './classes';
+import { ConditionalStep, Step, step_types, Workflow } from './classes';
 
 const checkAge = new ConditionalStep({
   name: 'Verify Age',
   subject: 25,
   operator: '>=',
   value: 18,
-  step_left: new ActionStep({
+  step_left: new Step({
     name: 'Grant Access',
+    type: step_types.ACTION,
     callable: async () => {
       console.log('Access granted');
       return { access: true };
     }
   }),
-  step_right: new ActionStep({
+  step_right: new Step({
     name: 'Deny Access',
+    type: step_types.ACTION,
     callable: async () => {
       console.log('Access denied');
       return { access: false };
@@ -115,11 +119,12 @@ await workflow.execute();
 ### Context-Based Conditional
 
 ```javascript
-import { ConditionalStep, ActionStep, Workflow } from './classes';
+import { ConditionalStep, Step, step_types, Workflow } from './classes';
 
 const workflow = new Workflow([
-  new ActionStep({
+  new Step({
     name: 'Fetch User',
+    type: step_types.ACTION,
     callable: async (context) => {
       context.user = await fetchUser(context.userId);
       return context.user;
@@ -130,14 +135,16 @@ const workflow = new Workflow([
     subject: (context) => context.user.tier,
     operator: '===',
     value: 'premium',
-    step_left: new ActionStep({
+    step_left: new Step({
       name: 'Premium Features',
+      type: step_types.ACTION,
       callable: async (context) => {
         return await enablePremiumFeatures(context.user);
       }
     }),
-    step_right: new ActionStep({
+    step_right: new Step({
       name: 'Standard Features',
+      type: step_types.ACTION,
       callable: async (context) => {
         return await enableStandardFeatures(context.user);
       }
@@ -151,7 +158,7 @@ await workflow.execute({ userId: 123 });
 ### Nested Conditionals
 
 ```javascript
-import { ConditionalStep, ActionStep } from './classes';
+import { ConditionalStep, Step, step_types } from './classes';
 
 const ageCheck = new ConditionalStep({
   name: 'Age Check',
@@ -163,17 +170,20 @@ const ageCheck = new ConditionalStep({
     subject: user.age,
     operator: '>=',
     value: 65,
-    step_left: new ActionStep({
+    step_left: new Step({
       name: 'Senior Discount',
+      type: step_types.ACTION,
       callable: async () => ({ discount: 0.20 })
     }),
-    step_right: new ActionStep({
+    step_right: new Step({
       name: 'Adult Price',
+      type: step_types.ACTION,
       callable: async () => ({ discount: 0 })
     })
   }),
-  step_right: new ActionStep({
+  step_right: new Step({
     name: 'Youth Discount',
+    type: step_types.ACTION,
     callable: async () => ({ discount: 0.10 })
   })
 });
@@ -184,11 +194,12 @@ const result = await ageCheck.execute();
 ### Multiple Conditions in Workflow
 
 ```javascript
-import { ConditionalStep, ActionStep, Workflow } from './classes';
+import { ConditionalStep, Step, step_types, Workflow } from './classes';
 
 const orderProcessing = new Workflow([
-  new ActionStep({
+  new Step({
     name: 'Calculate Total',
+    type: step_types.ACTION,
     callable: async (context) => {
       context.total = context.items.reduce((sum, item) => sum + item.price, 0);
       return context.total;
@@ -199,15 +210,17 @@ const orderProcessing = new Workflow([
     subject: (context) => context.total,
     operator: '>=',
     value: 50,
-    step_left: new ActionStep({
+    step_left: new Step({
       name: 'Apply Free Shipping',
+      type: step_types.ACTION,
       callable: async (context) => {
         context.shipping = 0;
         return context;
       }
     }),
-    step_right: new ActionStep({
+    step_right: new Step({
       name: 'Add Shipping Cost',
+      type: step_types.ACTION,
       callable: async (context) => {
         context.shipping = 5.99;
         return context;
@@ -219,20 +232,23 @@ const orderProcessing = new Workflow([
     subject: (context) => context.user.membershipYears,
     operator: '>',
     value: 5,
-    step_left: new ActionStep({
+    step_left: new Step({
       name: 'Apply Loyalty Discount',
+      type: step_types.ACTION,
       callable: async (context) => {
         context.total *= 0.90; // 10% off
         return context;
       }
     }),
-    step_right: new ActionStep({
+    step_right: new Step({
       name: 'No Discount',
+      type: step_types.ACTION,
       callable: async (context) => context
     })
   }),
-  new ActionStep({
+  new Step({
     name: 'Process Payment',
+    type: step_types.ACTION,
     callable: async (context) => {
       return await processPayment(context.total + context.shipping);
     }
@@ -245,15 +261,16 @@ await orderProcessing.execute({ items: cart, user: currentUser });
 ### Error Handling
 
 ```javascript
-import { ConditionalStep, ActionStep } from './classes';
+import { ConditionalStep, Step, step_types } from './classes';
 
 const processWithFallback = new ConditionalStep({
   name: 'Try Primary Service',
   subject: (context) => context.primaryServiceAvailable,
   operator: '===',
   value: true,
-  step_left: new ActionStep({
+  step_left: new Step({
     name: 'Use Primary',
+    type: step_types.ACTION,
     callable: async (context) => {
       try {
         return await primaryService.process(context.data);
@@ -263,8 +280,9 @@ const processWithFallback = new ConditionalStep({
       }
     }
   }),
-  step_right: new ActionStep({
+  step_right: new Step({
     name: 'Use Fallback',
+    type: step_types.ACTION,
     callable: async (context) => {
       console.log('Using fallback service');
       return await fallbackService.process(context.data);
@@ -276,7 +294,7 @@ const processWithFallback = new ConditionalStep({
 ### Dynamic Conditions
 
 ```javascript
-import { ConditionalStep, ActionStep } from './classes';
+import { ConditionalStep, Step, step_types } from './classes';
 
 function createFeatureGate(featureName, enabledStep, disabledStep) {
   return new ConditionalStep({
@@ -292,12 +310,14 @@ function createFeatureGate(featureName, enabledStep, disabledStep) {
 // Usage
 const betaFeatureGate = createFeatureGate(
   'beta_ui',
-  new ActionStep({
+  new Step({
     name: 'Load Beta UI',
+    type: step_types.ACTION,
     callable: async () => loadBetaUI()
   }),
-  new ActionStep({
+  new Step({
     name: 'Load Standard UI',
+    type: step_types.ACTION,
     callable: async () => loadStandardUI()
   })
 );
@@ -365,8 +385,4 @@ new ConditionalStep({
 
 ## Related Classes
 
-- [LogicStep](LogicStep.md) - Base logic evaluation class
-- [SwitchStep](SwitchStep.md) - Multi-way branching
-- [LoopStep](LoopStep.md) - Conditional loops
-- [FlowControlStep](FlowControlStep.md) - Loop flow control
-- [ActionStep](../step-types/ActionStep.md) - Action execution
+- [LogicStep](LogicStep.md) - Base logic evaluation

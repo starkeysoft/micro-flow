@@ -32,11 +32,11 @@ export default class DelayStep extends Step {
       name
     });
 
-    this.delay_duration = delay_duration;
-    this.delay_type = delay_type;
-    this.scheduled_job = null;
+    this.state.set('delay_duration', delay_duration);
+    this.state.set('delay_type', delay_type);
+    this.state.set('scheduled_job', null);
     
-    this.callable = this[delay_type].bind(this, delay_duration);
+    this.state.set('callable', this[delay_type].bind(this, delay_duration));
   }
 
   /**
@@ -73,9 +73,10 @@ export default class DelayStep extends Step {
         resolve();
       };
 
-      this.scheduled_job = schedule.scheduleJob(target_date, callback);
+      const job = schedule.scheduleJob(target_date, callback);
+      this.state.set('scheduled_job', job);
 
-      if (!this.scheduled_job) {
+      if (!this.state.get('scheduled_job')) {
         reject(new Error('Failed to schedule job'));
       }
     });
@@ -116,9 +117,10 @@ export default class DelayStep extends Step {
 
       const target_date = addMilliseconds(new Date(), duration);
 
-      this.scheduled_job = schedule.scheduleJob(target_date, callback);
+      const job = schedule.scheduleJob(target_date, callback);
+      this.state.set('scheduled_job', job);
 
-      if (!this.scheduled_job) {
+      if (!this.state.get('scheduled_job')) {
         setTimeout(callback, duration);
       }
     });
@@ -129,9 +131,10 @@ export default class DelayStep extends Step {
    * @returns {void}
    */
   cancel() {
-    if (this.scheduled_job) {
-      this.scheduled_job.cancel();
-      this.scheduled_job = null;
+    const job = this.state.get('scheduled_job');
+    if (job) {
+      job.cancel();
+      this.state.set('scheduled_job', null);
     }
   }
 }

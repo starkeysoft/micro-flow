@@ -28,17 +28,18 @@ export default class ConditionalStep extends LogicStep {
     step_right,
     name = '',
   } = {}) {
-    this.subject = subject;
-    this.operator = operator;
-    this.value = value;
-    this.step_left = step_left;
-    this.step_right = step_right;
-
     super({
       type: logic_step_types.CONDITIONAL,
       name,
-      callable: this.conditional.bind(this)
+      callable: async () => {}
     });
+    
+    this.state.set('subject', subject);
+    this.state.set('operator', operator);
+    this.state.set('value', value);
+    this.state.set('step_left', step_left);
+    this.state.set('step_right', step_right);
+    this.state.set('callable', this.conditional.bind(this));
   }
 
   /**
@@ -47,13 +48,16 @@ export default class ConditionalStep extends LogicStep {
    * @returns {Promise<*|null>} The result of executing the chosen step, or null if no step is provided.
    */
   conditional() {
+    const step_left = this.state.get('step_left');
+    const step_right = this.state.get('step_right');
+    
     if (this.checkCondition()) {
-      this.logStep(`Condition met for step: ${this.name}, executing left branch '${this.step_left.name}'`);
+      this.logStep(`Condition met for step: ${this.state.get('name')}, executing left branch '${step_left.state.get('name')}'`);
 
-      return this.step_left && typeof this.step_left.markAsComplete === 'function' ? this.step_left.execute() : null;
+      return step_left && typeof step_left.markAsComplete === 'function' ? step_left.execute() : null;
     }
 
-    this.logStep(`Condition not met for step: ${this.name}, executing right branch '${this.step_right.name}'`);
-    return this.step_right && typeof this.step_right.markAsComplete === 'function' ? this.step_right.execute() : null;
+    this.logStep(`Condition not met for step: ${this.state.get('name')}, executing right branch '${step_right.state.get('name')}'`);
+    return step_right && typeof step_right.markAsComplete === 'function' ? step_right.execute() : null;
   }
 }

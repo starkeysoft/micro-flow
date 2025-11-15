@@ -9,7 +9,7 @@ describe('Workflow', () => {
   let workflow;
 
   beforeEach(() => {
-    workflow = new Workflow([], 'test-workflow');
+    workflow = new Workflow({ steps: [], name: 'test-workflow' });
   });
 
   it('should initialize with correct properties', () => {
@@ -36,8 +36,8 @@ describe('Workflow', () => {
     workflow.pushSteps([step2]);
 
     expect(workflow.getSteps()).toHaveLength(2);
-    expect(workflow.getSteps()[0].name).toBe('step-1');
-    expect(workflow.getSteps()[1].name).toBe('step-2');
+    expect(workflow.getSteps()[0].state.get('name')).toBe('step-1');
+    expect(workflow.getSteps()[1].state.get('name')).toBe('step-2');
   });
 
   it('should execute steps in sequence', async () => {
@@ -143,9 +143,9 @@ describe('Workflow', () => {
     workflow.moveStep(0, 2);
     
     const steps = workflow.getSteps();
-    expect(steps[0].name).toBe('step-2');
-    expect(steps[1].name).toBe('step-3');
-    expect(steps[2].name).toBe('step-1');
+    expect(steps[0].state.get('name')).toBe('step-2');
+    expect(steps[1].state.get('name')).toBe('step-3');
+    expect(steps[2].state.get('name')).toBe('step-1');
   });
 
   it('should remove a step at a specific index', () => {
@@ -158,9 +158,9 @@ describe('Workflow', () => {
     const removed = workflow.removeStep(1);
     
     expect(removed).toHaveLength(1);
-    expect(removed[0].name).toBe('step-2');
+    expect(removed[0].state.get('name')).toBe('step-2');
     expect(workflow.getSteps()).toHaveLength(2);
-    expect(workflow.getSteps()[1].name).toBe('step-3');
+    expect(workflow.getSteps()[1].state.get('name')).toBe('step-3');
   });
 
   it('should shift and return the first step', () => {
@@ -186,14 +186,15 @@ describe('Workflow', () => {
     });
     
     workflow.pushStep(step);
+    workflow.state.set('custom_value', 'test-value');
     
-    const result = await workflow.execute({ custom_value: 'test-value' });
+    const result = await workflow.execute();
     
     expect(result.get('output_data')[0]).toBe('test-value');
   });
 
   it('should continue execution when exit_on_failure is false', async () => {
-    const workflowNoExit = new Workflow([], 'test-workflow', false);
+    const workflowNoExit = new Workflow({ steps: [], name: 'test-workflow', exit_on_failure: false });
     
     const step1 = new Step({
       name: 'failing-step',
@@ -229,7 +230,7 @@ describe('Workflow', () => {
     newWorkflow.events.on(newWorkflow.events.event_names.WORKFLOW_CREATED, listener);
     
     // Create another workflow to trigger the event
-    const anotherWorkflow = new Workflow([], 'another');
+    const anotherWorkflow = new Workflow({ name: 'another' });
     
     // The constructor already emitted for newWorkflow, but we can verify the pattern works
     expect(newWorkflow.state.get('name')).toContain('workflow_');
@@ -364,7 +365,7 @@ describe('Workflow', () => {
   });
 
   it('should use custom name or generate default name', () => {
-    const customWorkflow = new Workflow([], 'custom-name');
+    const customWorkflow = new Workflow({ name: 'custom-name' });
     const defaultWorkflow = new Workflow();
     
     expect(customWorkflow.state.get('name')).toBe('custom-name');
@@ -433,10 +434,10 @@ describe('Workflow', () => {
       callable: async () => 'result',
     });
     
-    workflow.pushSteps([secondStep, delayStep]);
+    workflow.pushSteps([delayStep, secondStep]);
     
     // Spy on markAsPending to verify it was called
-    const markAsPendingSpy = vi.spyOn(workflow.state.get('steps')[0], 'markAsPending');
+    const markAsPendingSpy = vi.spyOn(workflow.state.get('steps')[1], 'markAsPending');
     const markAsWaitingSpy = vi.spyOn(delayStep, 'markAsWaiting');
     
     // Call step() directly instead of execute()
@@ -445,6 +446,6 @@ describe('Workflow', () => {
     // Verify the DELAY-specific methods were called
     expect(markAsPendingSpy).toHaveBeenCalled();
     expect(markAsWaitingSpy).toHaveBeenCalled();
-    expect(delayStep.status).toBe('complete');
+    expect(delayStep.state.get('status')).toBe('complete');
   });
 });

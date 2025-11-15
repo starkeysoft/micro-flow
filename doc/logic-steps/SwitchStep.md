@@ -208,11 +208,12 @@ const result = await gradeSwitch.execute();
 ### Context-Based Routing
 
 ```javascript
-import { SwitchStep, Case, Workflow, ActionStep } from './classes';
+import { SwitchStep, Case, Workflow, Step, step_types } from './classes';
 
 const workflow = new Workflow([
-  new ActionStep({
+  new Step({
     name: 'Determine Action',
+    type: step_types.ACTION,
     callable: async (context) => {
       context.action = context.request.action;
       return context.action;

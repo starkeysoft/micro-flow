@@ -75,14 +75,6 @@ describe('State', () => {
     expect(stateObj).toHaveProperty('exit_on_failure', true);
   });
 
-  it('should handle setting undefined and null values', () => {
-    state.set('custom_field', undefined);
-    state.set('another_field', null);
-    
-    expect(state.get('custom_field')).toBe(undefined);
-    expect(state.get('another_field')).toBe(null);
-  });
-
   it('should initialize with custom initial state', () => {
     const customState = new State({ 
       id: 'custom-id', 

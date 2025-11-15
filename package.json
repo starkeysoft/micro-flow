@@ -1,19 +1,47 @@
 {
-  "name": "frontend-flow",
+  "name": "starkey-flow",
   "version": "1.0.0",
-  "description": "",
+  "description": "A flexible workflow and step management library for building complex asynchronous flows in Node.js applications",
   "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./classes/*": "./src/classes/*.js",
+    "./enums/*": "./src/enums/*.js",
+    "./helpers/*": "./src/helpers/*.js"
+  },
+  "files": [
+    "src/",
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "node build.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "pipeline": "npm test && npm run build"
+    "pipeline": "npm test && npm run build",
+    "prepublishOnly": "npm run pipeline"
   },
-  "keywords": [],
+  "keywords": [
+    "workflow",
+    "step",
+    "flow",
+    "automation",
+    "async",
+    "state-machine",
+    "orchestration"
+  ],
   "author": "",
   "license": "ISC",
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
   "dependencies": {
     "date-fns": "^4.1.0",
     "node-schedule": "^2.1.1",

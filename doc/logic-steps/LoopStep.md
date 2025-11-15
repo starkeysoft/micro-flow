@@ -50,7 +50,7 @@ Creates a new LoopStep instance.
 **Example:**
 
 ```javascript
-import { LoopStep, Workflow, ActionStep, loop_types } from './classes';
+import { LoopStep, Workflow, Step, step_types, loop_types } from './classes';
 
 // While loop
 const whileLoop = new LoopStep({
@@ -113,10 +113,11 @@ Executes a for-each loop that runs the sub-workflow once for each item in the it
 ### While Loop - Basic
 
 ```javascript
-import { LoopStep, Workflow, ActionStep, loop_types } from './classes';
+import { LoopStep, Workflow, Step, step_types, loop_types } from './classes';
 
 const subWorkflow = new Workflow([
-  new ActionStep({
+  new Step({
+    type: step_types.ACTION,
     name: 'Process Item',
     callable: async (context) => {
       const item = context.queue.shift();
@@ -147,22 +148,25 @@ await workflow.execute({
 ### For-Each Loop - Processing Array
 
 ```javascript
-import { LoopStep, Workflow, ActionStep, loop_types } from './classes';
+import { LoopStep, Workflow, Step, step_types, loop_types } from './classes';
 
 const itemWorkflow = new Workflow([
-  new ActionStep({
+  new Step({
+    type: step_types.ACTION,
     name: 'Validate',
     callable: async (context) => {
       return validateItem(context.currentItem);
     }
   }),
-  new ActionStep({
+  new Step({
+    type: step_types.ACTION,
     name: 'Transform',
     callable: async (context) => {
       return transformItem(context.currentItem);
     }
   }),
-  new ActionStep({
+  new Step({
+    type: step_types.ACTION,
     name: 'Save',
     callable: async (context) => {
       return await saveItem(context.currentItem);
@@ -183,10 +187,11 @@ await forEachLoop.execute();
 ### Retry Loop
 
 ```javascript
-import { LoopStep, Workflow, ActionStep, loop_types } from './classes';
+import { LoopStep, Workflow, Step, step_types, loop_types } from './classes';
 
 const retryWorkflow = new Workflow([
-  new ActionStep({
+  new Step({
+    type: step_types.ACTION,
     name: 'Attempt Operation',
     callable: async (context) => {
       try {
@@ -227,23 +232,26 @@ await workflow.execute({
 ### Batch Processing
 
 ```javascript
-import { LoopStep, Workflow, ActionStep, loop_types } from './classes';
+import { LoopStep, Workflow, Step, step_types, loop_types } from './classes';
 
 const batchWorkflow = new Workflow([
-  new ActionStep({
+  new Step({
+    type: step_types.ACTION,
     name: 'Get Batch',
     callable: async (context) => {
       context.currentBatch = context.data.splice(0, context.batchSize);
       return context.currentBatch;
     }
   }),
-  new ActionStep({
+  new Step({
+    type: step_types.ACTION,
     name: 'Process Batch',
     callable: async (context) => {
       return await processBatch(context.currentBatch);
     }
   }),
-  new ActionStep({
+  new Step({
+    type: step_types.ACTION,
     name: 'Update Progress',
     callable: async (context) => {
       context.processed += context.currentBatch.length;
@@ -272,10 +280,11 @@ await batchLoop.execute({
 ### Pagination Loop
 
 ```javascript
-import { LoopStep, Workflow, ActionStep, loop_types } from './classes';
+import { LoopStep, Workflow, Step, step_types, loop_types } from './classes';
 
 const pageWorkflow = new Workflow([
-  new ActionStep({
+  new Step({
+    type: step_types.ACTION,
     name: 'Fetch Page',
     callable: async (context) => {
       const response = await api.fetchPage(context.page);
@@ -310,13 +319,14 @@ await paginationLoop.execute({
 import { 
   LoopStep, 
   Workflow, 
-  ActionStep, 
+  Step, 
   ConditionalStep,
   loop_types 
 } from './classes';
 
 const processWorkflow = new Workflow([
-  new ActionStep({
+  new Step({
+    type: step_types.ACTION,
     name: 'Get Next Item',
     callable: async (context) => {
       context.currentItem = context.items[context.index];
@@ -329,13 +339,15 @@ const processWorkflow = new Workflow([
     subject: (context) => context.currentItem.type,
     operator: '===',
     value: 'premium',
-    step_left: new ActionStep({
+    step_left: new Step({
+    type: step_types.ACTION,
       name: 'Premium Processing',
       callable: async (context) => {
         return await processPremium(context.currentItem);
       }
     }),
-    step_right: new ActionStep({
+    step_right: new Step({
+    type: step_types.ACTION,
       name: 'Standard Processing',
       callable: async (context) => {
         return await processStandard(context.currentItem);
@@ -440,7 +452,8 @@ const goodLoop = new LoopStep({
 ```javascript
 // Ensure sub-workflow can modify context
 const workflow = new Workflow([
-  new ActionStep({
+  new Step({
+    type: step_types.ACTION,
     callable: async (context) => {
       context.counter--;  // Modify loop variable
       return context.counter;

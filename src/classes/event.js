@@ -1,5 +1,3 @@
-import { EventTarget, CustomEvent } from 'events';
-
 /**
  * Base event class that extends EventTarget for cross-platform event management.
  * Compatible with both Node.js (v14.5+) and web browsers. Can be used with either

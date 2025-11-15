@@ -17,19 +17,19 @@ describe('Step', () => {
   });
 
   it('should initialize with correct properties', () => {
-    expect(step.name).toBe('test-step');
-    expect(step.type).toBe(step_types.ACTION);
-    expect(step.status).toBe(step_statuses.WAITING);
-    expect(step.id).toBeDefined();
+    expect(step.state.get('name')).toBe('test-step');
+    expect(step.state.get('type')).toBe(step_types.ACTION);
+    expect(step.state.get('status')).toBe(step_statuses.WAITING);
+    expect(step.state.get('id')).toBeDefined();
   });
 
   it('should execute callable function and mark as complete', async () => {
-    step.setContext({ steps: [] });
+    step.state.set('steps', []);
     
     const result = await step.execute();
     
     expect(result).toBe('success');
-    expect(step.status).toBe(step_statuses.COMPLETE);
+    expect(step.state.get('status')).toBe(step_statuses.COMPLETE);
   });
 
   it('should handle errors and mark as failed', async () => {
@@ -41,10 +41,10 @@ describe('Step', () => {
       },
     });
     
-    errorStep.setContext({ steps: [] });
+    errorStep.state.set('steps', []);
     
     await expect(errorStep.execute()).rejects.toThrow('Test error');
-    expect(errorStep.status).toBe(step_statuses.FAILED);
+    expect(errorStep.state.get('status')).toBe(step_statuses.FAILED);
   });
 
   it('should emit events when status changes', () => {
@@ -56,35 +56,33 @@ describe('Step', () => {
     expect(listener).toHaveBeenCalledWith(
       expect.objectContaining({ step })
     );
-    expect(step.status).toBe(step_statuses.RUNNING);
+    expect(step.state.get('status')).toBe(step_statuses.RUNNING);
   });
 
-  it('should set context with step mapping', () => {
-    const mockSteps = [
-      { id: 'step1', name: 'Step 1' },
-      { id: 'step2', name: 'Step 2' },
-    ];
+  it('should set state with step mapping', () => {
+    const step1 = new Step({ name: 'Step 1', type: step_types.ACTION });
+    const step2 = new Step({ name: 'Step 2', type: step_types.ACTION });
+    const mockSteps = [step1, step2];
     
-    step.setContext({ steps: mockSteps });
-    
-    expect(step.context.steps).toBe(mockSteps);
-    expect(step.context.steps_by_id['step1']).toBe(mockSteps[0]);
-    expect(step.context.steps_by_id['step2']).toBe(mockSteps[1]);
-  });
-
-  it('should suppress logging when log_suppress is true', () => {
-    const consoleSpy = vi.spyOn(console, 'log');
-    
-    const quietStep = new Step({
-      name: 'quiet-step',
-      type: step_types.ACTION,
-      log_suppress: true,
+    step.state.set('steps', mockSteps);
+    step.state.set('steps_by_id', {
+      [step1.state.get('id')]: mockSteps[0],
+      [step2.state.get('id')]: mockSteps[1]
     });
     
-    quietStep.markAsComplete();
+    expect(step.state.get('steps')).toBe(mockSteps);
+    expect(step.state.get('steps_by_id')[step1.state.get('id')]).toBe(mockSteps[0]);
+    expect(step.state.get('steps_by_id')[step2.state.get('id')]).toBe(mockSteps[1]);
+  });
+
+  it('should not log anything when log suppression is enabled', () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     
-    expect(consoleSpy).not.toHaveBeenCalled();
-    consoleSpy.mockRestore();
+    step.state.set('log_suppress', true);
+    step.markAsComplete();
+    
+    expect(logSpy).not.toHaveBeenCalled();
+    logSpy.mockRestore();
   });
 
   it('should mark step as waiting and emit event', () => {
@@ -100,7 +98,7 @@ describe('Step', () => {
     expect(listener).toHaveBeenCalledWith(
       expect.objectContaining({ step })
     );
-    expect(step.status).toBe(step_statuses.WAITING);
+    expect(step.state.get('status')).toBe(step_statuses.WAITING);
   });
 
   it('should mark step as pending and emit event', () => {
@@ -112,7 +110,7 @@ describe('Step', () => {
     expect(listener).toHaveBeenCalledWith(
       expect.objectContaining({ step })
     );
-    expect(step.status).toBe(step_statuses.PENDING);
+    expect(step.state.get('status')).toBe(step_statuses.PENDING);
   });
 
   it('should set custom events object', () => {
@@ -148,12 +146,12 @@ describe('Step', () => {
       callable: innerStep,
     });
     
-    outerStep.setContext({ steps: [] });
+    outerStep.state.set('steps', []);
     
     const result = await outerStep.execute();
     
     expect(result).toBe('inner-result');
-    expect(outerStep.status).toBe(step_statuses.COMPLETE);
+    expect(outerStep.state.get('status')).toBe(step_statuses.COMPLETE);
   });
 
   it('should generate unique IDs for each step', () => {
@@ -167,26 +165,30 @@ describe('Step', () => {
       type: step_types.ACTION,
     });
     
-    expect(step1.id).toBeDefined();
-    expect(step2.id).toBeDefined();
-    expect(step1.id).not.toBe(step2.id);
+    expect(step1.state.get('id')).toBeDefined();
+    expect(step2.state.get('id')).toBeDefined();
+    expect(step1.state.get('id')).not.toBe(step2.state.get('id'));
   });
 
   it('should have access to step_types and sub_step_types', () => {
-    expect(step.step_types).toBeDefined();
-    expect(step.sub_step_types).toBeDefined();
+    expect(step.state.get('step_types')).toBeDefined();
+    expect(step.state.get('sub_step_types')).toBeDefined();
   });
 
-  it('should create steps_by_id mapping in context', () => {
+  it('should create steps_by_id mapping in state', () => {
     const step1 = new Step({ name: 'step1', type: step_types.ACTION });
     const step2 = new Step({ name: 'step2', type: step_types.ACTION });
     const mockSteps = [step1, step2];
     
-    step.setContext({ steps: mockSteps });
+    step.state.set('steps', mockSteps);
+    step.state.set('steps_by_id', {
+      [step1.state.get('id')]: step1,
+      [step2.state.get('id')]: step2
+    });
     
-    expect(step.context.steps_by_id[step1.id]).toBe(step1);
-    expect(step.context.steps_by_id[step2.id]).toBe(step2);
-    expect(Object.keys(step.context.steps_by_id)).toHaveLength(2);
+    expect(step.state.get('steps_by_id')[step1.state.get('id')]).toBe(step1);
+    expect(step.state.get('steps_by_id')[step2.state.get('id')]).toBe(step2);
+    expect(Object.keys(step.state.get('steps_by_id'))).toHaveLength(2);
   });
 
   it('should execute a Workflow as callable', async () => {
@@ -198,7 +200,7 @@ describe('Step', () => {
       callable: async () => 'workflow-result',
     });
     
-    const innerWorkflow = new Workflow([innerStep], 'inner-workflow');
+    const innerWorkflow = new Workflow({ steps: [innerStep], name: 'inner-workflow' });
     
     // Verify the workflow has the step before executing
     expect(innerWorkflow.isEmpty()).toBe(false);
@@ -210,11 +212,9 @@ describe('Step', () => {
       callable: innerWorkflow,
     });
     
-    outerStep.setContext({ steps: [] });
-    
     const result = await outerStep.execute();
     
     expect(result.get('output_data')[0]).toBe('workflow-result');
-    expect(outerStep.status).toBe(step_statuses.COMPLETE);
+    expect(outerStep.state.get('status')).toBe(step_statuses.COMPLETE);
   });
 });
