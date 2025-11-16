@@ -31,10 +31,10 @@ export default class Event extends EventTarget {
    * Emits a custom event with optional data payload.
    * This method maintains API compatibility with EventEmitter while using CustomEvent.
    * @param {string} event_name - The name of the event to emit.
-   * @param {*} data - Optional data to pass with the event.
+   * @param {*} [data] - Optional data to pass with the event in the detail property.
    * @param {boolean} [bubbles=false] - Whether the event should bubble up through the DOM.
    * @param {boolean} [cancelable=true] - Whether the event is cancelable.
-   * @returns {boolean} True if the event was dispatched successfully.
+   * @returns {boolean} True if the event was not cancelled, false if it was cancelled.
    */
   emit(event_name, data, bubbles = false, cancelable = true) {
     const custom_event = new CustomEvent(event_name, {

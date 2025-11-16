@@ -1,6 +1,6 @@
 /**
  * Creates a deep clone of a value, handling circular references and various built-in types.
- * NOTE: Functions, WeakMaps, and WeakSets are returned by reference (not cloned).
+ * NOTE: Functions, WeakMaps, WeakSets, and custom class instances are returned by reference (not cloned).
  * 
  * @param {*} value - The value to clone. Can be any JavaScript value including primitives,
  *                    objects, arrays, and built-in types.
@@ -9,10 +9,10 @@
  * 
  * @returns {*} A deep clone of the input value with the following behaviors:
  *              - Primitives and null/undefined are returned as-is
- *              - Objects and arrays are recursively cloned
+ *              - Plain objects and arrays are recursively cloned
  *              - Dates and RegExps are cloned with their state preserved
  *              - Maps and Sets are deeply cloned (both keys/values are cloned)
- *              - Functions, WeakMaps, and WeakSets are returned by reference (not cloned)
+ *              - Functions, WeakMaps, WeakSets, and custom class instances are returned by reference (not cloned)
  *              - Circular references are handled correctly
  * 
  * @example
@@ -59,7 +59,16 @@ function deep_clone(value, hash = new WeakMap()) {
     return clone;
   }
 
-  clone = Array.isArray(value) ? [] : {};
+  // Preserve custom class instances by returning them by reference
+  // Only clone plain objects and arrays
+  const isPlainObject = value.constructor === Object;
+  const isArray = Array.isArray(value);
+  
+  if (!isPlainObject && !isArray) {
+    return value;
+  }
+
+  clone = isArray ? [] : {};
 
   hash.set(value, clone);
 

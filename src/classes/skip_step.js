@@ -36,9 +36,10 @@ class SkipStep extends LogicStep {
 
   /**
    * Evaluates the condition and sets the should_skip flag accordingly.
-   * @returns {boolean} True if the step should be skipped, false otherwise.
+   * @async
+   * @returns {Promise<boolean>} True if the step should be skipped, false otherwise.
    */
-  skipStep() {
+  async skipStep() {
     if (this.checkCondition()) {
       this.state.set('should_skip', true);
     }

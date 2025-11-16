@@ -6,13 +6,15 @@
  * @readonly
  */
 const workflow_statuses = {
-  PENDING: 'pending',
-  RUNNING: 'running',
+  CANCELLED: 'cancelled',
   COMPLETED: 'completed',
+  CREATED: 'created',
+  ERRORED: 'errored',
   FAILED: 'failed',
   PAUSED: 'paused',
-  SKIPPED: 'skipped',
-  CANCELLED: 'cancelled'
+  PENDING: 'pending',
+  RUNNING: 'running',
+  SKIPPED: 'skipped'
 };
 
 export default workflow_statuses;

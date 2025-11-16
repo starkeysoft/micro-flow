@@ -15,7 +15,7 @@ export default class LogicStep extends Step {
    * @constructor
    * @param {Object} options - Configuration options for the logic step.
    * @param {string} options.type - The type of the logic step (from logic_step_types enum).
-   * @param {Step | Workflow | Function} [options.callable=()=>{}] - The function to execute for this step.
+   * @param {Function|Step|Workflow} [options.callable=async()=>{}] - The function, Step, or Workflow to execute for this step.
    * @param {string} [options.name=''] - The name of the logic step.
    */
   constructor({
@@ -35,10 +35,10 @@ export default class LogicStep extends Step {
   }
 
   /**
-   * Evaluates the subject using the specified this.operator.
+   * Evaluates the subject using the specified operator.
    * Supports strict/loose equality, inequality, and relational operators.
    * @returns {boolean} True if the condition is met, false otherwise.
-   * @throws {Error} Throws an error if the this.operator is unknown.
+   * @throws {Error} If the operator is unknown.
    */
   checkCondition() {
     const subject = this.state.get('subject');

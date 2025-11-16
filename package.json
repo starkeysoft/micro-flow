@@ -1,5 +1,5 @@
 {
-  "name": "starkey-flow",
+  "name": "micro-flow",
   "version": "1.0.0",
   "description": "A flexible workflow and step management library for building complex asynchronous flows in Node.js applications",
   "main": "index.js",

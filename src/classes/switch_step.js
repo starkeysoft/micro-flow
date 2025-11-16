@@ -16,8 +16,8 @@ export default class SwitchStep extends LogicStep {
    * Creates a new SwitchStep instance.
    * @constructor
    * @param {Object} options - Configuration options for the switch step.
-   * @param {Array<Case>} options.cases - The array of cases to evaluate. 
-   * @param {Case | Step | Workflow} [options.default_case=null] - The default case (Case/Step) or Workflow to execute if no cases match.
+   * @param {Array<Case> | Array<Step> | Array<Workflow>} [options.cases=[]] - The array of Case instances to evaluate.
+   * @param {Function | Case | Step | Workflow} [options.default_case=null] - The default case (Case/Step) or Workflow to execute if no cases match.
    * @param {string} [options.name=''] - The name of the switch step.
    */
   constructor({
@@ -38,8 +38,9 @@ export default class SwitchStep extends LogicStep {
 
   /**
    * Evaluates the cases and returns the result of the matched case or the default case.
+   * Creates a workflow from the cases and executes them sequentially until one matches.
    * @async
-   * @returns {Promise<*>} The result of the matched case or default case.
+   * @returns {Promise<Workflow>} The switch workflow instance with final state.
    */
   async getMatchedCase() {
     const cases = this.state.get('cases');

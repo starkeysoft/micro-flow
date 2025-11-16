@@ -11,18 +11,6 @@ import sub_step_types from '../enums/sub_step_types.js';
  * @class Step
  */
 export default class Step {
-  dontCopyStateKeys = [
-    'id',
-    'name',
-    'should_break',
-    'should_continue',
-    'should_skip',
-    'events',
-    'start_time',
-    'end_time',
-    'execution_time_ms',
-    'output_data'
-  ];
   /**
    * Creates a new Step instance.
    * @constructor
@@ -53,9 +41,10 @@ export default class Step {
   }
 
   /**
-   * Executes the step's callable function with any provided arguments.
+   * Executes the step's callable function. The workflow state is available via this.workflow,
+   * which is set by the parent workflow through setWorkflow() before execution.
    * @async
-   * @returns {Promise<*>} The result of the callable function.
+   * @returns {Promise<Object>} An object containing the result and step state: {result, state}.
    * @throws {Error} If the callable function throws an error during execution.
    */
   async execute() {
@@ -80,14 +69,14 @@ export default class Step {
         this.markAsComplete();
         this.state.set('execution_time_ms', callable.state.get('execution_time_ms'));
         this.events.emit(this.events.event_names.STEP_COMPLETED, { step: this, result });
-        return result;
+        return {result, step: this};
       }
 
       this.state.set('start_time', Date.now());
       this.events.emit(this.events.event_names.STEP_RUNNING, { step: this });
       
       // or they can be simple functions
-      result = await callable(this.state.getState());
+      result = await callable();
     } catch (error) {
       this.state.set('execution_time_ms', Date.now() - this.state.get('start_time'));
       this.events.emit(this.events.event_names.STEP_FAILED, { step: this, error });
@@ -100,7 +89,7 @@ export default class Step {
     this.state.set('execution_time_ms', Date.now() - this.state.get('start_time'));
     this.events.emit(this.events.event_names.STEP_COMPLETED, { step: this, result });
 
-    return result;
+    return this.prepareReturnData(result);
   }
 
   /**
@@ -135,7 +124,7 @@ export default class Step {
    * @returns {void}
    */
   markAsFailed(error) {
-    this.logStep(`Step "${this.state.get('name')}" failed with error: ${error.message}`);
+    this.logStep(`Step "${this.state.get('name')}" failed with error: ${error.stack}`);
 
     this.state.set('status', step_statuses.FAILED);
     this.events.emit(this.events.event_names.STEP_FAILED, { step: this, error });
@@ -175,6 +164,18 @@ export default class Step {
   }
 
   /**
+   * Prepares the return data for this step, including the result and step state.
+   * @param {*} result - The result from the callable execution.
+   * @returns {Object} An object containing the result and step state: {result, state}.
+   */
+  prepareReturnData(result) {
+    return {
+      result: result,
+      state: this.state.getState(),
+    };
+  }
+
+  /**
    * Sets a custom events object for this step.
    * @param {StepEvents} events - The StepEvents instance to use for this step.
    * @throws {Error} Throws an error if the provided events object is invalid.
@@ -188,43 +189,14 @@ export default class Step {
   }
 
   /**
-   * Sets the execution state for this step. Provides a snapshot of the workflow state
-   * at the time of execution. The state is an object containing state information
-   * accessible during step execution. Also creates a mapping of steps by their IDs
-   * for easy access.
-   * @param {State | WorkflowState} state - The State instance to set.
+   * Sets the workflow state reference for this step. This is called by the parent workflow
+   * before step execution to provide access to the workflow's state data. Steps can access
+   * workflow state through this.workflow during execution.
+   * @param {WorkflowState} workflow - The WorkflowState instance from the parent workflow.
    * @returns {void}
    */
-  setState(state) {
-    if (!state || typeof state.getState !== 'function') {
-      throw new Error('setState requires a State instance');
-    }
-
-    const working_state = new State(state.getStateClone());
-
-    for (const key of this.dontCopyStateKeys) {
-      if (key in working_state) {
-        delete working_state[key];
-      }
-    }
-
-    if (this.state.get('callable') instanceof Workflow) {
-      delete working_state['steps'];
-      delete working_state['steps_by_id'];
-    }
-
-    this.state.merge(working_state);
-
-    const steps_by_id = {};
-    const steps = working_state.get('steps');
-
-    if (steps && steps.length && !(this.state.get('callable') instanceof Workflow)) {
-      steps.forEach(step => {
-        steps_by_id[step.state.get('id')] = step;
-      });
-
-      this.state.set('steps_by_id', steps_by_id);
-    }
+  setWorkflow(workflow_state) {
+    this.workflow = workflow_state;
   }
 
   /**

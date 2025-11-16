@@ -16,8 +16,8 @@ export default class ConditionalStep extends LogicStep {
    * @param {*} options.subject - The value to compare against.
    * @param {string} options.operator - The comparison operator to use (e.g., '===', '==', '!=', '>', '<', '>=', '<=').
    * @param {*} options.value - The value to compare the subject with.
-   * @param {Step} options.step_left - The step to execute if the condition is met.
-   * @param {Step} options.step_right - The step to execute if the condition is not met.
+   * @param {Step|Workflow} options.step_left - The step or workflow to execute if the condition is met (true branch).
+   * @param {Step|Workflow} options.step_right - The step or workflow to execute if the condition is not met (false branch).
    * @param {string} [options.name=''] - The name of the conditional step.
    */
   constructor({
@@ -44,8 +44,9 @@ export default class ConditionalStep extends LogicStep {
 
   /**
    * Executes either the left or right step based on the condition evaluation.
+   * The workflow state is accessible through this.workflow during execution.
    * @async
-   * @returns {Promise<*|null>} The result of executing the chosen step, or null if no step is provided.
+   * @returns {Promise<Object|null>} The result of executing the chosen step {result, state}, or null if no step is provided.
    */
   conditional() {
     const step_left = this.state.get('step_left');

@@ -24,6 +24,7 @@ export default class DelayStep extends Step {
    */
   constructor({
     name = '',
+    delay_timestamp = null,
     delay_duration = 1000,
     delay_type = delay_types.ABSOLUTE
   } = {}) {
@@ -34,34 +35,41 @@ export default class DelayStep extends Step {
 
     this.state.set('delay_duration', delay_duration);
     this.state.set('delay_type', delay_type);
+    this.state.set('delay_timestamp', delay_timestamp);
     this.state.set('scheduled_job', null);
     
-    this.state.set('callable', this[delay_type].bind(this, delay_duration));
+    // Set the callable based on delay type
+    const method = delay_type === delay_types.ABSOLUTE ? this.absolute : this.relative;
+    this.state.set('callable', method.bind(this));
   }
 
   /**
    * Executes an absolute delay until a specific timestamp using node-schedule.
    * Schedules an event emission at the specified time and returns a promise.
    * @async
-   * @param {Date|string|number} timestamp - The absolute timestamp to wait until.
-   * @returns {Promise<void>}
+   * @throws {Error} If timestamp is not provided or in an invalid format.
+   * @returns {Promise<Object>} Resolves with a message object when delay completes.
    */
-  async absolute(timestamp) {
+  async absolute() {
+    if (!this.state.get('delay_timestamp')) {
+      throw new Error('Timestamp is required for absolute delay');
+    }
+
     return new Promise((resolve, reject) => {
       let target_date;
-      if (timestamp instanceof Date) {
-        target_date = timestamp;
-      } else if (typeof timestamp === 'string') {
-        target_date = parseISO(timestamp);
-      } else if (typeof timestamp === 'number') {
-        target_date = new Date(timestamp);
+      if (this.state.get('delay_timestamp') instanceof Date) {
+        target_date = this.state.get('delay_timestamp');
+      } else if (typeof this.state.get('delay_timestamp') === 'string') {
+        target_date = parseISO(this.state.get('delay_timestamp'));
+      } else if (typeof this.state.get('delay_timestamp') === 'number') {
+        target_date = new Date(this.state.get('delay_timestamp'));
       } else {
         reject(new Error('Invalid timestamp format'));
         return;
       }
 
       if (!isAfter(target_date, new Date())) {
-        resolve();
+        resolve({message: 'Timestamp is in the past, firing immediately'});
         return;
       }
 
@@ -70,7 +78,7 @@ export default class DelayStep extends Step {
           step: this,
           timestamp: target_date
         });
-        resolve();
+        resolve({message: 'Delay complete'});
       };
 
       const job = schedule.scheduleJob(target_date, callback);
@@ -84,19 +92,23 @@ export default class DelayStep extends Step {
 
   /**
    * Executes a relative delay for a specified duration from the current time.
-   * Uses node-schedule for longer delays (>100ms) and setTimeout for shorter ones.
+   * Uses node-schedule for longer delays (>=100ms) and setTimeout for shorter ones.
    * @async
-   * @param {number} duration - The duration in milliseconds to wait.
-   * @returns {Promise<void>}
+   * @throws {Error} If duration is not provided, not a number, or negative.
+   * @returns {Promise<void>} Resolves when the delay period completes.
    */
-  async relative(duration) {
+  async relative() {
+    if (!this.state.get('delay_duration') && this.state.get('delay_duration') !== 0) {
+      throw new Error('Duration is required for relative delay');
+    }
+
     return new Promise((resolve, reject) => {
-      if (typeof duration !== 'number' || duration < 0) {
+      if (typeof this.state.get('delay_duration') !== 'number' || this.state.get('delay_duration') < 0) {
         reject(new Error('Duration must be a positive number'));
         return;
       }
 
-      if (duration === 0) {
+      if (this.state.get('delay_duration') === 0) {
         resolve();
         return;
       }
@@ -104,24 +116,24 @@ export default class DelayStep extends Step {
       const callback = () => {
         this.events.emit(step_event_names.DELAY_STEP_RELATIVE_COMPLETE, {
           step: this,
-          duration,
+          duration: this.state.get('delay_duration'),
           completed_at: new Date()
         });
         resolve();
       };
 
-      if (duration < 100) {
-        setTimeout(callback, duration);
+      if (this.state.get('delay_duration') < 100) {
+        setTimeout(callback, this.state.get('delay_duration'));
         return;
       }
 
-      const target_date = addMilliseconds(new Date(), duration);
+      const target_date = addMilliseconds(new Date(), this.state.get('delay_duration'));
 
       const job = schedule.scheduleJob(target_date, callback);
       this.state.set('scheduled_job', job);
 
       if (!this.state.get('scheduled_job')) {
-        setTimeout(callback, duration);
+        setTimeout(callback, this.state.get('delay_duration'));
       }
     });
   }

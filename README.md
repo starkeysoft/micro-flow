@@ -1,6 +1,24 @@
-# Frontend Flow
+# Micro Flow - Workflows for Developers
 
-A flexible workflow and step management library for building complex asynchronous flows in Node.js applications.
+A dead simple, lightweight (34.9k g-zipped), flexible workflow library for automating asynchronous tasks.
+Works on both frontend and backend.
+Minimal dependencies
+
+Micro Flow is:
+  - A library for orchestrating flows _in code_ for abstracting away routines the developer would otherwise write themselves.
+
+Micro Flow is not:
+  - A workflow engine. You could certainly build one on top of it, but Micro Flow is made by and for developers to create shortcuts in development.
+
+Have a look through this file as well as the docs for examples of how you can use Micro Flow. Or, make a PR with your own example in the examples section of the docs.
+
+Some ideas:
+  - Form validation and submission
+  - Animations
+  - Mapping data from requests
+  - "Wizards" - a flow of steps that allow someone to set something up or configure their software
+  - Data processing pipelining
+  - Scheduling and automating tasks
 
 ---
 
@@ -45,7 +63,7 @@ A flexible workflow and step management library for building complex asynchronou
 
 ## Overview
 
-Frontend Flow is a robust workflow orchestration library that enables you to build complex, maintainable workflows with support for sequential execution, conditional branching, loops, sub-workflows, delays, and comprehensive event systems. Perfect for automating multi-step processes, building state machines, and orchestrating complex async operations.
+Micro Flow is a robust workflow orchestration library that enables you to build complex, maintainable workflows with support for sequential execution, conditional branching, loops, sub-workflows, delays, and comprehensive event systems. Perfect for automating multi-step processes, building state machines, and orchestrating complex async operations.
 
 ## Features
 
@@ -62,10 +80,14 @@ Frontend Flow is a robust workflow orchestration library that enables you to bui
 ✅ **Async Support** - Full support for asynchronous operations  
 ✅ **Type Safety** - Structured enums for step types, statuses, and events
 
+## TODOs
+  - Returns from steps aren't completely consistent. Requires standardization.
+  - Store state externally rather than passing it along. This will help keep the size of returns down as well.
+
 ## Installation
 
 ```bash
-npm install starkey-flow
+npm install micro-flow
 ```
 
 ## Requirements
@@ -76,10 +98,10 @@ npm install starkey-flow
 ## Quick Start
 
 ```javascript
-import { Workflow, Step, DelayStep, StepTypes } from 'starkey-flow';
+import { Workflow, Step, DelayStep, StepTypes } from 'micro-flow';
 
 // Create a workflow
-const workflow = new Workflow([], 'My First Workflow');
+const workflow = new Workflow({ name: 'My First Workflow' });
 
 // Add steps
 const step1 = new Step({
@@ -123,11 +145,11 @@ console.log('Workflow completed:', result);
 Workflows orchestrate the execution of steps in sequence. They manage state, handle errors, and emit lifecycle events throughout execution.
 
 ```javascript
-const workflow = new Workflow(
-  [step1, step2, step3],  // Array of steps
-  'My Workflow',           // Name (optional)
-  true                     // exit_on_failure (default: true)
-);
+const workflow = new Workflow({
+  steps: [step1, step2, step3],  // Array of steps
+  name: 'My Workflow',            // Name (optional)
+  exit_on_failure: true           // exit_on_failure (default: true)
+});
 ```
 
 **Key Methods:**
@@ -186,17 +208,39 @@ workflow.state.merge({ key1: 'value1', key2: 'value2' });
 Both workflows and steps emit events throughout their lifecycle:
 
 **Workflow Events:**
-- `WORKFLOW_CREATED` - When workflow is instantiated
-- `WORKFLOW_STARTED` - Before execution begins
+- `WORKFLOW_CANCELLED` - When workflow is cancelled
 - `WORKFLOW_COMPLETED` - After successful completion
+- `WORKFLOW_CREATED` - When workflow is instantiated
+- `WORKFLOW_ERRORED` - When workflow encounters an error
 - `WORKFLOW_FAILED` - When workflow fails
+- `WORKFLOW_PAUSED` - When workflow is paused
+- `WORKFLOW_RESUMED` - When workflow is resumed
+- `WORKFLOW_STARTED` - Before execution begins
 - `WORKFLOW_STEP_ADDED` - When a step is added
+- `WORKFLOW_STEP_MOVED` - When a step is moved
+- `WORKFLOW_STEP_REMOVED` - When a step is removed
+- `WORKFLOW_STEP_SHIFTED` - When a step is shifted
+- `WORKFLOW_STEP_SKIPPED` - When a step is skipped
+- `WORKFLOW_STEPS_ADDED` - When multiple steps are added
+- `WORKFLOW_STEPS_CLEARED` - When all steps are cleared
 
 **Step Events:**
-- `STEP_STARTED` - Before step execution
 - `STEP_COMPLETED` - After successful execution
 - `STEP_FAILED` - When step fails
-- `STEP_SKIPPED` - When step is skipped
+- `STEP_RUNNING` - When step execution starts
+- `STEP_PENDING` - When step is in pending state
+- `STEP_WAITING` - When step is in waiting state
+- `DELAY_STEP_ABSOLUTE_COMPLETE` - When absolute delay completes
+- `DELAY_STEP_RELATIVE_COMPLETE` - When relative delay completes
+
+### Callables
+
+A callable is an executable entity. This can be any of:
+  - Functions
+  - Step
+  - Workflow
+
+Each can be passed as the callable for any step.
 
 ## Step Types
 
@@ -205,7 +249,7 @@ Both workflows and steps emit events throughout their lifecycle:
 Add time-based delays to your workflow.
 
 ```javascript
-import { DelayStep, DelayTypes } from 'starkey-flow';
+import { DelayStep, DelayTypes } from 'micro-flow';
 
 // Relative delay (milliseconds)
 const delay1 = new DelayStep({
@@ -234,7 +278,7 @@ const delay3 = new DelayStep({
 Execute different paths based on runtime conditions.
 
 ```javascript
-import { ConditionalStep, Step, StepTypes, ConditionalStepComparators } from 'starkey-flow';
+import { ConditionalStep, Step, StepTypes, ConditionalStepComparators } from 'micro-flow';
 
 const conditional = new ConditionalStep({
   name: 'Check Value',
@@ -259,7 +303,7 @@ const conditional = new ConditionalStep({
 Iterate with while loops or for-each patterns.
 
 ```javascript
-import { LoopStep, Workflow, LoopTypes } from 'starkey-flow';
+import { LoopStep, Workflow, LoopTypes } from 'micro-flow';
 
 // While loop
 const whileLoop = new LoopStep({
@@ -268,7 +312,7 @@ const whileLoop = new LoopStep({
   subject: () => context.counter,
   operator: '<',
   value: 10,
-  sub_workflow: new Workflow([...steps]),
+  sub_workflow: new Workflow({ steps: [...steps] }),
   max_iterations: 20 // Safety limit
 });
 
@@ -277,7 +321,7 @@ const forEachLoop = new LoopStep({
   name: 'For Each Loop',
   loop_type: LoopTypes.FOR_EACH,
   iterable: [1, 2, 3, 4, 5],
-  sub_workflow: new Workflow([...steps])
+  sub_workflow: new Workflow({ steps: [...steps] })
 });
 ```
 
@@ -286,19 +330,23 @@ const forEachLoop = new LoopStep({
 Multi-way branching based on case matching.
 
 ```javascript
-import { SwitchStep, Case, Step, StepTypes } from 'starkey-flow';
+import { SwitchStep, Case, Step, StepTypes, ConditionalStepComparators } from 'micro-flow';
 
 const switchStep = new SwitchStep({
   name: 'Switch Statement',
   subject: () => context.status,
   cases: [
     new Case({
-      value: 'pending',
-      step: new Step({ name: 'Handle Pending', type: StepTypes.ACTION, callable: async () => {} })
+      subject: Date.now(),
+      operator: '>',
+      value: 1763308222197,
+      callable: new Step({ name: 'Handle Pending', type: StepTypes.ACTION, callable: async () => {} })
     }),
     new Case({
-      value: 'completed',
-      step: new Step({ name: 'Handle Completed', type: StepTypes.ACTION, callable: async () => {} })
+      subject: my_var,
+      operator: ConditionalStepComparators.STRICT_EQUALS,
+      value: true,
+      callable: new Step({ name: 'Handle Completed', type: StepTypes.ACTION, callable: async () => {} })
     })
   ],
   default_step: new Step({ 
@@ -314,7 +362,7 @@ const switchStep = new SwitchStep({
 Control workflow execution with break, continue, or skip operations.
 
 ```javascript
-import { FlowControlStep, FlowControlTypes } from 'starkey-flow';
+import { FlowControlStep, FlowControlTypes } from 'micro-flow';
 
 const breakStep = new FlowControlStep({
   name: 'Break Loop',
@@ -325,10 +373,20 @@ const continueStep = new FlowControlStep({
   name: 'Continue Loop',
   flow_control_type: FlowControlTypes.CONTINUE
 });
+```
 
-const skipStep = new FlowControlStep({
-  name: 'Skip Step',
-  flow_control_type: FlowControlTypes.SKIP
+### Skip Step
+
+Conditionally skip the next step
+
+```javascript
+import { SkipStep } from micro-flow
+
+const skipStep = new SkipStep({
+  subject: my_var,
+  operator: '!==',
+  value: false,
+  name: 'My Skip Step'
 });
 ```
 
@@ -338,19 +396,19 @@ const skipStep = new FlowControlStep({
 
 | Class | Description | Documentation |
 |-------|-------------|---------------|
-| `Workflow` | Main workflow orchestrator | [View →](./doc/base-classes/Workflow.md) |
-| `Step` | Base class for all steps | [View →](./doc/base-classes/Step.md) |
-| `DelayStep` | Add time delays | [View →](./doc/step-types/DelayStep.md) |
-| `ConditionalStep` | Conditional branching | [View →](./doc/logic-steps/ConditionalStep.md) |
-| `LoopStep` | Loop iterations | [View →](./doc/logic-steps/LoopStep.md) |
-| `SwitchStep` | Multi-way branching | [View →](./doc/logic-steps/SwitchStep.md) |
-| `FlowControlStep` | Flow control operations | [View →](./doc/logic-steps/FlowControlStep.md) |
-| `LogicStep` | Base for logic steps | [View →](./doc/logic-steps/LogicStep.md) |
-| `Case` | Switch case definition | [View →](./doc/logic-steps/Case.md) |
-| `State` | State management | [View →](./doc/utilities/State.md) |
-| `Event` | Base event class | [View →](./doc/events/Event.md) |
-| `StepEvent` | Step lifecycle events | [View →](./doc/events/StepEvent.md) |
-| `WorkflowEvent` | Workflow lifecycle events | [View →](./doc/events/WorkflowEvent.md) |
+| `Workflow` | Main workflow orchestrator | [View →](./doc/api/classes/workflow.md) |
+| `Step` | Base class for all steps | [View →](./doc/api/classes/step.md) |
+| `DelayStep` | Add time delays | [View →](./doc/api/classes/delay-step.md) |
+| `ConditionalStep` | Conditional branching | [View →](./doc/api/classes/conditional-step.md) |
+| `LoopStep` | Loop iterations | [View →](./doc/api/classes/loop-step.md) |
+| `SwitchStep` | Multi-way branching | [View →](./doc/api/classes/switch-step.md) |
+| `FlowControlStep` | Flow control operations | [View →](./doc/api/classes/flow-control-step.md) |
+| `LogicStep` | Base for logic steps | [View →](./doc/api/classes/logic-step.md) |
+| `Case` | Switch case definition | [View →](./doc/api/classes/case.md) |
+| `State` | State management | [View →](./doc/api/classes/state.md) |
+| `Event` | Base event class | [View →](./doc/api/classes/event.md) |
+| `StepEvent` | Step lifecycle events | [View →](./doc/api/classes/step-event.md) |
+| `WorkflowEvent` | Workflow lifecycle events | [View →](./doc/api/classes/workflow-event.md) |
 
 ### Enums
 
@@ -360,6 +418,7 @@ const skipStep = new FlowControlStep({
 | `StepTypes` | Step type constants (ACTION, DELAY, LOGIC) |
 | `StepEventNames` | Step event name constants |
 | `WorkflowEventNames` | Workflow event name constants |
+| `WorkflowStatuses` | Workflow status constants (CANCELLED, COMPLETED, CREATED, ERRORED, FAILED, PAUSED, PENDING, RUNNING, SKIPPED) |
 | `DelayTypes` | Delay type constants (RELATIVE, ABSOLUTE, CRON) |
 | `ConditionalStepComparators` | Comparison operators (EQUALS, NOT_EQUALS, GREATER_THAN, etc.) |
 | `FlowControlTypes` | Flow control types (BREAK, CONTINUE, SKIP) |
@@ -376,9 +435,9 @@ const skipStep = new FlowControlStep({
 ### Basic Workflow
 
 ```javascript
-import { Workflow, Step, StepTypes } from 'starkey-flow';
+import { Workflow, Step, StepTypes } from 'micro-flow';
 
-const workflow = new Workflow([], 'Basic Workflow');
+const workflow = new Workflow({ name: 'Basic Workflow' });
 
 workflow.pushSteps([
   new Step({
@@ -404,7 +463,7 @@ await workflow.execute();
 ### Conditional Branching
 
 ```javascript
-import { Workflow, Step, StepTypes, ConditionalStep } from 'starkey-flow';
+import { Workflow, Step, StepTypes, ConditionalStep } from 'micro-flow';
 
 const workflow = new Workflow();
 
@@ -431,9 +490,10 @@ await workflow.execute();
 ### Loops
 
 ```javascript
-import { Workflow, LoopStep, Step, StepTypes, LoopTypes } from 'starkey-flow';
+import { Workflow, LoopStep, Step, StepTypes, LoopTypes } from 'micro-flow';
 
-const loopBody = new Workflow([
+const loopBody = new Workflow({
+  steps: [
   new Step({
     name: 'Process Item',
     type: StepTypes.ACTION,
@@ -441,7 +501,8 @@ const loopBody = new Workflow([
       console.log('Processing:', context.current_item);
     }
   })
-]);
+]
+});
 
 const loop = new LoopStep({
   name: 'Process All Items',
@@ -450,16 +511,18 @@ const loop = new LoopStep({
   sub_workflow: loopBody
 });
 
-const workflow = new Workflow([loop]);
+const workflow = new Workflow({ steps: [loop] });
 await workflow.execute();
 ```
 
 ### Nested Workflows
 
 ```javascript
-import { Workflow, Step, StepTypes } from 'starkey-flow';
+import { Workflow, Step, StepTypes } from 'micro-flow';
 
-const subWorkflow = new Workflow([
+const subWorkflow = new Workflow({
+  name: 'Sub Workflow',
+  steps: [
   new Step({
     name: 'Sub Step 1',
     type: StepTypes.ACTION,
@@ -467,9 +530,11 @@ const subWorkflow = new Workflow([
       context.subResult = 'processed';
     }
   })
-], 'Sub Workflow');
+]
+});
 
-const mainWorkflow = new Workflow([
+const mainWorkflow = new Workflow({
+  steps: [
   new Step({
     name: 'Main Step 1',
     type: StepTypes.ACTION,
@@ -489,7 +554,8 @@ const mainWorkflow = new Workflow([
       console.log(context.subResult); // 'processed'
     }
   })
-]);
+]
+});
 
 await mainWorkflow.execute();
 ```
@@ -497,10 +563,10 @@ await mainWorkflow.execute();
 ### Error Handling
 
 ```javascript
-import { Workflow, Step, StepTypes } from 'starkey-flow';
+import { Workflow, Step, StepTypes } from 'micro-flow';
 
 // Workflow with exit_on_failure = false
-const workflow = new Workflow([], 'Resilient Workflow', false);
+const workflow = new Workflow({ name: 'Resilient Workflow', exit_on_failure: false });
 
 workflow.pushSteps([
   new Step({
@@ -532,7 +598,7 @@ await workflow.execute();
 ### Event Listeners
 
 ```javascript
-import { Workflow, WorkflowEventNames, Step, StepTypes, StepEventNames } from 'starkey-flow';
+import { Workflow, WorkflowEventNames, Step, StepTypes, StepEventNames } from 'micro-flow';
 
 const workflow = new Workflow();
 
@@ -559,7 +625,7 @@ step.events.on(StepEventNames.STEP_STARTED, (data) => {
 ### State Access
 
 ```javascript
-import { Workflow, Step, StepTypes } from 'starkey-flow';
+import { Workflow, Step, StepTypes } from 'micro-flow';
 
 const workflow = new Workflow();
 
@@ -597,9 +663,10 @@ workflow.pushStep(new Step({
 
 ```javascript
 import { Workflow, LoopStep, FlowControlStep, Step, StepTypes,
-         FlowControlTypes, LoopTypes } from 'starkey-flow';
+         FlowControlTypes, LoopTypes } from 'micro-flow';
 
-const loopBody = new Workflow([
+const loopBody = new Workflow({
+  steps: [
   new Step({
     name: 'Check Condition',
     type: StepTypes.ACTION,
@@ -619,26 +686,29 @@ const loopBody = new Workflow([
       context.counter++;
     }
   })
-]);
+]
+});
 
-const workflow = new Workflow([
-  new Step({
-    name: 'Initialize',
-    type: StepTypes.ACTION,
-    callable: async (context) => {
-      context.counter = 0;
-    }
-  }),
-  new LoopStep({
-    name: 'Controlled Loop',
-    loop_type: LoopTypes.WHILE,
-    subject: () => true, // Would run forever without break
-    operator: '===',
-    value: true,
-    sub_workflow: loopBody,
-    max_iterations: 100
-  })
-]);
+const workflow = new Workflow({
+  steps: [
+    new Step({
+      name: 'Initialize',
+      type: StepTypes.ACTION,
+      callable: async (context) => {
+        context.counter = 0;
+      }
+    }),
+    new LoopStep({
+      name: 'Controlled Loop',
+      loop_type: LoopTypes.WHILE,
+      subject: () => true, // Would run forever without break
+      operator: '===',
+      value: true,
+      sub_workflow: loopBody,
+      max_iterations: 100
+    })
+  ]
+});
 
 await workflow.execute();
 ```
@@ -647,13 +717,12 @@ await workflow.execute();
 
 Comprehensive documentation is available in the `/doc` folder:
 
-- **[Complete Documentation](./doc/README.md)** - Full documentation index
-- **[Base Classes](./doc/base-classes/)** - Workflow and Step fundamentals
-- **[Step Types](./doc/step-types/)** - DelayStep
-- **[Logic Steps](./doc/logic-steps/)** - ConditionalStep, LoopStep, SwitchStep
-- **[Events](./doc/events/)** - Event system documentation
-- **[Utilities](./doc/utilities/)** - State management and helpers
-- **[Enums](./doc/enums/)** - All enum references
+- **[Complete Documentation](./doc/index.md)** - Full documentation index
+- **[API Reference](./doc/api/classes/)** - All classes documentation
+- **[Core Concepts](./doc/core-concepts/)** - Workflows, Steps, State, Events, and Callables
+- **[Enums](./doc/api/enums/)** - All enum references
+- **[Helpers](./doc/api/helpers/)** - Helper functions
+- **[Examples](./doc/examples/)** - Usage examples
 
 ## Testing
 
