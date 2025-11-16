@@ -16,17 +16,23 @@ new Workflow(options)
 | `options.name` | `string` | No | `workflow_{uuid}` | Name for the workflow |
 | `options.exit_on_failure` | `boolean` | No | `true` | Whether to stop execution when a step fails |
 | `options.freeze_on_completion` | `boolean` | No | `true` | Whether to freeze state after completion |
+| `options.sub_step_type_paths` | `Array<string>` | No | `[]` | Additional directory paths to scan for custom step classes. The built-in classes directory is always included. Paths are merged when `setWorkflow()` is called on each step. |
 
 ### Example
 
 ```javascript
 import { Workflow, Step, StepTypes } from 'micro-flow';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const workflow = new Workflow({
   steps: [step1, step2, step3],
   name: 'Data Processing',
   exit_on_failure: true,
-  freeze_on_completion: true
+  freeze_on_completion: true,
+  sub_step_type_paths: [join(__dirname, './custom-steps')]
 });
 ```
 

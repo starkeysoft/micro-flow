@@ -10,6 +10,7 @@ const workflow_statuses = {
   COMPLETED: 'completed',
   CREATED: 'created',
   ERRORED: 'errored',
+  FROZEN: 'frozen',
   FAILED: 'failed',
   PAUSED: 'paused',
   PENDING: 'pending',

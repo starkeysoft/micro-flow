@@ -466,8 +466,9 @@ const recordWorkflow = new Workflow({
     new Step({
       name: 'Process Single Record',
       type: StepTypes.ACTION,
-      callable: async function() {
-        const record = this.workflow.get('currentRecord');
+      callable: async function(context) {
+        // Access current record from the parent loop step
+        const record = this.parent.state.get('current_item');
         return await DataProcessor.processRecord(record);
       }
     })

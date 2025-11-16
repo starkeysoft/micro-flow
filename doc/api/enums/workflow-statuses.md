@@ -13,7 +13,6 @@ Defines the execution states for workflows throughout their lifecycle.
 | `CANCELLED` | `'cancelled'` | Workflow execution was cancelled |
 | `PAUSED` | `'paused'` | Workflow execution is paused |
 | `RESUMED` | `'resumed'` | Workflow resumed after pause |
-| `EMPTY` | `'empty'` | Workflow has no steps |
 | `FROZEN` | `'frozen'` | Workflow state is frozen (immutable) |
 
 ## Import
@@ -34,8 +33,7 @@ PENDING → RUNNING → COMPLETED
            FAILED
               ↓
          CANCELLED
-              
-EMPTY (special state)
+
 FROZEN (final state modifier)
 ```
 

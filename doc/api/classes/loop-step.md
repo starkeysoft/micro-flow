@@ -60,6 +60,7 @@ In addition to LogicStep state properties:
 |----------|------|-------------|
 | `loop_type` | `string` | Loop type (WHILE or FOR_EACH) |
 | `iterable` | `Array` | Collection for FOR_EACH loops |
+| `current_item` | `any` | Current item being processed (set during FOR_EACH loops) |
 | `max_iterations` | `number` | Maximum iteration limit |
 | `should_break` | `boolean` | Flag to break from loop |
 
@@ -140,7 +141,9 @@ itemWorkflow.pushSteps([
   new Step({
     name: 'Validate',
     type: StepTypes.ACTION,
-    callable: async (item) => {
+    callable: async function(context) {
+      // Access current item from the parent loop step
+      const item = this.parent.state.get('current_item');
       if (!item.valid) throw new Error('Invalid item');
       return item;
     }
@@ -148,11 +151,14 @@ itemWorkflow.pushSteps([
   new Step({
     name: 'Transform',
     type: StepTypes.ACTION,
-    callable: async (item) => ({
-      ...item,
-      processed: true,
-      timestamp: Date.now()
-    })
+    callable: async function(context) {
+      const item = this.parent.state.get('current_item');
+      return {
+        ...item,
+        processed: true,
+        timestamp: Date.now()
+      };
+    }
   })
 ]);
 
@@ -244,7 +250,8 @@ searchWorkflow.pushSteps([
   new Step({
     name: 'Check Item',
     type: StepTypes.ACTION,
-    callable: async function(item) {
+    callable: async function(context) {
+      const item = this.parent.state.get('current_item');
       if (item.id === this.workflow.targetId) {
         this.workflow.foundItem = item;
         this.workflow.should_break = true; // Exit loop
@@ -275,14 +282,16 @@ processWorkflow.pushSteps([
   new FlowControlStep({
     name: 'Skip Invalid',
     flow_control_type: FlowControlTypes.CONTINUE,
-    callable: async function(item) {
+    callable: async function(context) {
+      const item = this.parent.state.get('current_item');
       return !item.valid; // Continue (skip) if not valid
     }
   }),
   new Step({
     name: 'Process Item',
     type: StepTypes.ACTION,
-    callable: async (item) => {
+    callable: async function(context) {
+      const item = this.parent.state.get('current_item');
       return await processValidItem(item);
     }
   })
@@ -306,22 +315,35 @@ innerWorkflow.pushSteps([
   new Step({
     name: 'Process Sub-Item',
     type: StepTypes.ACTION,
-    callable: async (subItem) => {
+    callable: async function(context) {
+      const subItem = this.parent.state.get('current_item');
       console.log('Processing:', subItem);
       return { processed: subItem };
     }
   })
 ]);
 
-const innerLoop = new LoopStep({
-  name: 'Inner Loop',
-  loop_type: LoopTypes.FOR_EACH,
-  iterable: (category) => category.items, // Access items from outer loop
-  callable: innerWorkflow
-});
-
+// Note: For nested loops, you'll need to get the outer loop's current_item
+// and use it to build the iterable for the inner loop
 const outerWorkflow = new Workflow({ name: 'Outer Loop' });
-outerWorkflow.pushSteps([innerLoop]);
+outerWorkflow.pushSteps([
+  new Step({
+    name: 'Setup Inner Loop',
+    type: StepTypes.ACTION,
+    callable: async function(context) {
+      const category = this.parent.state.get('current_item');
+      
+      const innerLoop = new LoopStep({
+        name: 'Inner Loop',
+        loop_type: LoopTypes.FOR_EACH,
+        iterable: category.items,
+        callable: innerWorkflow
+      });
+      
+      return await innerLoop.execute();
+    }
+  })
+]);
 
 const outerLoop = new LoopStep({
   name: 'Outer Loop',
@@ -380,7 +402,8 @@ apiCallWorkflow.pushSteps([
   new Step({
     name: 'Call API',
     type: StepTypes.ACTION,
-    callable: async (endpoint) => {
+    callable: async function(context) {
+      const endpoint = this.parent.state.get('current_item');
       const response = await fetch(endpoint);
       return response.json();
     }
@@ -410,7 +433,8 @@ accumulateWorkflow.pushSteps([
   new Step({
     name: 'Process and Accumulate',
     type: StepTypes.ACTION,
-    callable: async function(item) {
+    callable: async function(context) {
+      const item = this.parent.state.get('current_item');
       const result = await processItem(item);
       
       // Accumulate results in workflow state

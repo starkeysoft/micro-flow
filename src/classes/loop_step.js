@@ -46,6 +46,7 @@ export default class LoopStep extends LogicStep {
     this.state.set('value', value);
     this.state.set('max_iterations', max_iterations);
     this.state.set('should_break', false);
+    this.state.set('current_item', null);
     
     this.state.set('callable', this[loop_type === loop_types.WHILE ? 'whileLoopStep' : 'forEachLoopStep'].bind(this));
   }
@@ -142,6 +143,7 @@ export default class LoopStep extends LogicStep {
 
       this.logStep(`Iteration ${iterations + 1} for loop step: ${this.state.get('name')}`);
 
+      this.state.set('current_item', item);
       const result = await this.runCallable();
 
       iterations++;
