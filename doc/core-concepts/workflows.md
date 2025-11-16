@@ -15,7 +15,8 @@ const workflow = new Workflow({
   steps: [],                    // Array of step objects (optional)
   name: 'My Workflow',          // Workflow name (optional, auto-generated if not provided)
   exit_on_failure: true,        // Stop execution on step failure (default: true)
-  freeze_on_completion: true    // Freeze state after completion (default: true)
+  freeze_on_completion: true,   // Freeze state after completion (default: true)
+  sub_step_type_paths: []       // Additional directories for custom step classes (default: [])
 });
 ```
 
@@ -27,6 +28,7 @@ const workflow = new Workflow({
 | `name` | `string` | `workflow_{uuid}` | Name for the workflow |
 | `exit_on_failure` | `boolean` | `true` | Whether to stop execution when a step fails |
 | `freeze_on_completion` | `boolean` | `true` | Whether to freeze state after workflow completes |
+| `sub_step_type_paths` | `Array<string>` | `[]` | Additional directory paths to scan for custom step classes. The built-in classes directory is always included. |
 
 ## Key Methods
 

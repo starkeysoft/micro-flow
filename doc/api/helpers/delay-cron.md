@@ -1,18 +1,19 @@
 # delay_cron Helper
 
-Delays execution until a specific timestamp is reached using a polling mechanism.
+Delays execution until a specific timestamp is reached using node-schedule.
 
 ## Signature
 
 ```javascript
-async delay_cron(fire_time)
+async delay_cron(fire_time, events = new Event())
 ```
 
 ## Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `fire_time` | `number` | Yes | Target timestamp in milliseconds (epoch time) |
+| `fire_time` | `number \| Date` | Yes | Target timestamp in milliseconds (epoch time) or Date object |
+| `events` | `Event` | No | Optional Event instance for emitting events (defaults to new Event) |
 
 ## Returns
 
@@ -21,19 +22,21 @@ async delay_cron(fire_time)
 
 ## Description
 
-The `delay_cron` helper provides a polling-based delay mechanism that waits until a specific timestamp is reached. It checks every second (1000ms) whether the current time has reached or exceeded the target time.
+The `delay_cron` helper provides a scheduler-based delay mechanism that waits until a specific timestamp is reached using `node-schedule`. It schedules a job to execute at the exact target time and emits events when the delay completes.
 
 This is particularly useful for:
 - Scheduling tasks to run at specific times
 - Implementing time-based delays in workflows
 - Creating cron-like behavior without external schedulers
+- Event-driven delayed execution
 
-## Polling Mechanism
+## Scheduling Mechanism
 
-The function uses a polling interval of **1 second (1000ms)** to check if the target time has been reached. This means:
-- Resolution is limited to ~1 second accuracy
-- Not suitable for sub-second precision timing
-- Low overhead for long-duration delays
+The function uses **node-schedule** to schedule job execution at the exact target time. This provides:
+- High precision timing (millisecond accuracy)
+- No polling overhead
+- Efficient resource usage
+- Event emission for reactive programming
 
 ## Examples
 

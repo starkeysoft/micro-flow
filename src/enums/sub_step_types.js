@@ -19,6 +19,12 @@ const __dirname = dirname(__filename);
  * When step_name references an enum (e.g., logic_step_types.CONDITIONAL), the function
  * resolves the actual string value from the imported enum objects.
  * 
+ * The built-in classes directory is always scanned. Additional directories can be provided
+ * to scan for custom step classes. This is typically used via workflow.sub_step_type_paths,
+ * which is merged with the default when setWorkflow() is called on a step.
+ * 
+ * @param {string[]} directories - An array of additional directory paths to scan for class files. 
+ *   The built-in classes directory is always included. Defaults to an empty array.
  * @returns {Object.<string, string|null>} An object mapping class names to their step_name values.
  *   Classes without a step_name property are mapped to null.
  * @example
@@ -26,13 +32,15 @@ const __dirname = dirname(__filename);
  * // {
  * //   "Step": null,
  * //   "ConditionalStep": "conditional",
- * //   "Step": null,
+ * //   "LogicStep": "logic",
  * //   ...
  * // }
  */
-const generate_sub_step_types = () => {
+const generate_sub_step_types = (directories = []) => {
   const types = {};
-  const classesDir = join(__dirname, '../classes');
+  
+  // Always include the classes directory, then append any additional directories
+  const dirsToScan = directories.push([join(__dirname, '../classes')]);
   
   // Combine all enums into one lookup object
   const allEnums = {
@@ -40,41 +48,44 @@ const generate_sub_step_types = () => {
     step_types
   };
   
-  // Read all files in the classes directory
-  const files = readdirSync(classesDir).filter(file => file.endsWith('.js') && file !== 'index.js');
-  
-  for (const file of files) {
-    const filePath = join(classesDir, file);
-    const content = readFileSync(filePath, 'utf-8');
+  // Scan each directory in the array
+  for (const dir of dirsToScan) {
+    // Read all files in the current directory
+    const files = readdirSync(dir).filter(file => file.endsWith('.js') && file !== 'index.js');
     
-    // Extract class name from the file content
-    const classNameMatch = content.match(/export default class (\w+)/);
-    if (!classNameMatch) continue;
-    
-    const className = classNameMatch[1];
-    
-    // Extract static step_name value
-    const stepNameMatch = content.match(/static step_name\s*=\s*['"`]?([^'"`;\n]+)['"`]?/);
-    
-    if (stepNameMatch) {
-      let stepName = stepNameMatch[1].trim();
+    for (const file of files) {
+      const filePath = join(dir, file);
+      const content = readFileSync(filePath, 'utf-8');
       
-      // Handle cases where step_name references an enum
-      // e.g., logic_step_types.CONDITIONAL or step_types.ACTION
-      if (stepName.includes('.')) {
-        const [enumName, enumKey] = stepName.split('.');
+      // Extract class name from the file content
+      const classNameMatch = content.match(/export default class (\w+)/);
+      if (!classNameMatch) continue;
+      
+      const className = classNameMatch[1];
+      
+      // Extract static step_name value
+      const stepNameMatch = content.match(/static step_name\s*=\s*['"`]?([^'"`;\n]+)['"`]?/);
+      
+      if (stepNameMatch) {
+        let stepName = stepNameMatch[1].trim();
         
-        // Look up the actual value from the imported enums
-        if (allEnums[enumName] && allEnums[enumName][enumKey]) {
-          stepName = allEnums[enumName][enumKey];
-        } else {
-          stepName = null;
+        // Handle cases where step_name references an enum
+        // e.g., logic_step_types.CONDITIONAL or step_types.ACTION
+        if (stepName.includes('.')) {
+          const [enumName, enumKey] = stepName.split('.');
+          
+          // Look up the actual value from the imported enums
+          if (allEnums[enumName] && allEnums[enumName][enumKey]) {
+            stepName = allEnums[enumName][enumKey];
+          } else {
+            stepName = null;
+          }
         }
+        
+        types[className] = stepName;
+      } else {
+        types[className] = null;
       }
-      
-      types[className] = stepName;
-    } else {
-      types[className] = null;
     }
   }
   

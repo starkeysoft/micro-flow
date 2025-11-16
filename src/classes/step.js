@@ -4,7 +4,7 @@ import State from './state.js';
 import Workflow from './workflow.js';
 import step_statuses from '../enums/step_statuses.js';
 import step_types from '../enums/step_types.js';
-import sub_step_types from '../enums/sub_step_types.js';
+import generate_sub_step_types from '../enums/sub_step_types.js';
 
 /**
  * Base class representing a workflow step with lifecycle management and event handling.
@@ -30,7 +30,7 @@ export default class Step {
     this.state = new State({
       status: step_statuses.WAITING,
       step_types: step_types,
-      sub_step_types: sub_step_types,
+      sub_step_types: generate_sub_step_types(),
       start_time: null,
       name: name,
       type: type,
@@ -197,6 +197,7 @@ export default class Step {
    */
   setWorkflow(workflow_state) {
     this.workflow = workflow_state;
+    this.state.set('sub_step_types', generate_sub_step_types(workflow_state.get('sub_step_type_paths')));
   }
 
   /**

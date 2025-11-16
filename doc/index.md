@@ -1,6 +1,6 @@
 # Micro Flow - Workflows for Developers
 
-> A dead simple, lightweight (34.9k g-zipped), flexible workflow library for automating asynchronous tasks. Works on both frontend and backend.
+> A dead simple, lightweight (~35k g-zipped), flexible workflow library for automating asynchronous tasks. Works on both frontend and backend.
 
 ## Documentation
 

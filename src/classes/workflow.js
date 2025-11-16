@@ -18,8 +18,9 @@ export default class Workflow {
    * @param {string} [options.name=null] - Optional name for the workflow. If not provided, generates a unique name.
    * @param {boolean} [options.exit_on_failure=true] - Whether to exit the workflow when a step fails.
    * @param {boolean} [options.freeze_on_completion=true] - Whether to freeze the state after completion.
+   * @param {string[]} [options.sub_step_type_paths=[]] - Additional directories to scan for sub step types.
    */
-  constructor({ steps = [], name = null, exit_on_failure = true, freeze_on_completion = true } = {}) {
+  constructor({ steps = [], name = null, exit_on_failure = true, freeze_on_completion = true, sub_step_type_paths = [] } = {}) {
     const id = uuidv4();
     const workflowName = name ?? `workflow_${id}`;
     this.events = new WorkflowEvents();
@@ -43,6 +44,7 @@ export default class Workflow {
       status: null,
       output_data: [],
       steps: steps,
+      sub_step_type_paths: sub_step_type_paths,
     });
 
     this.setListeners();

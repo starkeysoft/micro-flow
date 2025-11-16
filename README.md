@@ -1,6 +1,6 @@
 # Micro Flow - Workflows for Developers
 
-A dead simple, lightweight (34.9k g-zipped), flexible workflow library for automating asynchronous tasks.
+A dead simple, lightweight (~35k g-zipped), flexible workflow library for automating asynchronous tasks.
 Works on both frontend and backend.
 Minimal dependencies
 
@@ -19,6 +19,7 @@ Some ideas:
   - "Wizards" - a flow of steps that allow someone to set something up or configure their software
   - Data processing pipelining
   - Scheduling and automating tasks
+  - More complex UI reactivity in fewer lines of code
 
 ---
 
@@ -148,7 +149,8 @@ Workflows orchestrate the execution of steps in sequence. They manage state, han
 const workflow = new Workflow({
   steps: [step1, step2, step3],  // Array of steps
   name: 'My Workflow',            // Name (optional)
-  exit_on_failure: true           // exit_on_failure (default: true)
+  exit_on_failure: true,          // exit_on_failure (default: true)
+  sub_step_type_paths: []         // Additional directories for custom steps (default: [])
 });
 ```
 
@@ -317,6 +319,7 @@ const whileLoop = new LoopStep({
 });
 
 // For-each loop
+// Note: In FOR_EACH loops, access current item via this.parent.state.get('current_item')
 const forEachLoop = new LoopStep({
   name: 'For Each Loop',
   loop_type: LoopTypes.FOR_EACH,
@@ -497,8 +500,10 @@ const loopBody = new Workflow({
   new Step({
     name: 'Process Item',
     type: StepTypes.ACTION,
-    callable: async (context) => {
-      console.log('Processing:', context.current_item);
+    callable: async function(context) {
+      // Access current item from the parent loop step
+      const currentItem = this.parent.state.get('current_item');
+      console.log('Processing:', currentItem);
     }
   })
 ]
