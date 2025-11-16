@@ -1,8 +1,8 @@
-import deep_clone from '../helpers/deep_clone';
+import deep_clone from '../helpers/deep_clone.js';
 
 /**
- * Class representing the state of a workflow or process.
- * Provides methods for managing workflow state with getter/setter functionality.
+ * Class representing the state of a workflow, step, or process.
+ * Provides methods for managing state with getter/setter functionality and immutability options.
  * @class State
  */
 export default class State {
@@ -29,10 +29,11 @@ export default class State {
   /**
    * Gets the value of a state property.
    * @param {string} key - The key of the state property to get.
-   * @returns {*} The value of the state property.
+   * @param {*} [defaultValue=null] - Default value to return if the key doesn't exist.
+   * @returns {*} The value of the state property, or defaultValue if not found.
    */
-  get(key) {
-    return this.state[key];
+  get(key, defaultValue = null) {
+    return this.state[key] ?? defaultValue;
   }
 
   /**
@@ -55,6 +56,7 @@ export default class State {
    * Sets the value of a state property.
    * @param {string} key - The key of the state property to set.
    * @param {*} value - The value to set for the state property.
+   * @returns {void}
    */
   set(key, value) {
     this.state[key] = value;
@@ -63,6 +65,7 @@ export default class State {
   /**
    * Merges an object into the current state.
    * @param {Object} newState - The object to merge into the current state.
+   * @returns {void}
    */
   merge(newState) {
     this.state = { ...this.state, ...newState };
@@ -70,17 +73,23 @@ export default class State {
 
   /**
    * Freezes the state object to prevent further modifications.
+   * @returns {void}
    */
   freeze() {
     Object.freeze(this.state);
   }
 
   /**
-   * Prepares the state by calculating execution time and freezing the state.
+   * Prepares the state by calculating execution time and optionally freezing the state.
    * @param {number} start_time - The start time of the execution.
+   * @param {boolean} [freeze=true] - Whether to freeze the state after preparation.
+   * @returns {void}
    */
-  prepare(start_time) {
+  prepare(start_time, freeze = true) {
     this.state.execution_time_ms = Date.now() - start_time;
-    this.freeze();
+
+    if (freeze) {
+      this.freeze();
+    }
   }
 }

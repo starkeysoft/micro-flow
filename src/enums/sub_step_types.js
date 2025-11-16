@@ -24,7 +24,7 @@ const __dirname = dirname(__filename);
  * @example
  * // Returns:
  * // {
- * //   "ActionStep": "action",
+ * //   "Step": null,
  * //   "ConditionalStep": "conditional",
  * //   "Step": null,
  * //   ...
@@ -60,7 +60,7 @@ const generate_sub_step_types = () => {
       let stepName = stepNameMatch[1].trim();
       
       // Handle cases where step_name references an enum
-      // e.g., logic_step_types.CONDITIONAL or step_types.SUBFLOW
+      // e.g., logic_step_types.CONDITIONAL or step_types.ACTION
       if (stepName.includes('.')) {
         const [enumName, enumKey] = stepName.split('.');
         

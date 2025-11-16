@@ -9,7 +9,8 @@ const LogicStepTypes = {
   CONDITIONAL: 'conditional',
   LOOP: 'loop',
   FLOW_CONTROL: 'flow_control',
-  SWITCH: 'switch'
+  SWITCH: 'switch',
+  SKIP: 'skip'
 };
 
 export default LogicStepTypes;

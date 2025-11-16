@@ -1,4 +1,3 @@
-export { default as ActionStep } from './action_step.js';
 export { default as Case } from './case.js';
 export { default as ConditionalStep } from './conditional_step.js';
 export { default as DelayStep } from './delay_step.js';
@@ -6,10 +5,10 @@ export { default as Event } from './event.js';
 export { default as FlowControlStep } from './flow_control_step.js';
 export { default as LogicStep } from './logic_step.js';
 export { default as LoopStep } from './loop_step.js';
+export { default as SkipStep } from './skip_step.js';
 export { default as State } from './state.js';
 export { default as Step } from './step.js';
 export { default as StepEvent } from './step_event.js';
-export { default as SubflowStep } from './subflow_step.js';
 export { default as SwitchStep } from './switch_step.js';
 export { default as Workflow } from './workflow.js';
 export { default as WorkflowEvent } from './workflow_event.js';

@@ -9,8 +9,9 @@ const step_statuses = {
   COMPLETE: 'complete',
   FAILED: 'failed',
   PENDING: 'pending',
+  QUEUED: 'queued',
   RUNNING: 'running',
-  WAITING: 'waiting'
+  WAITING: 'waiting',
 };
 
 export default step_statuses;

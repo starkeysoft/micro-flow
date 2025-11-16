@@ -1,21 +1,16 @@
 import { v4 as uuidv4 } from 'uuid';
 import StepEvents from './step_event.js';
+import State from './state.js';
+import Workflow from './workflow.js';
+import step_statuses from '../enums/step_statuses.js';
 import step_types from '../enums/step_types.js';
 import sub_step_types from '../enums/sub_step_types.js';
-import step_statuses from '../enums/step_statuses.js';
-import Workflow from './workflow.js';
 
 /**
  * Base class representing a workflow step with lifecycle management and event handling.
  * @class Step
  */
 export default class Step {
-  events = new StepEvents();
-  status = step_statuses.WAITING;
-  step_types = step_types;
-  sub_step_types = sub_step_types;
-  context = {};
-
   /**
    * Creates a new Step instance.
    * @constructor
@@ -31,48 +26,70 @@ export default class Step {
     callable = async () => {},
     log_suppress = false,
   }) {
-    this.name = name;
-    this.type = type;
-    this.callable = callable;
-    this.log_suppress = log_suppress;
-    this.id = uuidv4();
+    this.events = new StepEvents();
+    this.state = new State({
+      status: step_statuses.WAITING,
+      step_types: step_types,
+      sub_step_types: sub_step_types,
+      start_time: null,
+      name: name,
+      type: type,
+      callable: callable,
+      log_suppress: log_suppress,
+      id: uuidv4()
+    });
   }
 
   /**
-   * Executes the step's callable function with any provided arguments.
+   * Executes the step's callable function. The workflow state is available via this.workflow,
+   * which is set by the parent workflow through setWorkflow() before execution.
    * @async
-   * @returns {Promise<*>} The result of the callable function.
+   * @returns {Promise<Object>} An object containing the result and step state: {result, state}.
    * @throws {Error} If the callable function throws an error during execution.
    */
   async execute() {
     this.markAsRunning();
 
     // Steps can be instances of other steps
-    if (typeof this.callable.markAsComplete === 'function') {
-      this.callable = this.callable.callable;
+    let callable = this.state.get('callable');
+    if (typeof callable.markAsComplete === 'function') {
+      callable = callable.state.get('callable');
+      this.state.set('callable', callable);
     }
 
     let result;
 
     try {
       // Steps can be instances of workflows
-      if (this.callable instanceof Workflow) {
-        // Don't pass context.steps to avoid overwriting the workflow's own steps
-        const { steps, steps_by_id, ...contextWithoutSteps } = this.context || {};
-        result = await this.callable.execute(contextWithoutSteps);
+      if (callable instanceof Workflow) {
+        this.events.emit(this.events.event_names.STEP_RUNNING, { step: this });
+
+        result = await callable.execute();
+
         this.markAsComplete();
-        return result;
+        this.state.set('execution_time_ms', callable.state.get('execution_time_ms'));
+        this.events.emit(this.events.event_names.STEP_COMPLETED, { step: this, result });
+        return {result, step: this};
       }
 
+      this.state.set('start_time', Date.now());
+      this.events.emit(this.events.event_names.STEP_RUNNING, { step: this });
+      
       // or they can be simple functions
-      result = await this.callable(this.context);
+      result = await callable();
     } catch (error) {
+      this.state.set('execution_time_ms', Date.now() - this.state.get('start_time'));
+      this.events.emit(this.events.event_names.STEP_FAILED, { step: this, error });
       this.markAsFailed(error);
       throw error;
     }
   
     this.markAsComplete();
-    return result;
+
+    this.state.set('execution_time_ms', Date.now() - this.state.get('start_time'));
+    this.events.emit(this.events.event_names.STEP_COMPLETED, { step: this, result });
+
+    return this.prepareReturnData(result);
   }
 
   /**
@@ -82,12 +99,12 @@ export default class Step {
    * @returns {void}
    */
   logStep(message) {
-    if (this.log_suppress) {
+    if (this.state.get('log_suppress')) {
       return;
     }
 
-    const log_type = this.status === step_statuses.FAILED ? 'error' : 'log';
-    console[log_type](message ? message : `Step "${this.name}" ${this.status}.`);
+    const log_type = this.state.get('status') === step_statuses.FAILED ? 'error' : 'log';
+    console[log_type](message ? message : `Step "${this.state.get('name')}" ${this.state.get('status')}.`);
   }
 
   /**
@@ -97,7 +114,7 @@ export default class Step {
   markAsComplete() {
     this.logStep();
 
-    this.status= step_statuses.COMPLETE;
+    this.state.set('status', step_statuses.COMPLETE);
     this.events.emit(this.events.event_names.STEP_COMPLETED, { step: this });
   }
 
@@ -107,9 +124,9 @@ export default class Step {
    * @returns {void}
    */
   markAsFailed(error) {
-    this.logStep(`Step "${this.name}" failed with error: ${error.message}`);
+    this.logStep(`Step "${this.state.get('name')}" failed with error: ${error.stack}`);
 
-    this.status = step_statuses.FAILED;
+    this.state.set('status', step_statuses.FAILED);
     this.events.emit(this.events.event_names.STEP_FAILED, { step: this, error });
   }
 
@@ -120,7 +137,7 @@ export default class Step {
   markAsWaiting() {
     this.logStep();
 
-    this.status = step_statuses.WAITING;
+    this.state.set('status', step_statuses.WAITING);
     this.events.emit(this.events.event_names.STEP_WAITING, { step: this });
   }
 
@@ -131,7 +148,7 @@ export default class Step {
   markAsPending() {
     this.logStep();
 
-    this.status = step_statuses.PENDING;
+    this.state.set('status', step_statuses.PENDING);
     this.events.emit(this.events.event_names.STEP_PENDING, { step: this });
   }
 
@@ -142,8 +159,20 @@ export default class Step {
   markAsRunning() {
     this.logStep();
 
-    this.status = step_statuses.RUNNING;
+    this.state.set('status', step_statuses.RUNNING);
     this.events.emit(this.events.event_names.STEP_RUNNING, { step: this });
+  }
+
+  /**
+   * Prepares the return data for this step, including the result and step state.
+   * @param {*} result - The result from the callable execution.
+   * @returns {Object} An object containing the result and step state: {result, state}.
+   */
+  prepareReturnData(result) {
+    return {
+      result: result,
+      state: this.state.getState(),
+    };
   }
 
   /**
@@ -160,20 +189,25 @@ export default class Step {
   }
 
   /**
-   * Sets the execution context for this step. Provides a snapshot of the workflow state
-   * at the time of execution. The context is an object containing state information
-   * accessible during step execution. Also creates a mapping of steps by their IDs
-   * for easy access.
-   * @param {Object} state - The state object to set as the context.
+   * Sets the workflow state reference for this step. This is called by the parent workflow
+   * before step execution to provide access to the workflow's state data. Steps can access
+   * workflow state through this.workflow during execution.
+   * @param {WorkflowState} workflow - The WorkflowState instance from the parent workflow.
    * @returns {void}
    */
-  setContext(state) {
-    this.context = state;
+  setWorkflow(workflow_state) {
+    this.workflow = workflow_state;
+  }
 
-    this.context.steps_by_id = {};
-
-    this.context?.steps.forEach(step => {
-      this.context.steps_by_id[step.id] = step;
-    });
+  /**
+   * Sets the callable function for this action step. This is the only step that
+   * can do that after instantiation. It is deliberately designed to be generic
+   * and run whatever function is provided.
+   * @param {Step | Workflow | Function} callable - The function to execute when this step runs.
+   * @returns {void}
+   * @throws {Error} If the provided callable is not a function.
+   */
+  setCallable(callable) {
+    this.state.set('callable', callable);
   }
 }

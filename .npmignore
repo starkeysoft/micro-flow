@@ -1,0 +1,30 @@
+# Tests
+tests/
+__mocks__/
+*.test.js
+vitest.config.js
+vitest.setup.js
+
+# Coverage
+coverage/
+
+# Build tools
+build.js
+
+# Development
+.vscode/
+*.code-workspace
+
+# Documentation (if you want to exclude, otherwise remove these lines)
+doc/
+
+# Git
+.git/
+.gitignore
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+test.js

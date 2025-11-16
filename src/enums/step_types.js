@@ -10,7 +10,6 @@ const step_types = {
   ACTION: 'action',
   LOGIC: 'logic',
   DELAY: 'delay',
-  SUBFLOW: 'subflow',
 };
 
 export default step_types;

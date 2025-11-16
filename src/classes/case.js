@@ -6,8 +6,6 @@ import Logic from './logic_step';
  * @extends Logic
  */
 export default class Case extends Logic {
-  shouldBreak = false;
-
   /**
    * Creates a new Case instance.
    * @constructor
@@ -15,7 +13,7 @@ export default class Case extends Logic {
    * @param {*} options.subject - The value to compare against.
    * @param {string} options.operator - The comparison operator to use (e.g., '===', '==', '!=', '>', '<', '>=', '<=').
    * @param {*} options.value - The value to compare the subject with.
-   * @param {Step | Workflow | Function} [options.callable=async()=>{}] - The async function to execute if the condition is met.
+   * @param {Function|Step|Workflow} [options.callable=async()=>{}] - The async function, Step, or Workflow to execute if the condition is met.
    */
   constructor({
     subject,
@@ -23,27 +21,30 @@ export default class Case extends Logic {
     value,
     callable = async () => {},
   }) {
-    this.subject = subject;
-    this.operator = operator;
-    this.value = value;
-
     super({
       type: 'case',
       name: 'Case',
       callable,
     });
+
+    this.state.set('subject', subject);
+    this.state.set('operator', operator);
+    this.state.set('value', value);
+    this.state.set('shouldBreak', false);
   }
 
   /**
    * Checks the condition of the case and executes the callable if the condition is met.
+   * Sets shouldBreak flag to true when condition matches.
    * @async
-   * @returns {Promise<*|boolean>} The result of the callable function if condition is met, false otherwise.
+   * @returns {Promise<Object|boolean>} The result {result, state} from callable execution if condition is met, false otherwise.
    */
   async check() {
     if (this.checkCondition()) {
       this.logStep(`Case condition met.`);
-      this.should_break = true;
-      return await this.execute();
+      this.state.set('shouldBreak', true);
+      const callable = this.state.get('callable');
+      return await callable.execute();
     } else {
       this.logStep(`Case condition not met.`);
       return false;
