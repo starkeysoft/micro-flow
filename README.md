@@ -5,10 +5,10 @@ Works on both frontend and backend.
 Minimal dependencies
 
 Micro Flow is:
-  - A library for orchestrating flows _in code_ for abstracting away routines the developer would otherwise write themselves.
+  - A library for orchestrating flows _in code_ for abstracting away routines the developer would otherwise write themselves. Micro Flow is made by and for developers to enable shortcuts in development. 
 
 Micro Flow is not:
-  - A workflow engine. You could certainly build one on top of it, but Micro Flow is made by and for developers to create shortcuts in development.
+  - A workflow engine. You could certainly build one on top of it, but it is not that.
 
 Have a look through this file as well as the docs for examples of how you can use Micro Flow. Or, make a PR with your own example in the examples section of the docs.
 
