@@ -2,7 +2,9 @@
 
 A dead simple, lightweight (~35k g-zipped), flexible workflow library for automating asynchronous tasks.
 Works on both frontend and backend.
-Minimal dependencies
+Minimal dependencies.
+
+**Note**: I am still working on testing all of the steps, and still working on making sure the AI-generated docs are accurate. If you see something that's off or doesn't work, and you can fix it, I'd appreciate a PR. I'll remove this message when I'm sure everything's stable and the docs are accurate. Probably don't use it in production just yet.
 
 Micro Flow is:
   - A library for orchestrating flows _in code_ for abstracting away routines the developer would otherwise write themselves. Micro Flow is made by and for developers to enable shortcuts in development. 
