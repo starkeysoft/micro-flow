@@ -1,5 +1,5 @@
-import LogicStep from './logic_step';
-import logic_step_types from '../enums/logic_step_types';
+import LogicStep from './logic_step.js';
+import logic_step_types from '../enums/logic_step_types.js';
 
 /**
  * Represents a skip step that conditionally skips execution based on a condition.
@@ -44,7 +44,7 @@ class SkipStep extends LogicStep {
       this.state.set('should_skip', true);
     }
 
-    return this.state.get('should_skip');
+    return { message: `SkipStep ${this.state.get('name') ?? this.state.get('id')}: Next step ${this.state.get('should_skip') ? 'will be skipped' : 'will not be skipped'}`, should_skip: this.state.get('should_skip')};
   }
 }
 

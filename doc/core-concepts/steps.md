@@ -45,7 +45,7 @@ See [Step Types](../step-types/README.md) for detailed documentation on speciali
 
 ### execute()
 
-Executes the step's callable function. The workflow state is accessible via `this.workflow`, which is set by the parent workflow through `setWorkflow()` before execution. This is a reference to the workflow object, so anything you mutate on it will also mutate the workflow itself. 
+Executes the step's callable function. The callable receives a context object `{ workflow, step }` as its first parameter. The `workflow` is the parent workflow's state object, and `step` is the current Step instance. Changes to the workflow state will affect the workflow itself. 
 
 ```javascript
 const result = await step.execute();
@@ -79,9 +79,9 @@ Sets the workflow state reference for this step. This is called by the parent wo
 // Called automatically by workflow before execution
 step.setWorkflow(workflowState);
 
-// Access in callable
-callable: async () => {
-  const workflowData = this.workflow.get('customData');
+// Access in callable via context parameter
+callable: async ({ workflow, step }) => {
+  const workflowData = workflow.get('customData');
   // ...
 }
 ```
@@ -143,16 +143,19 @@ Steps can have the following statuses (from `StepStatuses` enum):
 
 ## State Access
 
-Steps have access to workflow state during execution through the `this.workflow` property:
+Steps have access to workflow and step state during execution through the context object:
 
 ```javascript
 const step = new Step({
   name: 'Process with Context',
   type: StepTypes.ACTION,
-  callable: async function() {
+  callable: async ({ workflow, step }) => {
     // Access workflow state
-    const userId = this.workflow.get('userId');
-    const steps = this.workflow.get('steps');
+    const userId = workflow.get('userId');
+    const steps = workflow.get('steps');
+    
+    // Access step state
+    const stepName = step.state.get('name');
     
     // Perform work
     const userData = await fetchUser(userId);
@@ -162,7 +165,7 @@ const step = new Step({
 });
 ```
 
-**Important:** Use regular functions (not arrow functions) if you need access to `this.workflow`.
+**Important:** Callables receive a context object `{ workflow, step }` as their first parameter.
 
 ## Step State Properties
 

@@ -23,7 +23,6 @@ export default defineConfig({
   resolve: {
     alias: {
       events: new URL('./__mocks__/events.js', import.meta.url).pathname,
-      '../enums/sub_step_types.js': new URL('./__mocks__/sub_step_types.js', import.meta.url).pathname,
     },
   },
 });

@@ -18,13 +18,11 @@ export default class Step {
    * @param {string} options.name - The name of the step.
    * @param {string} options.type - The type of the step (from step_types enum).
    * @param {Function | Step | Workflow} [options.callable=async()=>{}] - The async function to execute for this step.
-   * @param {boolean} [options.log_suppress=false] - Whether to suppress logging for this step.
    */
   constructor({
     name,
     type,
     callable = async () => {},
-    log_suppress = false,
   }) {
     this.events = new StepEvents();
     this.state = new State({
@@ -32,10 +30,11 @@ export default class Step {
       step_types: step_types,
       sub_step_types: generate_sub_step_types(),
       start_time: null,
+      end_time: null,
+      execution_time_ms: 0,
       name: name,
       type: type,
       callable: callable,
-      log_suppress: log_suppress,
       id: uuidv4()
     });
   }
@@ -44,50 +43,34 @@ export default class Step {
    * Executes the step's callable function. The workflow state is available via this.workflow,
    * which is set by the parent workflow through setWorkflow() before execution.
    * @async
+   * @param {WorkflowState} [workflow] - The workflow state passed from the parent workflow.
    * @returns {Promise<Object>} An object containing the result and step state: {result, state}.
    * @throws {Error} If the callable function throws an error during execution.
    */
-  async execute() {
+  async execute(workflow) {
     this.markAsRunning();
 
-    // Steps can be instances of other steps
     let callable = this.state.get('callable');
-    if (typeof callable.markAsComplete === 'function') {
-      callable = callable.state.get('callable');
-      this.state.set('callable', callable);
-    }
-
-    let result;
+    let result = {};
 
     try {
-      // Steps can be instances of workflows
+      // Callables can be instances of workflows or other steps
       if (callable instanceof Workflow) {
-        this.events.emit(this.events.event_names.STEP_RUNNING, { step: this });
-
-        result = await callable.execute();
-
-        this.markAsComplete();
-        this.state.set('execution_time_ms', callable.state.get('execution_time_ms'));
-        this.events.emit(this.events.event_names.STEP_COMPLETED, { step: this, result });
-        return {result, step: this};
+        result = await callable.execute({ workflow, step: this });
+      } else if ((typeof callable.markAsComplete === 'function')) {
+        result = await callable.callable.execute({ workflow, step: this });
+      } else {
+        // or they can be async functions
+        result = await callable({ workflow, step: this });
       }
 
-      this.state.set('start_time', Date.now());
-      this.events.emit(this.events.event_names.STEP_RUNNING, { step: this });
-      
-      // or they can be simple functions
-      result = await callable();
     } catch (error) {
       this.state.set('execution_time_ms', Date.now() - this.state.get('start_time'));
-      this.events.emit(this.events.event_names.STEP_FAILED, { step: this, error });
       this.markAsFailed(error);
-      throw error;
+      result.error = error;
     }
   
-    this.markAsComplete();
-
-    this.state.set('execution_time_ms', Date.now() - this.state.get('start_time'));
-    this.events.emit(this.events.event_names.STEP_COMPLETED, { step: this, result });
+    result.error ?? this.markAsComplete();
 
     return this.prepareReturnData(result);
   }
@@ -95,16 +78,21 @@ export default class Step {
   /**
    * Logs step status information to the console unless logging is suppressed.
    * Failed steps are logged as errors, all others as standard logs.
+   * @param {string} [event_name] - Event object associated with the log.
    * @param {string} [message] - Optional custom message to log. If not provided, uses default status message.
    * @returns {void}
    */
-  logStep(message) {
-    if (this.state.get('log_suppress')) {
+  logStep(event_name, data = this.state.getState(), message = null) {
+    this.events.emit(event_name, { step: this, ...data });
+
+    if (this.workflow.get('log_suppress', false)) {
       return;
     }
 
     const log_type = this.state.get('status') === step_statuses.FAILED ? 'error' : 'log';
-    console[log_type](message ? message : `Step "${this.state.get('name')}" ${this.state.get('status')}.`);
+
+    const message_to_log = `[${new Date().toISOString()}] - ${message ? message : `Step "${this.state.get('name')}" ${this.state.get('status')}.`}`
+    console[log_type](message_to_log);
   }
 
   /**
@@ -112,10 +100,11 @@ export default class Step {
    * @returns {void}
    */
   markAsComplete() {
-    this.logStep();
-
+    const end_time = Date.now();
+    this.state.set('execution_time_ms', end_time - this.state.get('start_time'));
+    this.state.set('end_time', end_time);
     this.state.set('status', step_statuses.COMPLETE);
-    this.events.emit(this.events.event_names.STEP_COMPLETED, { step: this });
+    this.logStep(this.events.event_names.STEP_COMPLETED, null, `Step "${this.state.get('name')}" completed in ${this.state.get('execution_time_ms')}ms.`);
   }
 
   /**
@@ -124,10 +113,11 @@ export default class Step {
    * @returns {void}
    */
   markAsFailed(error) {
-    this.logStep(`Step "${this.state.get('name')}" failed with error: ${error.stack}`);
-
+    const end_time = Date.now();
+    this.state.set('end_time', end_time);
+    this.state.set('execution_time_ms', end_time - this.state.get('start_time'));
     this.state.set('status', step_statuses.FAILED);
-    this.events.emit(this.events.event_names.STEP_FAILED, { step: this, error });
+    this.logStep(this.events.event_names.STEP_FAILED, { step: this, error }, `Step "${this.state.get('name')}" failed with error: ${error.stack}`);
   }
 
   /**
@@ -135,10 +125,8 @@ export default class Step {
    * @returns {void}
    */
   markAsWaiting() {
-    this.logStep();
-
     this.state.set('status', step_statuses.WAITING);
-    this.events.emit(this.events.event_names.STEP_WAITING, { step: this });
+    this.logStep(this.events.event_names.STEP_WAITING, null, `Step "${this.state.get('name')}" is now waiting.`);
   }
 
   /**
@@ -146,10 +134,8 @@ export default class Step {
    * @returns {void}
    */
   markAsPending() {
-    this.logStep();
-
     this.state.set('status', step_statuses.PENDING);
-    this.events.emit(this.events.event_names.STEP_PENDING, { step: this });
+    this.logStep(this.events.event_names.STEP_PENDING, null, `Step "${this.state.get('name')}" is now pending.`);
   }
 
   /**
@@ -157,10 +143,9 @@ export default class Step {
    * @returns {void}
    */
   markAsRunning() {
-    this.logStep();
-
+    this.state.set('start_time', Date.now());
     this.state.set('status', step_statuses.RUNNING);
-    this.events.emit(this.events.event_names.STEP_RUNNING, { step: this });
+    this.logStep(this.events.event_names.STEP_RUNNING, null, `Step "${this.state.get('name')}" is now running.`);
   }
 
   /**
@@ -186,6 +171,41 @@ export default class Step {
       throw new Error('Invalid events object provided. Must be an instance of StepEvents.');
     }
     this.events = events;
+  }
+
+  setListeners() {
+    this.events.on(this.events.event_names.STEP_RUNNING, (data) => {
+      this.state.set('status', step_statuses.RUNNING);
+      this.logStep(`Step "${data.step.state.get('name')}" is now running.`);
+    });
+
+    this.events.on(this.events.event_names.STEP_COMPLETED, (data) => {
+      this.state.set('status', step_statuses.COMPLETE);
+      this.logStep(`Step "${data.step.state.get('name')}" has completed.`);
+    });
+
+    this.events.on(this.events.event_names.STEP_FAILED, (data) => {
+      this.state.set('status', step_statuses.FAILED);
+      this.logStep(`Step "${data.step.state.get('name')}" has failed with error: ${data.error.stack}`);
+    });
+
+    this.events.on(this.events.event_names.STEP_PENDING, (data) => {
+      this.state.set('status', step_statuses.PENDING);
+      this.logStep(`Step "${data.step.state.get('name')}" is now pending.`);
+    });
+
+    this.events.on(this.events.event_names.STEP_WAITING, (data) => {
+      this.state.set('status', step_statuses.WAITING);
+      this.logStep(`Step "${data.step.state.get('name')}" is now waiting.`);
+    });
+  
+    this.events.on(this.events.event_names.DELAY_STEP_ABSOLUTE_COMPLETE, (data) => {
+      this.logStep(`Delay step "${data.step.state.get('name')}" absolute delay completed at ${data.timestamp}.`);
+    });
+
+    this.events.on(this.events.event_names.DELAY_STEP_RELATIVE_COMPLETE, (data) => {
+      this.logStep(`Delay step "${data.step.state.get('name')}" relative delay of ${data.duration}ms completed at ${data.completed_at}.`);
+    });
   }
 
   /**

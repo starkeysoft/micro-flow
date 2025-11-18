@@ -1,4 +1,4 @@
-import Logic from './logic_step';
+import Logic from './logic_step.js';
 
 /**
  * Represents a case in a switch statement that evaluates a condition and executes a callable if matched.
@@ -31,6 +31,7 @@ export default class Case extends Logic {
     this.state.set('operator', operator);
     this.state.set('value', value);
     this.state.set('shouldBreak', false);
+    this.state.set('callable', callable);
   }
 
   /**
@@ -44,10 +45,11 @@ export default class Case extends Logic {
       this.logStep(`Case condition met.`);
       this.state.set('shouldBreak', true);
       const callable = this.state.get('callable');
-      return await callable.execute();
+      const result = await callable.execute();
+      return { message: `ConditionalStep Case ${this.state.get('name') ?? this.state.get('id')} condition met`, ...result };
     } else {
       this.logStep(`Case condition not met.`);
-      return false;
+      return { message: `ConditionalStep Case ${this.state.get('name') ?? this.state.get('id')} condition not met` };
     }
   }
 }

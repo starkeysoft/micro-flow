@@ -1,4 +1,4 @@
-import LogicStep from './logic_step';
+import LogicStep from './logic_step.js';
 import logic_step_types from '../enums/logic_step_types.js';
 import flow_control_types from '../enums/flow_control_types.js';
 
@@ -60,7 +60,7 @@ export default class FlowControlStep extends LogicStep {
       this.state.set('should_break', false);
     }
 
-    return this.state.get('should_break');
+    return {message: `Break flow control step: ${this.state.get('name')} ${this.state.get('should_break') ? 'will break' : 'will not break'}`, result: this.state.getState()};
   }
 
   /**
@@ -77,6 +77,6 @@ export default class FlowControlStep extends LogicStep {
       this.state.set('should_continue', true);
     }
 
-    return !this.state.get('should_continue');
+    return { message: `Continue flow control step: ${this.state.get('name')} ${this.state.get('should_continue') ? 'will continue' : 'will not continue'}`, result: this.state.getState() };
   }
 }

@@ -272,17 +272,17 @@ The step state includes the following properties accessible via `step.state.get(
 
 ## Callable Function Context
 
-The callable function receives special context via `this`:
+The callable function receives a context object as its first parameter with `workflow` and `step` properties:
 
 ```javascript
-const callable = async function(data) {
+const callable = async ({ workflow, step }, data) => {
   // Access workflow state
-  this.workflow // WorkflowState instance
+  workflow // WorkflowState instance
   
   // Access step properties
-  this.name // Step name
-  this.state // Step state
-  this.events // Step events
+  step.state.get('name') // Step name
+  step.state // Step state
+  step.events // Step events
   
   // Perform work
   return result;
@@ -295,19 +295,22 @@ const callable = async function(data) {
 const step = new Step({
   name: 'Access Workflow',
   type: StepTypes.ACTION,
-  callable: async function(data) {
+  callable: async ({ workflow, step }, data) => {
     // Get workflow status
-    const workflowStatus = this.workflow.status;
+    const workflowStatus = workflow.get('status');
     
     // Get all workflow steps
-    const allSteps = this.workflow.steps;
+    const allSteps = workflow.get('steps');
+    
+    // Get step name
+    const stepName = step.state.get('name');
     
     // Set workflow flag
     if (condition) {
-      this.workflow.should_skip = true;
+      workflow.set('should_skip', true);
     }
     
-    return { workflowStatus, stepCount: allSteps.length };
+    return { workflowStatus, stepCount: allSteps.length, stepName };
   }
 });
 ```
@@ -358,7 +361,7 @@ See [StepEvent](./step-event.md) for all available events.
 const step = new Step({
   name: 'Calculate',
   type: StepTypes.ACTION,
-  callable: async (numbers) => {
+  callable: async ({ workflow, step }, numbers) => {
     return numbers.reduce((sum, n) => sum + n, 0);
   }
 });
@@ -373,14 +376,14 @@ console.log(result); // 15
 const step = new Step({
   name: 'Check Status',
   type: StepTypes.ACTION,
-  callable: async function(data) {
+  callable: async ({ workflow, step }, data) => {
     // Access workflow state
-    const userId = this.workflow.userId;
-    const previousResults = this.workflow.output_data;
+    const userId = workflow.get('userId');
+    const previousResults = workflow.get('output_data');
     
     // Conditional skip
     if (previousResults.length > 10) {
-      this.workflow.should_skip = true;
+      workflow.set('should_skip', true);
     }
     
     return { userId, resultCount: previousResults.length };
@@ -394,7 +397,7 @@ const step = new Step({
 const step = new Step({
   name: 'Fetch External API',
   type: StepTypes.ACTION,
-  callable: async (url) => {
+  callable: async ({ workflow, step }, url) => {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();
@@ -417,7 +420,7 @@ await step.execute('https://api.example.com/data');
 const step = new Step({
   name: 'Process Data',
   type: StepTypes.ACTION,
-  callable: async (data) => processData(data)
+  callable: async ({ workflow, step }, data) => processData(data)
 });
 
 step.events.on('STEP_STARTED', () => {

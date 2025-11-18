@@ -40,7 +40,7 @@ const generate_sub_step_types = (directories = []) => {
   const types = {};
   
   // Always include the classes directory, then append any additional directories
-  const dirsToScan = directories.push([join(__dirname, '../classes')]);
+  directories.push(join(__dirname, '../classes'));
   
   // Combine all enums into one lookup object
   const allEnums = {
@@ -49,7 +49,7 @@ const generate_sub_step_types = (directories = []) => {
   };
   
   // Scan each directory in the array
-  for (const dir of dirsToScan) {
+  for (const dir of directories) {
     // Read all files in the current directory
     const files = readdirSync(dir).filter(file => file.endsWith('.js') && file !== 'index.js');
     
@@ -92,4 +92,4 @@ const generate_sub_step_types = (directories = []) => {
   return types;
 }
 
-export default generate_sub_step_types();
+export default generate_sub_step_types;

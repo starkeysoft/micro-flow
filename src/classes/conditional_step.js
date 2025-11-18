@@ -1,6 +1,6 @@
-import LogicStep from './logic_step';
-import Step from './step';
-import logic_step_types from '../enums/logic_step_types';
+import LogicStep from './logic_step.js';
+import Step from './step.js';
+import logic_step_types from '../enums/logic_step_types.js';
 
 /**
  * Represents a conditional step that executes one of two possible paths based on a condition.
@@ -48,17 +48,19 @@ export default class ConditionalStep extends LogicStep {
    * @async
    * @returns {Promise<Object|null>} The result of executing the chosen step {result, state}, or null if no step is provided.
    */
-  conditional() {
+  async conditional() {
     const step_left = this.state.get('step_left');
     const step_right = this.state.get('step_right');
     
     if (this.checkCondition()) {
       this.logStep(`Condition met for step: ${this.state.get('name')}, executing left branch '${step_left.state.get('name')}'`);
 
-      return step_left && typeof step_left.markAsComplete === 'function' ? step_left.execute() : null;
+      const result = step_left && typeof step_left.markAsComplete === 'function' ? await step_left.execute({ workflow: this.workflow, step: step_left }) : null;
     }
 
     this.logStep(`Condition not met for step: ${this.state.get('name')}, executing right branch '${step_right.state.get('name')}'`);
-    return step_right && typeof step_right.markAsComplete === 'function' ? step_right.execute() : null;
+    const result = step_right && typeof step_right.markAsComplete === 'function' ? await step_right.execute({ workflow: this.workflow, step: step_right }) : null;
+  
+    return { message: `ConditionalStep ${this.state.get('name') ?? this.state.get('id')} executed ${this.checkCondition() ? `left ('${step_left.state.get('name')}')` : `right ('${step_right.state.get('name')}')`} branch`, ...result };
   }
 }

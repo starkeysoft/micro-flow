@@ -55,7 +55,7 @@ export default class DelayStep extends Step {
       throw new Error('Timestamp is required for absolute delay');
     }
 
-    return new Promise((resolve, reject) => {
+    const result = await new Promise((resolve, reject) => {
       let target_date;
       if (this.state.get('delay_timestamp') instanceof Date) {
         target_date = this.state.get('delay_timestamp');
@@ -78,16 +78,14 @@ export default class DelayStep extends Step {
           step: this,
           timestamp: target_date
         });
-        resolve({message: 'Delay complete'});
+        resolve();
       };
 
       const job = schedule.scheduleJob(target_date, callback);
       this.state.set('scheduled_job', job);
-
-      if (!this.state.get('scheduled_job')) {
-        reject(new Error('Failed to schedule job'));
-      }
     });
+
+    return { message: `Absolute delay step: ${this.state.get('name')} until ${this.state.get('delay_timestamp')} scheduled`, ...result };
   }
 
   /**
@@ -102,7 +100,7 @@ export default class DelayStep extends Step {
       throw new Error('Duration is required for relative delay');
     }
 
-    return new Promise((resolve, reject) => {
+    const result = await new Promise((resolve, reject) => {
       if (typeof this.state.get('delay_duration') !== 'number' || this.state.get('delay_duration') < 0) {
         reject(new Error('Duration must be a positive number'));
         return;
@@ -122,20 +120,13 @@ export default class DelayStep extends Step {
         resolve();
       };
 
-      if (this.state.get('delay_duration') < 100) {
-        setTimeout(callback, this.state.get('delay_duration'));
-        return;
-      }
-
       const target_date = addMilliseconds(new Date(), this.state.get('delay_duration'));
 
       const job = schedule.scheduleJob(target_date, callback);
       this.state.set('scheduled_job', job);
-
-      if (!this.state.get('scheduled_job')) {
-        setTimeout(callback, this.state.get('delay_duration'));
-      }
     });
+
+    return { message: `Relative delay step: ${this.state.get('name')} for duration ${this.state.get('delay_duration')}ms scheduled`, ...result };
   }
 
   /**

@@ -1,4 +1,4 @@
-import LogicStep from './logic_step';
+import LogicStep from './logic_step.js';
 import logic_step_types from '../enums/logic_step_types.js';
 import step_types from '../enums/step_types.js';
 import Workflow from './workflow.js';
@@ -46,28 +46,13 @@ export default class SwitchStep extends LogicStep {
     const cases = this.state.get('cases');
     const default_case = this.state.get('default_case');
     const switch_workflow = new Workflow({ steps: cases, name: `Switch Step Workflow: ${this.state.get('id')}` });
-    console.log('Executing SwitchStep with cases:', cases.length);
+    this.logStep(`Executing SwitchStep ${this.state.get('name')} with ${cases.length} cases`);
 
     if (default_case) {
-      if (!(default_case instanceof Workflow)) {
-        console.log('Adding default case as step.');
-
-        switch_workflow.pushStep(default_case);
-
-        return await switch_workflow.execute();
-      }
-
-      console.log('Adding default case as workflow.');
-
-      const workflow_step = new Step({
-        type: step_types.ACTION,
-        callable: default_case,
-        name: default_case.state.get('name') ? `${default_case.state.get('name')} Workflow` : 'Default Case Workflow'
-      });
-
-      switch_workflow.pushStep(workflow_step);
-
-      return await switch_workflow.execute();
+      switch_workflow.pushStep(default_case);
     }
+
+    const result = await switch_workflow.execute();
+    return { message: `SwitchStep ${this.state.get('name') ?? this.state.get('id')} executed case`, ...result };
   }
 }

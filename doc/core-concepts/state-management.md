@@ -169,16 +169,19 @@ Workflows use `WorkflowState`, which extends `State` with additional workflow-sp
 
 ## Accessing State in Steps
 
-Steps can access workflow state through the `this.workflow` property:
+Steps can access workflow and step state through the context object passed to callables:
 
 ```javascript
 const step = new Step({
   name: 'Access State',
   type: StepTypes.ACTION,
-  callable: async function() {
+  callable: async ({ workflow, step }) => {
     // Get workflow state
-    const userId = this.workflow.get('userId');
-    const allSteps = this.workflow.get('steps');
+    const userId = workflow.get('userId');
+    const allSteps = workflow.get('steps');
+    
+    // Get step state
+    const stepName = step.state.get('name');
     
     // Perform operations
     const userData = await fetchUser(userId);
@@ -188,7 +191,7 @@ const step = new Step({
 });
 ```
 
-**Important:** Use regular functions (not arrow functions) to access `this.workflow`.
+**Important:** Callables receive a context object `{ workflow, step }` as their first parameter.
 
 ## Passing Initial State
 
@@ -254,24 +257,24 @@ const workflow = new Workflow({ name: 'Data Processor' });
 const step1 = new Step({
   name: 'Initialize',
   type: StepTypes.ACTION,
-  callable: async function() {
+  callable: async ({ workflow, step }) => {
     // Set workflow state
-    this.workflow.set('processedItems', []);
-    this.workflow.set('totalCount', 0);
+    workflow.set('processedItems', []);
+    workflow.set('totalCount', 0);
   }
 });
 
 const step2 = new Step({
   name: 'Process',
   type: StepTypes.ACTION,
-  callable: async function() {
+  callable: async ({ workflow, step }) => {
     // Read workflow state
-    const items = this.workflow.get('processedItems');
+    const items = workflow.get('processedItems');
     
     // Modify and update
     items.push({ id: 1, data: 'processed' });
-    this.workflow.set('processedItems', items);
-    this.workflow.set('totalCount', items.length);
+    workflow.set('processedItems', items);
+    workflow.set('totalCount', items.length);
   }
 });
 
@@ -289,9 +292,9 @@ const workflow = new Workflow({ name: 'Data Pipeline' });
 const fetchStep = new Step({
   name: 'Fetch',
   type: StepTypes.ACTION,
-  callable: async function() {
+  callable: async ({ workflow, step }) => {
     const data = await fetchData();
-    this.workflow.set('fetchedData', data);
+    workflow.set('fetchedData', data);
     return data;
   }
 });
@@ -299,10 +302,10 @@ const fetchStep = new Step({
 const transformStep = new Step({
   name: 'Transform',
   type: StepTypes.ACTION,
-  callable: async function() {
-    const data = this.workflow.get('fetchedData');
+  callable: async ({ workflow, step }) => {
+    const data = workflow.get('fetchedData');
     const transformed = data.map(item => transform(item));
-    this.workflow.set('transformedData', transformed);
+    workflow.set('transformedData', transformed);
     return transformed;
   }
 });
@@ -310,8 +313,8 @@ const transformStep = new Step({
 const saveStep = new Step({
   name: 'Save',
   type: StepTypes.ACTION,
-  callable: async function() {
-    const data = this.workflow.get('transformedData');
+  callable: async ({ workflow, step }) => {
+    const data = workflow.get('transformedData');
     await saveData(data);
     return { saved: data.length };
   }
@@ -329,10 +332,10 @@ const workflow = new Workflow({ name: 'User Processor' });
 workflow.pushStep(new Step({
   name: 'Process User',
   type: StepTypes.ACTION,
-  callable: async function() {
+  callable: async ({ workflow, step }) => {
     // Access initial state
-    const userId = this.workflow.get('userId');
-    const config = this.workflow.get('config');
+    const userId = workflow.get('userId');
+    const config = workflow.get('config');
     
     return await processUser(userId, config);
   }
@@ -384,7 +387,7 @@ console.log(results);
 4. **Initialize Early** - Set initial state in first step or via initialState
 5. **Document State Shape** - Document what state keys your workflow expects
 6. **Avoid Large Objects** - Keep state lean; store references or IDs instead of full objects
-7. **Use Regular Functions** - Use regular functions (not arrow functions) when accessing `this.workflow`
+7. **Use Context Parameter** - Callables receive `{ workflow, step }` as the first parameter for state access
 
 ## See Also
 

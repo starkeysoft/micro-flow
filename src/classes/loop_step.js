@@ -1,4 +1,4 @@
-import LogicStep from './logic_step';
+import LogicStep from './logic_step.js';
 import Workflow from './workflow.js';
 import logic_step_types from '../enums/logic_step_types.js';
 import loop_types from '../enums/loop_types.js';
@@ -38,7 +38,7 @@ export default class LoopStep extends LogicStep {
       name,
     });
 
-    this.state.set('callable', callable);
+    this.state.set('sub_callable', callable);
     this.state.set('subject', subject);
     this.state.set('operator', operator);
     this.state.set('loop_type', loop_type);
@@ -47,6 +47,7 @@ export default class LoopStep extends LogicStep {
     this.state.set('max_iterations', max_iterations);
     this.state.set('should_break', false);
     this.state.set('current_item', null);
+    this.state.set('current_index', 0);
     
     this.state.set('callable', this[loop_type === loop_types.WHILE ? 'whileLoopStep' : 'forEachLoopStep'].bind(this));
   }
@@ -54,15 +55,20 @@ export default class LoopStep extends LogicStep {
   /**
    * Executes the sub-workflow associated with this loop step and resets its state for the next iteration.
    * @async
-   * @returns {Promise<Workflow>} The executed workflow instance with final state.
+   * @returns {Promise<Function> | Promise<Step> | Promise<Workflow>} The executed workflow instance with final state.
    */
   async runCallable() {
-    const callable = this.state.get('callable');
-    const result = await callable.execute();
-
-    callable.state.set('current_step_index', 0);
-
-    return result;
+    const sub_callable = this.state.get('sub_callable');
+    
+    if (typeof sub_callable === 'function') {
+      return await sub_callable({ workflow: this.workflow, step: this });
+    } else if (sub_callable && typeof sub_callable.execute === 'function') {
+      // Step or Workflow instance
+      sub_callable.workflow = this.workflow;
+      return await sub_callable.execute({ workflow: this.workflow, step: this });
+    }
+    
+    throw new Error('Invalid sub_callable: must be a function, Step, or Workflow');
   }
 
   /**
@@ -70,14 +76,14 @@ export default class LoopStep extends LogicStep {
    * Includes protection against infinite loops via max_iterations.
    * @async
    * @throws {Error} If the loop configuration is invalid (missing subject, operator, or value).
-   * @returns {Promise<Workflow>} The workflow instance from the last execution.
+   * @returns {Promise<Function> | Promise<Step> | Promise<Workflow>} The workflow instance from the last execution.
    */
   async whileLoopStep() {
     const subject = this.state.get('subject');
     const operator = this.state.get('operator');
     const value = this.state.get('value');
     const max_iterations = this.state.get('max_iterations');
-    const callable = this.state.get('callable');
+    const sub_callable = this.state.get('sub_callable');
     
     if (!subject || !operator || value === undefined) {
       throw new Error('Invalid configuration for while loop step');
@@ -86,10 +92,11 @@ export default class LoopStep extends LogicStep {
     this.logStep(`Starting while loop step: ${this.state.get('name')}`);
 
     let iterations = 0;
+    let result = {};
 
     while (this.checkCondition()) {
       const break_on_iteration = max_iterations <= iterations;
-      const break_on_signal = callable.state.get('should_break');
+      const break_on_signal = sub_callable?.state?.get('should_break') ?? false;
       const should_break = break_on_iteration || break_on_signal;
       this.state.set('should_break', should_break);
 
@@ -101,12 +108,15 @@ export default class LoopStep extends LogicStep {
 
       this.logStep(`Iteration ${iterations + 1} for loop step: ${this.state.get('name')}`);
 
-      const result = await this.runCallable();
+      result = await this.runCallable();
 
       iterations++;
-
-      return result;
     }
+
+    return {
+      message: `While loop step: ${this.state.get('name')} completed after ${iterations} iterations`,
+      result
+    };
   }
 
   /**
@@ -114,29 +124,34 @@ export default class LoopStep extends LogicStep {
    * Includes protection against infinite loops via max_iterations.
    * @async
    * @throws {Error} If the iterable configuration is invalid or not iterable.
-   * @returns {Promise<Workflow>} The workflow instance from the last execution.
+   * @returns {Promise<Function> | Promise<Step> | Promise<Workflow>} The workflow instance from the last execution.
    */
   async forEachLoopStep() {
-    const iterable = this.state.get('iterable');
+    let iterable = this.state.get('iterable');
     const max_iterations = this.state.get('max_iterations');
-    const callable = this.state.get('callable');
+    const sub_callable = this.state.get('sub_callable');
     
-    if (!iterable || typeof iterable[Symbol.iterator] !== 'function') {
+    if (!iterable) {
       throw new Error('Invalid configuration for for_each loop step');
+    }
+
+    if (typeof iterable === 'function') {
+      iterable = await iterable({ workflow: this.workflow, step: this });
     }
 
     this.logStep(`Starting for_each loop step: ${this.state.get('name')}`);
 
     let iterations = 0;
+    const results = [];
 
     for await (const item of iterable) {
       const break_on_iteration = max_iterations <= iterations;
-      const break_on_signal = callable.state.get('should_break');
+      const break_on_signal = sub_callable?.state?.get('should_break') ?? this.state.get('should_break');
       const should_break = break_on_iteration || break_on_signal;
       this.state.set('should_break', should_break);
 
       if (should_break) {
-        this.logStep(`Breaking out of while loop step: ${this.state.get('name')} due to ${break_on_iteration ? 'max iterations reached' : 'break signal received'}`);
+        this.logStep(`Breaking out of for_each loop step: ${this.state.get('name')} due to ${break_on_iteration ? 'max iterations reached' : 'break signal received'}`);
         this.state.set('should_break', true);
         break;
       }
@@ -144,11 +159,13 @@ export default class LoopStep extends LogicStep {
       this.logStep(`Iteration ${iterations + 1} for loop step: ${this.state.get('name')}`);
 
       this.state.set('current_item', item);
+      this.state.set('current_index', iterations);
       const result = await this.runCallable();
+      results.push(result);
 
       iterations++;
-
-      return result;
     }
+
+    return results;
   }
 }
