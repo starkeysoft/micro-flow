@@ -72,7 +72,7 @@ async function createUserDataWorkflow(userId, apiKey) {
   const client = new APIClient();
   const workflow = new Workflow({
     name: 'User Data Collection',
-    exit_on_failure: true
+    exit_on_failure: false
   });
   
   // Step 1: Authenticate

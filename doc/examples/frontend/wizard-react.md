@@ -167,7 +167,7 @@ function OnboardingWizard() {
   const createSubmissionWorkflow = useCallback(() => {
     const workflow = new Workflow({
       name: 'Account Creation',
-      exit_on_failure: true
+      exit_on_failure: false
     });
     
     // Step 1: Create account

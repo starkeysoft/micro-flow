@@ -12,14 +12,9 @@ new Step(options)
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
+| `options.name` | `string` | Yes | - | Name for the step |
 | `options.type` | `string` | Yes | - | Step type from StepTypes enum |
-| `options.callable` | `Function` | Yes | - | Function to execute (async or sync) |
-| `options.name` | `string` | No | `step_{uuid}` | Name for the step |
-| `options.suppress_log` | `boolean` | No | `false` | Whether to suppress step logs |
-| `options.previous_step` | `Step` | No | `null` | Reference to previous step |
-| `options.max_retries` | `number` | No | `0` | Maximum number of retry attempts |
-| `options.retry_delay_ms` | `number` | No | `1000` | Delay in ms between retries |
-| `options.timeout_ms` | `number` | No | `0` | Execution timeout (0 = no timeout) |
+| `options.callable` | `Function \| Step \| Workflow` | No | `async()=>{}` | The async function, Step, or Workflow to execute for this step |
 
 ### Example
 
@@ -29,13 +24,10 @@ import { Step, StepTypes } from 'micro-flow';
 const step = new Step({
   name: 'Fetch Data',
   type: StepTypes.ACTION,
-  callable: async (data) => {
+  callable: async ({ workflow, step }) => {
     const response = await fetch('/api/data');
     return response.json();
-  },
-  max_retries: 3,
-  retry_delay_ms: 2000,
-  timeout_ms: 5000
+  }
 });
 ```
 
@@ -64,15 +56,15 @@ const result = step.state.get('result');
 
 ### `workflow`
 - **Type:** `WorkflowState | null`
-- **Description:** Reference to the workflow state (set by workflow before execution)
+- **Description:** Reference to the workflow state (set by workflow before execution via `setWorkflow()`)
 - **Read-only:** No
 
 ```javascript
 // Access workflow state from within step callable
-const callable = async function(data) {
-  const workflowStatus = this.workflow.status;
-  const allSteps = this.workflow.steps;
-  return processData(data);
+const callable = async function({ workflow, step }) {
+  const workflowStatus = workflow.get('status');
+  const allSteps = workflow.get('steps');
+  return processData(workflow);
 };
 ```
 
@@ -80,24 +72,25 @@ const callable = async function(data) {
 
 ### `execute(data)`
 
-Executes the step's callable function with the provided data. Handles retries, timeouts, state updates, and event emission.
+Executes the step's callable function. The workflow state is available via `this.workflow`, which is set by the parent workflow through `setWorkflow()` before execution.
 
 ```javascript
-async execute(data?: any): Promise<{ result: any, state: State }>
+async execute(workflow?: WorkflowState): Promise<{ result: any, state: Object }>
 ```
 
 **Parameters:**
-- `data` (any, optional) - Input data to pass to the callable function
+- `workflow` (WorkflowState, optional) - The workflow state passed from the parent workflow
 
 **Returns:**
-- `Promise<Object>` - Object with `result` (callable return value) and `state` (final step state)
+- `Promise<Object>` - Object with `result` (callable return value) and `state` (final step state via `getState()`)
 
 **Throws:**
-- `Error` if callable is not a function or execution fails after all retries
+- `Error` if the callable function throws an error during execution
 
 **Emits:**
-- `STEP_STARTED` - When step starts executing
+- `STEP_RUNNING` - When step starts executing
 - `STEP_COMPLETED` - When step completes successfully
+- `STEP_FAILED` - When step fails
 - `STEP_FAILED` - When step fails after all retries
 - `STEP_RETRY` - When step is retrying after failure
 - `STEP_TIMEOUT` - When step exceeds timeout limit

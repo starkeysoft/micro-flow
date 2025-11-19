@@ -14,11 +14,10 @@ import { Step, StepTypes } from 'micro-flow';
 const step = new Step({
   name: 'Fetch User Data',
   type: StepTypes.ACTION,
-  callable: async () => {
+  callable: async ({ workflow, step }) => {
     const response = await fetch('/api/user');
     return response.json();
-  },
-  log_suppress: false  // Enable/disable logging (default: false)
+  }
 });
 ```
 
@@ -26,10 +25,9 @@ const step = new Step({
 
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
-| `name` | `string` | No | Name of the step |
-| `type` | `string` | No | Step type from StepTypes enum |
-| `callable` | `Function\|Step\|Workflow` | No | The async function to execute (default: `async()=>{}`) |
-| `log_suppress` | `boolean` | No | Whether to suppress logging (default: `false`) |
+| `name` | `string` | Yes | Name of the step |
+| `type` | `string` | Yes | Step type from StepTypes enum |
+| `callable` | `Function\|Step\|Workflow` | No | The async function, Step, or Workflow to execute (default: `async()=>{}`) |
 
 ## Step Types
 

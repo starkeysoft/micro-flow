@@ -204,7 +204,7 @@ import workflow_statuses from './src/enums/workflow_statuses.js';
 
 - `State` class: Generic state container with `get()`, `set()`, `merge()`, `getState()`, `getStateClone()`
 - `WorkflowState`: Extends State for workflow-specific data
-- Context passed through callable functions
+- State passed through callable functions
 - Workflow state accessible via `this.workflow` in step execution
 
 ### Event System

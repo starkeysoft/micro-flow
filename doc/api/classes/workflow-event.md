@@ -277,7 +277,7 @@ await workflow.execute();
 ```javascript
 const workflow = new Workflow({ 
   name: 'Production Workflow',
-  exit_on_failure: true
+  exit_on_failure: false
 });
 
 workflow.events.on('WORKFLOW_FAILED', ({ workflow }) => {

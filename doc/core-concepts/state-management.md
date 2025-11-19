@@ -129,7 +129,7 @@ The State class includes these default properties:
 {
   id: null,
   name: null,
-  exit_on_failure: true,
+  exit_on_failure: false,
   current_step: null,
   steps: [],
   events: null,

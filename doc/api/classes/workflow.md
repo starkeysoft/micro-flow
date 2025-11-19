@@ -14,7 +14,7 @@ new Workflow(options)
 |-----------|------|----------|---------|-------------|
 | `options.steps` | `Array<Step>` | No | `[]` | Initial array of steps to execute |
 | `options.name` | `string` | No | `workflow_{uuid}` | Name for the workflow |
-| `options.exit_on_failure` | `boolean` | No | `true` | Whether to stop execution when a step fails |
+| `options.exit_on_failure` | `boolean` | No | `false` | Whether to stop execution when a step fails |
 | `options.freeze_on_completion` | `boolean` | No | `true` | Whether to freeze state after completion |
 | `options.sub_step_type_paths` | `Array<string>` | No | `[]` | Additional directory paths to scan for custom step classes. The built-in classes directory is always included. Paths are merged when `setWorkflow()` is called on each step. |
 
@@ -30,7 +30,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const workflow = new Workflow({
   steps: [step1, step2, step3],
   name: 'Data Processing',
-  exit_on_failure: true,
+  exit_on_failure: false,
   freeze_on_completion: true,
   sub_step_type_paths: [join(__dirname, './custom-steps')]
 });
@@ -66,17 +66,17 @@ const steps = workflow.state.get('steps');
 Executes all steps in the workflow sequentially until completion or error. Passes workflow state to each step via `setWorkflow()` before execution.
 
 ```javascript
-async execute(initialState?: WorkflowState): Promise<Workflow>
+async execute(initialState?: WorkflowState): Promise<Object>
 ```
 
 **Parameters:**
 - `initialState` (WorkflowState, optional) - Initial state to merge before execution
 
 **Returns:**
-- `Promise<Workflow>` - The workflow instance with final state
+- `Promise<Object>` - A deep clone of the workflow state (via `getStateClone()`)
 
 **Throws:**
-- `Error` if workflow is empty or a step fails (when exit_on_failure is true)
+- `Error` if initialState is provided but not an instance of WorkflowState, or if a step fails and exit_on_failure is true
 
 **Example:**
 
@@ -86,11 +86,11 @@ workflow.pushSteps([step1, step2, step3]);
 
 // Execute
 const result = await workflow.execute();
-console.log('Completed in:', result.state.get('execution_time_ms'), 'ms');
+console.log('Completed in:', result.execution_time_ms, 'ms');
 
 // Execute with initial state
 const initialState = new WorkflowState({ userId: 123 });
-await workflow.execute(initialState);
+const finalState = await workflow.execute(initialState);
 ```
 
 ### `pushStep(step)`

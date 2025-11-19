@@ -269,7 +269,7 @@ class DatabaseMock {
 async function createUserRegistrationWorkflow(userData) {
   const workflow = new Workflow({
     name: 'User Registration',
-    exit_on_failure: true
+    exit_on_failure: false
   });
   
   // Set up database connection
