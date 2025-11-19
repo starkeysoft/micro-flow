@@ -1,9 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
 import WorkflowEvents from './workflow_event.js';
-import WorkflowState from './state.js';
+import State from './state.js';
 import Step from './step.js';
 import step_types from '../enums/step_types.js';
 import workflow_statuses from '../enums/workflow_statuses.js';
+
+const WorkflowState = State;
+const StepState = State;
 
 /**
  * Represents a workflow that executes a series of steps sequentially.
@@ -77,15 +80,11 @@ export default class Workflow {
    * Emits workflow started, completed, and errored events as appropriate.
    * Passes workflow state to each step via setWorkflow() before execution.
    * @async
-   * @param {WorkflowState} [initialState=null] - Optional initial state to merge before execution.
+   * @param {WorkflowState | StepState | State} [initialState=null] - Optional initial state to merge before execution.
    * @returns {Promise<Workflow>} The workflow instance with final state after execution.
    * @throws {Error} If any step in the workflow throws an error during execution and exit_on_failure is true.
    */
   async execute(initialState = null) {
-    if (initialState && !(initialState instanceof WorkflowState)) {
-      throw new Error('initialState must be an instance of WorkflowState');
-    }
-
     if (initialState) {
       this.state.merge(initialState);
     }
@@ -638,7 +637,7 @@ export default class Workflow {
     let result;
 
     try {
-      result = await step.execute(this.state);
+      result = await step.execute(this.state ?? this.workflow.state);
 
       this.state.set('should_break', step.state.get('should_break') ?? this.state.get('should_break'));
       this.state.set('should_continue', step.state.get('should_continue') ?? this.state.get('should_continue'));

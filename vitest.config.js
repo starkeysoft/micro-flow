@@ -20,9 +20,4 @@ export default defineConfig({
       ],
     },
   },
-  resolve: {
-    alias: {
-      events: new URL('./__mocks__/events.js', import.meta.url).pathname,
-    },
-  },
 });

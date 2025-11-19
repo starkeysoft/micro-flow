@@ -7,3 +7,9 @@ test.js
 dist
 
 *.code-workspace
+
+.vscode
+
+.DS_Store
+
+.idea
