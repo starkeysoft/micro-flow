@@ -10,12 +10,23 @@ describe('Step', () => {
   let workflow;
 
   beforeEach(() => {
-    // Reset the global state before each test
+    // Reset the global state before each test and set up a valid workflow context
     state.state = {
-      ...state.constructor.defaultState,
+      workflows: {
+        test_workflow_id: {
+          steps: [],
+          output_data: [],
+          current_step: null,
+          status: null,
+        }
+      },
+      active_workflow_id: 'test_workflow_id',
+      workflow_stack: ['test_workflow_id'],
       steps: [],
+      output_data: [],
+      current_step: null,
+      status: null,
       current_step_index: 0,
-      output_data: []
     };
   });
 

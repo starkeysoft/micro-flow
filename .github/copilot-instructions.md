@@ -22,6 +22,7 @@
 ├── build.js                    # esbuild script for minification
 ├── vitest.config.js           # Test configuration
 ├── vitest.setup.js            # Test environment polyfills
+├── test.js                    # Standalone test runner
 ├── src/
 │   ├── classes/               # Core workflow classes (14 files)
 │   │   ├── workflow.js       # Main workflow orchestrator
@@ -53,11 +54,18 @@
 │   ├── workflow.test.js
 │   ├── step.test.js
 │   ├── delay_step.test.js
-│   └── state.test.js
+│   ├── state.test.js
+│   └── event.test.js
 ├── __mocks__/                 # Vitest mocks
 │   ├── events.js
 │   └── sub_step_types.js
 ├── doc/                       # API documentation (Markdown)
+├── coverage/                  # Coverage output (HTML reports)
+│   ├── index.html             # Coverage summary
+│   ├── classes/               # Coverage for classes
+│   ├── enums/                 # Coverage for enums
+│   ├── helpers/               # Coverage for helpers
+│   └── ...                    # Other coverage assets
 │   ├── index.md
 │   ├── api/
 │   └── core-concepts/
@@ -124,10 +132,7 @@ Dependencies are typically already installed. The `node_modules/` directory exis
 - Coverage: Available via `npm run test:coverage`
 
 **Known Test Status**:
-- **State tests**: 9 tests, all passing ✓
-- **Workflow tests**: 28 tests, 23 failing (due to sub_step_types mock issue)
-- **Step tests**: 15 tests, all failing (same mock issue)
-- **DelayStep tests**: 38 tests, 37 failing (same mock issue)
+**Event tests**: Status varies (newly added, check output)
 
 **CRITICAL TEST ISSUE**: There is a known issue with `generate_sub_step_types()` function in tests. The mock in `__mocks__/sub_step_types.js` may not be properly configured. This causes: `TypeError: (0 , __vite_ssr_import_6__.default) is not a function` at `step.js:33`.
 
@@ -264,6 +269,14 @@ import workflow_statuses from './src/enums/workflow_statuses.js';
 - Don't assume TypeScript (this is pure JavaScript)
 - Don't assume CommonJS (this is ES modules only)
 
+### Branch Information
+
+Current branch may differ from default. As of this update, branch is `main`. Adjust instructions if working on a different branch.
+
+### Workspace File Additions
+
+Workspace may contain additional files not listed above. Trust these instructions unless a major discrepancy is found.
+
 ### Search Efficiently
 
 - **Classes**: Look in `src/classes/`
@@ -277,6 +290,6 @@ If information is incomplete or instructions fail, THEN search the codebase. Oth
 ---
 
 **Last Updated**: Based on codebase state as of exploration
-**Node Version Validated**: 18.0.0+
+**Node Version Validated**: 20.0.0+
 **Build Status**: ✓ Working
 **Test Status**: ⚠️ Known issues with test infrastructure
