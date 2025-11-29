@@ -1,11 +1,16 @@
+
+import { errors, warnings } from '../enums/errors.js';
+import Broadcast from './broadcast.js';
+
 /**
- * Base event class that extends EventTarget for cross-platform event management.
- * Compatible with both Node.js (v14.5+) and web browsers. Can be used with either
- * addEventListener/removeEventListener or EventEmitter-style on/off methods.
- * @class Event
- * @extends EventTarget
+ * Event class for micro-flow
+ * Provides a simple event emitter implementation for workflow steps and state changes.
+ *
+ * This class is used for emitting and listening to events within workflows and steps.
+ * For broadcasting events across multiple workflows or listeners, see the Broadcast class.
  */
-export default class Event extends EventTarget {
+
+class Event extends EventTarget {
   /**
    * Creates a new Event instance.
    * @constructor
@@ -42,7 +47,41 @@ export default class Event extends EventTarget {
       bubbles,
       cancelable
     });
-    return this.dispatchEvent(custom_event);
+    // Local event dispatch
+    const result = this.dispatchEvent(custom_event);
+    // Broadcast event using Broadcast class
+    try {
+      const channel = new Broadcast(event_name);
+      channel.send(data);
+      channel.destroy();
+    } catch (e) {
+      console.warn(warnings.BROADCAST_FAILED, e);
+    }
+    return result;
+  }
+
+  /**
+   * Listen for broadcasts on a given event name (channel).
+   * @param {string} event_name - The event name/channel to listen for.
+   * @param {Function} listener - Callback for broadcasted data.
+   * @returns {Broadcast} Returns the Broadcast instance for manual control.
+   */
+  onBroadcast(event_name, listener) {
+    const channel = new Broadcast(event_name);
+    channel.onReceive(listener);
+    return channel;
+  }
+
+  /**
+   * Listen for both local and broadcast events.
+   * @param {string} event_name - The event name/channel to listen for.
+   * @param {Function} listener - Callback for event data.
+   * @returns {Object} Returns { event: this, broadcast: Broadcast instance }
+   */
+  onAny(event_name, listener) {
+    this.on(event_name, listener);
+    const broadcast = this.onBroadcast(event_name, listener);
+    return { event: this, broadcast };
   }
 
   /**
@@ -57,10 +96,8 @@ export default class Event extends EventTarget {
       // Call the listener with the detail (data) from CustomEvent
       listener(event.detail);
     };
-    
     // Store the original listener reference for removeListener
     this._listener_map.set(listener, wrapped_listener);
-    
     this.addEventListener(event_name, wrapped_listener);
     return this;
   }
@@ -75,7 +112,6 @@ export default class Event extends EventTarget {
     const wrapped_listener = (event) => {
       listener(event.detail);
     };
-    
     this.addEventListener(event_name, wrapped_listener, { once: true });
     return this;
   }
@@ -105,3 +141,5 @@ export default class Event extends EventTarget {
     return this.off(event_name, listener);
   }
 }
+
+export default Event;

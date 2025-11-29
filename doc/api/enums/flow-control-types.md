@@ -168,9 +168,9 @@ downloadWorkflow.pushSteps([
     name: 'Download',
     type: StepTypes.ACTION,
     callable: async function() {
-      const url = this.workflow.get('currentUrl');
+      const url = this.state.get('currentUrl');
       const result = await downloadFile(url);
-      this.workflow.set('downloadResult', result);
+      this.state.set('downloadResult', result);
       return result;
     }
   }),
@@ -178,7 +178,7 @@ downloadWorkflow.pushSteps([
     name: 'Break on Failure',
     flow_control_type: FlowControlTypes.BREAK,
     callable: async function() {
-      const downloadResult = this.workflow.get('downloadResult');
+      const downloadResult = this.state.get('downloadResult');
       // Break if download failed
       return !downloadResult.success;
     }
@@ -298,7 +298,7 @@ const loop = new LoopStep({
       name: 'Save Result', // Only reached if no error
       type: StepTypes.ACTION,
       callable: async function() {
-        const result = this.workflow.get('processResult');
+        const result = this.state.get('processResult');
         await saveResult(result);
         return { saved: true };
       }

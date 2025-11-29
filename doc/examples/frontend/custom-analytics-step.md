@@ -396,8 +396,8 @@ async function createCheckoutWorkflow(cart, user) {
       const discount = cart.total * 0.1; // 10% off
       const finalTotal = cart.total - discount;
       
-      this.workflow.set('finalTotal', finalTotal);
-      this.workflow.set('discount', discount);
+      this.state.set('finalTotal', finalTotal);
+      this.state.set('discount', discount);
       
       // Add discount info to analytics
       this.addCustomProperty('discount', discount);
@@ -423,14 +423,14 @@ async function createCheckoutWorkflow(cart, user) {
     callable: async function() {
       console.log('Processing payment...');
       
-      const amount = this.workflow.get('finalTotal') || cart.total;
+      const amount = this.state.get('finalTotal') || cart.total;
       
       // Simulate payment processing
       await new Promise(resolve => setTimeout(resolve, 500));
       
       const transactionId = 'txn_' + Date.now();
       
-      this.workflow.set('transactionId', transactionId);
+      this.state.set('transactionId', transactionId);
       this.addCustomProperty('transactionId', transactionId);
       
       return { success: true, transactionId, amount };
@@ -453,7 +453,7 @@ async function createCheckoutWorkflow(cart, user) {
       await new Promise(resolve => setTimeout(resolve, 300));
       
       const orderId = 'order_' + Math.floor(Math.random() * 100000);
-      this.workflow.set('orderId', orderId);
+      this.state.set('orderId', orderId);
       this.addCustomProperty('orderId', orderId);
       
       return { orderId, created: true };

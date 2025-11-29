@@ -186,7 +186,7 @@ function OnboardingWizard() {
         };
         
         const result = await api.createAccount(accountData);
-        this.workflow.set('userId', result.userId);
+        this.state.set('userId', result.userId);
         
         return result;
       }
@@ -203,14 +203,14 @@ function OnboardingWizard() {
         type: StepTypes.ACTION,
         callable: async function() {
           const paymentData = {
-            userId: this.workflow.get('userId'),
+            userId: this.state.get('userId'),
             cardNumber: formData.cardNumber,
             expiryDate: formData.expiryDate,
             amount: 9.99
           };
           
           const result = await api.processPayment(paymentData);
-          this.workflow.set('transactionId', result.transactionId);
+          this.state.set('transactionId', result.transactionId);
           
           return result;
         }
@@ -230,8 +230,8 @@ function OnboardingWizard() {
     });
     
     workflow.events.on('STEP_COMPLETED', (data) => {
-      const currentIndex = data.step.workflow.get('current_step_index');
-      const totalSteps = data.step.workflow.get('steps').length;
+      const currentIndex = data.step.state.get('current_step_index');
+      const totalSteps = data.step.state.get('steps').length;
       setProgress((currentIndex / totalSteps) * 100);
     });
     

@@ -49,14 +49,13 @@ workflow.events.on('WORKFLOW_STARTED', (data) => {
 });
 ```
 
-### `state`
-- **Type:** `WorkflowState`
-- **Description:** Workflow state instance containing all state data
-- **Read-only:** No (but properties are managed through methods)
+### `id`
+- **Type:** `string`
+- **Description:** Unique UUID for this workflow instance
+- **Read-only:** Yes
 
 ```javascript
-const status = workflow.state.get('status');
-const steps = workflow.state.get('steps');
+console.log(workflow.id); // "a1b2c3d4-..."
 ```
 
 ## Methods

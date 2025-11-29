@@ -116,7 +116,7 @@ class ValidationLogicStep extends LogicStep {
    */
   async validateRule(rule) {
     const { field, type, operator, value, customValidator } = rule;
-    const fieldValue = this.workflow.get(field);
+    const fieldValue = this.state.get(field);
     
     // Use custom validator if provided
     if (customValidator) {
@@ -162,11 +162,11 @@ class ValidationLogicStep extends LogicStep {
    * Check database for unique constraint
    */
   async checkUniqueness(field, value) {
-    const db = this.workflow.get('database');
+    const db = this.state.get('database');
     if (!db) return true;
     
     const result = await db.query(
-      `SELECT COUNT(*) as count FROM ${this.workflow.get('tableName')} WHERE ${field} = ?`,
+      `SELECT COUNT(*) as count FROM ${this.state.get('tableName')} WHERE ${field} = ?`,
       [value]
     );
     
@@ -177,10 +177,10 @@ class ValidationLogicStep extends LogicStep {
    * Check if referenced entity exists
    */
   async checkExists(field, value) {
-    const db = this.workflow.get('database');
+    const db = this.state.get('database');
     if (!db) return true;
     
-    const referenceTable = this.workflow.get(`${field}_reference_table`);
+    const referenceTable = this.state.get(`${field}_reference_table`);
     const result = await db.query(
       `SELECT COUNT(*) as count FROM ${referenceTable} WHERE id = ?`,
       [value]
@@ -362,7 +362,7 @@ async function createUserRegistrationWorkflow(userData) {
         operator: '!==',
         value: function() {
           // Password shouldn't match username
-          return this.workflow.get('username');
+          return this.state.get('username');
         },
         customValidator: async (password, workflowState) => {
           // Custom strength validation
@@ -415,11 +415,11 @@ async function createUserRegistrationWorkflow(userData) {
     name: 'Create Account',
     type: StepTypes.ACTION,
     callable: async function() {
-      const db = this.workflow.get('database');
+      const db = this.state.get('database');
       const userData = {
-        email: this.workflow.get('email'),
-        username: this.workflow.get('username'),
-        age: this.workflow.get('age')
+        email: this.state.get('email'),
+        username: this.state.get('username'),
+        age: this.state.get('age')
       };
       
       console.log('Creating user account:', userData);
@@ -428,7 +428,7 @@ async function createUserRegistrationWorkflow(userData) {
       await new Promise(resolve => setTimeout(resolve, 200));
       
       const userId = Math.floor(Math.random() * 10000);
-      this.workflow.set('userId', userId);
+      this.state.set('userId', userId);
       
       console.log('✓ Account created with ID:', userId);
       

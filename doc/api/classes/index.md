@@ -26,6 +26,9 @@ Complete API reference for all classes in Micro Flow.
 - **[StepEvent](./step-event.md)** - Step-specific event management
 - **[WorkflowEvent](./workflow-event.md)** - Workflow-specific event management
 
+### Communication Classes
+- **[Broadcast](./broadcast.md)** - Cross-context communication wrapper (BroadcastChannel API)
+
 ## Class Hierarchy
 
 ```

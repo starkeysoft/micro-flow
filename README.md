@@ -1,8 +1,11 @@
 # Micro Flow - Workflows in your Code
 
+
 A dead simple, lightweight (~35k g-zipped), flexible workflow library for automating asynchronous tasks.
 Works on both frontend and backend.
 Minimal dependencies.
+
+**Compatibility:** Micro Flow is fully compatible with Node.js 20+ and all modern browsers. Broadcast features require Node.js 20+ or a browser with BroadcastChannel support.
 
 **Note**: I am still working on testing all of the steps, and still working on making sure the AI-generated docs are accurate. If you see something that's off or doesn't work, and you can fix it, I'd appreciate a PR, or please open an issue. I'll work on getting a template up for that soon. I'll remove this message when I'm sure everything's stable and the docs are accurate. Probably don't use it in production just yet.
 
@@ -22,6 +25,7 @@ Some ideas:
   - Data processing pipelining
   - Scheduling and automating tasks
   - More complex UI reactivity in fewer lines of code
+  - Rapid prototyping and POC
 
 ---
 
@@ -110,10 +114,10 @@ const workflow = new Workflow({ name: 'My First Workflow' });
 const step1 = new Step({
   name: 'Fetch Data',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
+  callable: async () => {
     console.log('Fetching data...');
     const data = await fetchData();
-    workflow.set('data', data);
+    step.setStepStateValue('data', data);
     return data;
   }
 });
@@ -126,9 +130,9 @@ const delay = new DelayStep({
 const step2 = new Step({
   name: 'Process Data',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
-    console.log('Processing:', workflow.get('data'));
-    return processData(workflow.get('data'));
+  callable: async () => {
+    console.log('Processing:', step1.getStepStateValue('data'));
+    return processData(step1.getStepStateValue('data'));
   }
 });
 
@@ -174,39 +178,106 @@ All steps extend the base `Step` class and share common properties:
 
 ### State Management
 
-The `State` class manages workflow data:
+Micro Flow uses a **global singleton State instance** that is shared across all workflows and steps. This enables efficient state sharing and reduces memory overhead.
+
+#### Property Path Notation
+
+State supports flexible path notation for accessing nested properties:
+
+**Dot Notation** - Access nested objects:
+```javascript
+state.set('user.profile.name', 'John');
+state.get('user.profile.name'); // 'John'
+```
+
+**Bracket Notation** - Access arrays and keys with special characters:
+```javascript
+// Array indices
+state.set('users[0].name', 'Alice');
+state.get('users[0].name'); // 'Alice'
+
+// Keys with special characters
+state.set("config['api-key']", 'secret123');
+state.get("config['api-key']"); // 'secret123'
+
+// Nested arrays
+state.set('matrix[0][1]', 42);
+state.get('matrix[0][1]'); // 42
+```
+
+**Mixed Notation** - Combine both:
+```javascript
+state.set('data.items[0].properties.name', 'First Item');
+state.get('data.items[0].properties.name'); // 'First Item'
+```
+
+#### Basic Operations
 
 ```javascript
-// Accessing state in steps
+import state from 'micro-flow';
+
+// Direct access to global state
+state.set('app.config', { theme: 'dark' });
+state.get('app.config'); // { theme: 'dark' }
+
+// Delete state values
+state.delete('user.profile.name');
+
+// Get a deep clone of the entire state
+const stateClone = state.getStateClone();
+
+// Merge data into state
+state.merge({ key1: 'value1', key2: 'value2' });
+
+// Each step has its own state namespace
 const step = new Step({
   name: 'Process Data',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
-    // Read from workflow state
-    const data = workflow.get('previousData');
+  callable: async function() {
+    // Set value in this step's state namespace
+    this.setStepStateValue('result', 'processed');
     
-    // Write to workflow state (available for subsequent steps)
-    workflow.set('result', processData(data));
+    // Get value from this step's state namespace
+    const result = this.getStepStateValue('result');
     
-    return workflow.get('result');
+    return result;
   }
 });
 
-// Get state values
-const currentStep = workflow.state.get('current_step');
-const allSteps = workflow.state.get('steps');
-
-// Get a deep clone of the entire state
-const stateClone = workflow.state.getStateClone();
-
-// Set state values
-workflow.state.set('custom_data', { foo: 'bar' });
-
-// Merge data into state
-workflow.state.merge({ key1: 'value1', key2: 'value2' });
+// Access workflow state directly
+import state from 'micro-flow';
+const workflowState = state.get(`workflows.${workflowId}`);
 ```
 
 ### Events
+
+
+Micro Flow supports both local and broadcasted events. Events are emitted locally and also broadcast using the Broadcast class (channel name = event name), enabling cross-context communication (e.g., between tabs, windows, or workers in browsers).
+
+#### Local Events
+```javascript
+workflow.events.on('WORKFLOW_STARTED', (data) => {
+  console.log('Workflow started:', data);
+});
+```
+
+#### Broadcast Integration
+```javascript
+// Listen for broadcasted events
+workflow.events.onBroadcast('WORKFLOW_STARTED', (data) => {
+  console.log('Broadcast received:', data);
+});
+
+// Listen for both local and broadcast events
+workflow.events.onAny('WORKFLOW_STARTED', (data) => {
+  console.log('Received (any):', data);
+});
+
+// Emit event (also broadcasts)
+workflow.events.emit('WORKFLOW_STARTED', { info: 'Workflow started!' });
+```
+
+See [Event API docs](doc/api/classes/event.md) for details.
 
 Both workflows and steps emit events throughout their lifecycle:
 
@@ -285,7 +356,7 @@ import { ConditionalStep, Step, StepTypes, ConditionalStepComparators } from 'mi
 
 const conditional = new ConditionalStep({
   name: 'Check Value',
-  subject: () => workflow.get('value'),
+  subject: () => state.get('value'),
   operator: ConditionalStepComparators.GREATER_THAN,
   value: 10,
   step_left: new Step({ 
@@ -312,7 +383,7 @@ import { LoopStep, Workflow, LoopTypes } from 'micro-flow';
 const whileLoop = new LoopStep({
   name: 'While Loop',
   loop_type: LoopTypes.WHILE,
-  subject: () => workflow.get('counter'),
+  subject: () => state.get('counter'),
   operator: '<',
   value: 10,
   sub_workflow: new Workflow({ steps: [...steps] }),
@@ -338,7 +409,7 @@ import { SwitchStep, Case, Step, StepTypes, ConditionalStepComparators } from 'm
 
 const switchStep = new SwitchStep({
   name: 'Switch Statement',
-  subject: () => workflow.get('status'),
+  subject: () => state.get('status'),
   cases: [
     new Case({
       subject: Date.now(),
@@ -413,6 +484,7 @@ const skipStep = new SkipStep({
 | `Event` | Base event class | [View →](./doc/api/classes/event.md) |
 | `StepEvent` | Step lifecycle events | [View →](./doc/api/classes/step-event.md) |
 | `WorkflowEvent` | Workflow lifecycle events | [View →](./doc/api/classes/workflow-event.md) |
+| `Broadcast` | Cross-context communication | [View →](./doc/api/classes/broadcast.md) |
 
 ### Enums
 
@@ -423,7 +495,8 @@ const skipStep = new SkipStep({
 | `StepEventNames` | Step event name constants |
 | `WorkflowEventNames` | Workflow event name constants |
 | `WorkflowStatuses` | Workflow status constants (CANCELLED, COMPLETED, CREATED, ERRORED, FAILED, PAUSED, PENDING, RUNNING, SKIPPED) |
-| `DelayTypes` | Delay type constants (RELATIVE, ABSOLUTE, CRON) |
+| `DelayTypes` | Delay type constants (RELATIVE, ABSOLUTE, CRON) - includes cron scheduling |
+| `errors` | Error messages and warnings |
 | `ConditionalStepComparators` | Comparison operators (EQUALS, NOT_EQUALS, GREATER_THAN, etc.) |
 | `FlowControlTypes` | Flow control types (BREAK, CONTINUE, SKIP) |
 | `LogicStepTypes` | Logic step types (CONDITIONAL, LOOP, SWITCH) |
@@ -443,24 +516,25 @@ import { Workflow, Step, StepTypes } from 'micro-flow';
 
 const workflow = new Workflow({ name: 'Basic Workflow' });
 
-workflow.pushSteps([
-  new Step({
-    name: 'Step 1',
-    type: StepTypes.ACTION,
-    callable: async ({ workflow, step }) => {
-      workflow.set('value', 1);
-    }
-  }),
-  new Step({
-    name: 'Step 2',
-    type: StepTypes.ACTION,
-    callable: async ({ workflow, step }) => {
-      const currentValue = workflow.get('value');
-      workflow.set('value', currentValue + 1);
-      console.log(workflow.get('value')); // 2
-    }
-  })
-]);
+const step1 = new Step({
+  name: 'Step 1',
+  type: StepTypes.ACTION,
+  callable: async function() {
+    this.setStepStateValue('value', 1);
+  }
+});
+
+const step2 = new Step({
+  name: 'Step 2',
+  type: StepTypes.ACTION,
+  callable: async function() {
+    const currentValue = step1.getStepStateValue('value');
+    this.setStepStateValue('value', currentValue + 1);
+    console.log(this.getStepStateValue('value')); // 2
+  }
+});
+
+workflow.pushSteps([step1, step2]);
 
 await workflow.execute();
 ```
@@ -472,6 +546,7 @@ import { Workflow, Step, StepTypes, ConditionalStep } from 'micro-flow';
 
 const workflow = new Workflow();
 
+// Note: user.role should be stored in state or accessed from closure
 workflow.pushStep(new ConditionalStep({
   name: 'Check User Role',
   subject: () => user.role,
@@ -480,12 +555,16 @@ workflow.pushStep(new ConditionalStep({
   step_left: new Step({
     name: 'Admin Flow',
     type: StepTypes.ACTION,
-    callable: async () => handleAdminFlow()
+    callable: async function() {
+      return handleAdminFlow();
+    }
   }),
   step_right: new Step({
     name: 'User Flow',
     type: StepTypes.ACTION,
-    callable: async () => handleUserFlow()
+    callable: async function() {
+      return handleUserFlow();
+    }
   })
 }));
 
@@ -502,7 +581,7 @@ const loopBody = new Workflow({
   new Step({
     name: 'Process Item',
     type: StepTypes.ACTION,
-    callable: async function({ workflow, step }) {
+    callable: async function(state, step) {
       // Access current item from the parent loop step
       const currentItem = this.parent.state.get('current_item');
       console.log('Processing:', currentItem);
@@ -527,41 +606,43 @@ await workflow.execute();
 ```javascript
 import { Workflow, Step, StepTypes } from 'micro-flow';
 
+const subStep = new Step({
+  name: 'Sub Step 1',
+  type: StepTypes.ACTION,
+  callable: async function() {
+    this.setStepStateValue('subResult', 'processed');
+  }
+});
+
 const subWorkflow = new Workflow({
   name: 'Sub Workflow',
-  steps: [
-  new Step({
-    name: 'Sub Step 1',
-    type: StepTypes.ACTION,
-    callable: async ({ workflow, step }) => {
-      workflow.set('subResult', 'processed');
-    }
-  })
-]
+  steps: [subStep]
+});
+
+const mainStep1 = new Step({
+  name: 'Main Step 1',
+  type: StepTypes.ACTION,
+  callable: async function() {
+    this.setStepStateValue('data', 'initial');
+  }
+});
+
+const mainStep2 = new Step({
+  name: 'Execute Sub-workflow',
+  type: StepTypes.ACTION,
+  callable: subWorkflow  // Pass workflow as callable
+});
+
+const mainStep3 = new Step({
+  name: 'Main Step 3',
+  type: StepTypes.ACTION,
+  callable: async function() {
+    console.log(subStep.getStepStateValue('subResult')); // 'processed'
+  }
 });
 
 const mainWorkflow = new Workflow({
-  steps: [
-  new Step({
-    name: 'Main Step 1',
-    type: StepTypes.ACTION,
-    callable: async ({ workflow, step }) => {
-      workflow.set('data', 'initial');
-    }
-  }),
-  new Step({
-    name: 'Execute Sub-workflow',
-    type: StepTypes.ACTION,
-    callable: subWorkflow  // Pass workflow as callable
-  }),
-  new Step({
-    name: 'Main Step 2',
-    type: StepTypes.ACTION,
-    callable: async ({ workflow, step }) => {
-      console.log(workflow.get('subResult')); // 'processed'
-    }
-  })
-]
+  steps: [mainStep1, mainStep2, mainStep3]
 });
 
 await mainWorkflow.execute();
@@ -632,36 +713,43 @@ step.events.on(StepEventNames.STEP_STARTED, (data) => {
 ### State Access
 
 ```javascript
-import { Workflow, Step, StepTypes } from 'micro-flow';
+import { Workflow, Step, StepTypes, state } from 'micro-flow';
 
 const workflow = new Workflow();
 
 workflow.pushStep(new Step({
   name: 'Work with State',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
-    // Get individual state values
-    const currentStep = workflow.get('current_step');
-    const workflowName = workflow.get('name');
+  callable: async function() {
+    // Access global state directly
+    state.set('app.config', { theme: 'dark' });
+    const config = state.get('app.config');
+    
+    // Use path-based access with dot notation
+    state.set('user.profile.name', 'John');
+    const userName = state.get('user.profile.name');
     
     // Get the entire state object
-    const fullState = workflow.getState();
+    const fullState = state.getState();
     
     // Get a deep clone of state (safe to modify)
-    const stateClone = workflow.getStateClone();
+    const stateClone = state.getStateClone();
     stateClone.custom_property = 'modified';
     
-    // Set individual state values
-    workflow.set('custom_data', { result: 'success' });
+    // Set step-specific state values
+    this.setStepStateValue('custom_data', { result: 'success' });
     
-    // Merge multiple values into state
-    workflow.merge({
+    // Merge multiple values into global state
+    state.merge({
       processed: true,
       timestamp: Date.now()
     });
     
+    // Delete state values
+    state.delete('user.profile.name');
+    
     // Data automatically available for subsequent steps
-    const myData = workflow.get('custom_data');
+    const myData = this.getStepStateValue('custom_data');
   }
 }));
 ```
@@ -672,40 +760,47 @@ workflow.pushStep(new Step({
 import { Workflow, LoopStep, FlowControlStep, Step, StepTypes,
          FlowControlTypes, LoopTypes } from 'micro-flow';
 
+const checkStep = new Step({
+  name: 'Check Condition',
+  type: StepTypes.ACTION,
+  callable: async function() {
+    const counter = state.get('counter') || 0;
+    this.setStepStateValue('shouldBreak', counter > 5);
+  }
+});
+
+const incrementStep = new Step({
+  name: 'Increment',
+  type: StepTypes.ACTION,
+  callable: async function() {
+    const counter = state.get('counter') || 0;
+    state.set('counter', counter + 1);
+  }
+});
+
 const loopBody = new Workflow({
   steps: [
-  new Step({
-    name: 'Check Condition',
-    type: StepTypes.ACTION,
-    callable: async ({ workflow, step }) => {
-      workflow.set('shouldBreak', workflow.get('counter') > 5);
-    }
-  }),
-  new FlowControlStep({
-    name: 'Break if needed',
-    flow_control_type: FlowControlTypes.BREAK,
-    condition: ({ workflow }) => workflow.get('shouldBreak')
-  }),
-  new Step({
-    name: 'Increment',
-    type: StepTypes.ACTION,
-    callable: async ({ workflow, step }) => {
-      const counter = workflow.get('counter');
-      workflow.set('counter', counter + 1);
-    }
-  })
-]
+    checkStep,
+    new FlowControlStep({
+      name: 'Break if needed',
+      flow_control_type: FlowControlTypes.BREAK,
+      condition: () => checkStep.getStepStateValue('shouldBreak')
+    }),
+    incrementStep
+  ]
+});
+
+const initStep = new Step({
+  name: 'Initialize',
+  type: StepTypes.ACTION,
+  callable: async function() {
+    state.set('counter', 0);
+  }
 });
 
 const workflow = new Workflow({
   steps: [
-    new Step({
-      name: 'Initialize',
-      type: StepTypes.ACTION,
-      callable: async ({ workflow, step }) => {
-        workflow.set('counter', 0);
-      }
-    }),
+    initStep,
     new LoopStep({
       name: 'Controlled Loop',
       loop_type: LoopTypes.WHILE,

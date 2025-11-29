@@ -1,12 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import WorkflowEvents from './workflow_event.js';
-import State from './state.js';
+import state from './state.js';
 import Step from './step.js';
 import step_types from '../enums/step_types.js';
 import workflow_statuses from '../enums/workflow_statuses.js';
-
-const WorkflowState = State;
-const StepState = State;
 
 /**
  * Represents a workflow that executes a series of steps sequentially.
@@ -27,31 +24,11 @@ export default class Workflow {
    * @param {string[]} [options.sub_step_type_paths=[]] - Additional directories to scan for sub step types.
    */
   constructor({ steps = [], name = null, exit_on_failure = false, freeze_on_completion = true, sub_step_type_paths = [] } = {}) {
-    const id = uuidv4();
-    const workflowName = name ?? `workflow_${id}`;
+    this.id = uuidv4();
+    const workflowName = name ?? `workflow_${this.id}`;
     this.events = new WorkflowEvents();
-    this.state = new WorkflowState({
-      complete_time: null,
-      create_time: null,
-      cancel_time: null,
-      current_step: null,
-      current_step_index: 0,
-      exit_on_failure: exit_on_failure,
-      freeze_on_completion: freeze_on_completion,
-      id: id,
-      name: workflowName,
-      pause_time: null,
-      resume_time: null,
-      should_break: false,
-      should_continue: false,
-      should_pause: false,
-      should_skip: false,
-      start_time: null,
-      status: null,
-      output_data: [],
-      steps: steps,
-      sub_step_type_paths: sub_step_type_paths,
-    });
+
+    this.initializeWorkflowState(this.id, steps, workflowName, exit_on_failure, freeze_on_completion, sub_step_type_paths);
 
     this.setListeners();
 
@@ -63,7 +40,7 @@ export default class Workflow {
    * @returns {void}
    */
   clearSteps() {
-    this.state.set('steps', []);
+    this.setWorkflowValue('steps', []);
     this.events.emit(this.events.event_names.WORKFLOW_STEPS_CLEARED, { workflow: this });
   }
 
@@ -72,60 +49,81 @@ export default class Workflow {
    * @returns {void}
    */
   decrementStepIndex() {
-    this.state.set('current_step_index', this.state.get('current_step_index') - 1);
+    this.setWorkflowValue('current_step_index', this.getWorkflowValue('current_step_index') - 1);
   }
 
   /**
    * Executes all steps in the workflow sequentially until completion or error.
    * Emits workflow started, completed, and errored events as appropriate.
-   * Passes workflow state to each step via setWorkflow() before execution.
+   * 
+   * The workflow:
+   * 1. Merges any initial state provided
+   * 2. Iterates through each step in sequence
+   * 3. Handles flow control flags (should_break, should_skip, should_pause)
+   * 4. Collects output data from each step
+   * 5. Returns a clone of the final global state
+   * 
    * @async
-   * @param {WorkflowState | StepState | State} [initialState=null] - Optional initial state to merge before execution.
-   * @returns {Promise<Workflow>} The workflow instance with final state after execution.
+   * @param {Object} [initialState=null] - Optional initial state properties to merge into global state before execution.
+   * @returns {Promise<Object>} A deep clone of the global state after execution, including output_data array.
    * @throws {Error} If any step in the workflow throws an error during execution and exit_on_failure is true.
+   * @example
+   * const workflow = new Workflow({
+   *   name: 'data-processor',
+   *   steps: [step1, step2, step3]
+   * });
+   * 
+   * const result = await workflow.execute({ input_data: [1, 2, 3] });
+   * console.log(result.output_data); // Array of results from each step
    */
   async execute(initialState = null) {
+    // Push this workflow onto the stack
+    const workflowStack = state.get('workflow_stack') || [];
+    workflowStack.push(this.id);
+    state.set('workflow_stack', workflowStack);
+    state.set('active_workflow_id', this.id);
+
     if (initialState) {
-      this.state.merge(initialState);
+      state.merge(initialState);
     }
 
-    this.logWorkflow(this.events.event_names.WORKFLOW_STARTED, { workflow: this.state.getState() }, `Workflow "${this.state.get('name')}" started.`);
+    this.logWorkflow(this.events.event_names.WORKFLOW_STARTED, { workflow: this.getWorkflowState() }, `Workflow "${this.getWorkflowValue('name')}" started.`);
     this.markAsRunning();
-
-    this.state.set('output_data', []);
 
     if (this.isEmpty()) {
       this.markAsComplete();
-      return this.state.getStateClone();
+      this.popWorkflowStack();
+      return this.buildReturnState();
     }
 
-    let iterator = this.state.get('current_step_index');
-    const steps = this.state.get('steps').slice(iterator);
+    let iterator = this.getWorkflowValue('current_step_index');
+    const steps = this.getWorkflowValue('steps').slice(iterator);
     for await (const step of steps) {
-      if (this.state.get('should_break')) {
+      if (this.getWorkflowValue('should_break')) {
         break;
       }
 
-      if (this.state.get('should_skip')) {
-        this.state.set('should_skip', false);
+      if (this.getWorkflowValue('should_skip')) {
+        this.setWorkflowValue('should_skip', false);
         continue;
       }
-      
+     
       try {
         const result = await this.step(step);
-        this.state.get('output_data').push(result);
-      } catch (error) {
-        this.incrementStepIndex();
-        this.markAsFailed(error, true, false);
 
-        if (this.state.get('exit_on_failure')) {
-          return { ...this.state.getStateClone(), error };
+        const output_data = this.getWorkflowValue('output_data');
+        output_data.push(result);
+        this.setWorkflowValue('output_data', output_data);
+      } catch (error) {
+        this.markAsFailed(error, true);
+
+        if (this.getWorkflowValue('exit_on_failure')) {
+          this.popWorkflowStack();
+          return { ...this.buildReturnState(), error };
         }
       }
 
-      this.incrementStepIndex();
-
-      if (this.state.get('should_pause')) {
+      if (this.getWorkflowValue('should_pause')) {
         this.pause();
         break;
       }
@@ -133,7 +131,9 @@ export default class Workflow {
 
     this.markAsComplete();
 
-    return this.state.getStateClone();
+    this.popWorkflowStack();
+
+    return this.buildReturnState();
   }
 
   /**
@@ -141,7 +141,7 @@ export default class Workflow {
    * @returns {Array} An array of all step objects in the workflow.
    */
   getSteps() {
-    return this.state.get('steps');
+    return this.getWorkflowValue('steps');
   }
 
   /**
@@ -149,7 +149,60 @@ export default class Workflow {
    * @returns {void}
    */
   incrementStepIndex() {
-    this.state.set('current_step_index', this.state.get('current_step_index') + 1);
+    this.setWorkflowValue('current_step_index', this.getWorkflowValue('current_step_index') + 1);
+  }
+
+  /**
+   * Initializes all workflow state properties in the global state object.
+   * Called automatically by the constructor.
+   * 
+   * Sets up:
+   * - Workflow identification (id, name)
+   * - Execution configuration (exit_on_failure, freeze_on_completion)
+   * - Control flags (should_break, should_continue, should_pause, should_skip)
+   * - Timing properties (start_time, pause_time, resume_time, etc.)
+   * - Steps array via pushSteps()
+   * 
+   * @param {string} id - Unique UUID for this workflow instance.
+   * @param {Array} steps - Initial array of steps to add.
+   * @param {string} name - Name of the workflow.
+   * @param {boolean} exit_on_failure - Whether to stop execution on step failure.
+   * @param {boolean} freeze_on_completion - Whether to freeze state after completion.
+   * @param {Array<string>} sub_step_type_paths - Additional directories for custom step types.
+   * @returns {void}
+   * @private
+   */
+  initializeWorkflowState(id, steps, name, exit_on_failure, freeze_on_completion, sub_step_type_paths) {
+    // Ensure workflows object exists
+    if (!state.get('workflows')) {
+      state.set('workflows', {});
+    }
+
+    // Initialize this workflow's namespaced state
+    state.set(`workflows.${id}`, {
+      id: id,
+      name: name,
+      exit_on_failure: exit_on_failure,
+      freeze_on_completion: freeze_on_completion,
+      complete_time: null,
+      create_time: null,
+      cancel_time: null,
+      current_step: null,
+      current_step_index: 0,
+      pause_time: null,
+      resume_time: null,
+      should_break: false,
+      should_continue: false,
+      should_pause: false,
+      should_skip: false,
+      start_time: null,
+      status: null,
+      output_data: [],
+      sub_step_type_paths: sub_step_type_paths,
+      steps: []
+    });
+
+    this.pushSteps(steps);
   }
 
   /**
@@ -157,28 +210,29 @@ export default class Workflow {
    * @returns {boolean} True if the workflow is empty, false otherwise.
    */
   isEmpty() {
-    return !this.state.get('steps').length;
+    const steps = this.getWorkflowValue('steps');
+    return !steps || steps.length === 0;
   }
 
   /**
    * Logs workflow status information to the console unless logging is suppressed.
    * Failed workflows are logged as errors, all others as standard logs.
    * @param {string} event_name - The event name to emit.
-   * @param {Object} [data=this.state.getState()] - Event data to emit and potentially log.
+   * @param {Object} [data=state.getState()] - Event data to emit and potentially log.
    * @param {string} [message=null] - Optional custom message to log. If not provided, uses default status message.
    * @returns {void}
    */
-  logWorkflow(event_name, data = this.state.getState(), message = null) {
+  logWorkflow(event_name, data = this.getWorkflowState(), message = null) {
     if (event_name) {
       this.events.emit(event_name, { step: this, ...data });
     }
 
-    if (this.state.get('log_suppress')) {
+    if (state.get('log_suppress')) {
       return;
     }
 
-    const log_type = this.state.get('status') === workflow_statuses.FAILED ? 'error' : 'log';
-    const message_to_log = `[${new Date().toISOString()}] - ${message ? message : `Workflow "${this.state.get('name')}" ${this.state.get('status')}.`}`
+    const log_type = this.getWorkflowValue('status') === workflow_statuses.FAILED ? 'error' : 'log';
+    const message_to_log = `[${new Date().toISOString()}] - ${message ? message : `Workflow "${this.getWorkflowValue('name')}" ${this.getWorkflowValue('status')}.`}`
     console[log_type](message_to_log);
   }
 
@@ -188,12 +242,7 @@ export default class Workflow {
    * @returns {void}
    */
   markAsComplete() {
-    const end_time = Date.now();
-    this.state.set('execution_time_ms', end_time - this.state.get('start_time'));
-    this.state.set('end_time', end_time);
-    this.state.set('status', workflow_statuses.COMPLETE);
-    this.state.prepare(this.state.get('start_time'), this.state.get('freeze_on_completion') ?? true);
-    this.logWorkflow(this.events.event_names.WORKFLOW_COMPLETED, null, `Workflow "${this.state.get('name')}" is now complete.`);
+    this.logWorkflow(this.events.event_names.WORKFLOW_COMPLETED, null, `Workflow "${this.getWorkflowValue('name')}" is now complete.`);
   }
 
   /**
@@ -203,16 +252,13 @@ export default class Workflow {
    * @param {boolean} [fire_event=true] - Whether to emit the WORKFLOW_FAILED event.
    * @returns {void}
    */
-  markAsFailed(error, fire_event = true, freeze = true) {
+  markAsFailed(error, fire_event = true) {
     const end_time = Date.now();
-    this.state.set('end_time', end_time);
-    this.state.set('status', workflow_statuses.FAILED);
+    this.setWorkflowValue('end_time', end_time);
+    this.setWorkflowValue('status', workflow_statuses.FAILED);
+    this.setWorkflowValue('execution_time_ms', end_time - this.getWorkflowValue('start_time'));
 
-    if (freeze) {
-      this.state.prepare(this.state.get('start_time'), this.state.get('freeze_on_completion') ?? true);
-    }
-
-    this.logWorkflow(fire_event ? this.events.event_names.WORKFLOW_FAILED : null, { error }, `Workflow "${this.state.get('name')}" failed with error: ${error.message}`);
+    this.logWorkflow(fire_event ? this.events.event_names.WORKFLOW_FAILED : null, { error }, `Workflow "${this.getWorkflowValue('name')}" failed with error: ${error.message}`);
   }
 
   /**
@@ -222,8 +268,8 @@ export default class Workflow {
    * @returns {void}
    */
   markAsCreated(fire_event = true) {
-    this.state.set('status', workflow_statuses.CREATED);
-    this.logWorkflow(fire_event ? this.events.event_names.WORKFLOW_CREATED : null, null, `Workflow "${this.state.get('name')}" is now created.`);
+    this.setWorkflowValue('status', workflow_statuses.CREATED);
+    this.logWorkflow(fire_event ? this.events.event_names.WORKFLOW_CREATED : null, null, `Workflow "${this.getWorkflowValue('name')}" is now created.`);
   }
 
   /**
@@ -233,8 +279,8 @@ export default class Workflow {
    * @returns {void}
    */
   markAsPaused(fire_event = true) {
-    this.state.set('status', workflow_statuses.PAUSED);
-    this.logWorkflow(fire_event ? this.events.event_names.WORKFLOW_PAUSED : null, null, `Workflow "${this.state.get('name')}" is now paused.`); 
+    this.setWorkflowValue('status', workflow_statuses.PAUSED);
+    this.logWorkflow(fire_event ? this.events.event_names.WORKFLOW_PAUSED : null, null, `Workflow "${this.getWorkflowValue('name')}" is now paused.`); 
   }
 
   /**
@@ -244,10 +290,10 @@ export default class Workflow {
    * @returns {void}
    */
   markAsResumed(fire_event = true) {
-    this.state.set('should_pause', false);
-    this.state.set('resume_time', Date.now());
-    this.state.set('status', workflow_statuses.RESUMED);
-    this.logWorkflow(fire_event ? this.events.event_names.WORKFLOW_RESUMED : null, null, `Workflow "${this.state.get('name')}" is now resumed.`);
+    this.setWorkflowValue('should_pause', false);
+    this.setWorkflowValue('resume_time', Date.now());
+    this.setWorkflowValue('status', workflow_statuses.RESUMED);
+    this.logWorkflow(fire_event ? this.events.event_names.WORKFLOW_RESUMED : null, null, `Workflow "${this.getWorkflowValue('name')}" is now resumed.`);
   }
 
   /**
@@ -256,9 +302,9 @@ export default class Workflow {
    * @returns {void}
    */
   markAsRunning() {
-    this.state.set('start_time', Date.now());
-    this.state.set('status', workflow_statuses.RUNNING);
-    this.logWorkflow(this.events.event_names.WORKFLOW_RUNNING, null, `Workflow "${this.state.get('name')}" is now running.`);
+    this.setWorkflowValue('start_time', Date.now());
+    this.setWorkflowValue('status', workflow_statuses.RUNNING);
+    this.logWorkflow(this.events.event_names.WORKFLOW_RUNNING, null, `Workflow "${this.getWorkflowValue('name')}" is now running.`);
   }
 
   /**
@@ -268,8 +314,10 @@ export default class Workflow {
    * @returns {Array} The result of the splice operation.
    */
   moveStep(fromIndex, toIndex) {
-    const [movedStep] = this.state.get('steps').splice(fromIndex, 1);
-    this.state.get('steps').splice(toIndex, 0, movedStep);
+    const steps = this.getWorkflowValue('steps');
+    const [movedStep] = steps.splice(fromIndex, 1);
+    steps.splice(toIndex, 0, movedStep);
+    this.setWorkflowValue('steps', steps);
     this.events.emit(this.events.event_names.WORKFLOW_STEP_MOVED, { workflow: this, movedStep });
   }
 
@@ -279,28 +327,64 @@ export default class Workflow {
    * @returns {void}
    */
   pause() {
-    this.state.set('should_pause', true);
-    this.state.set('paused_time', Date.now());
+    this.setWorkflowValue('should_pause', true);
+    this.setWorkflowValue('paused_time', Date.now());
     this.markAsPaused();
   }
 
   /**
    * Adds a single step to the end of the workflow.
-   * @param {Object} step - The step object to add to the workflow.
+   * 
+   * This method:
+   * 1. Sets the step's current_step_index property
+   * 2. Adds the step to the global state steps array
+   * 3. Suppresses the "direct steps modification" warning
+   * 4. Emits WORKFLOW_STEP_ADDED event
+   * 
+   * @param {Step} step - The step object to add to the workflow.
    * @returns {void}
+   * @example
+   * const workflow = new Workflow({ name: 'my-workflow' });
+   * const step = new Step({
+   *   name: 'process-data',
+   *   type: step_types.ACTION,
+   *   callable: async () => ({ result: 'done' })
+   * });
+   * workflow.pushStep(step);
    */
   pushStep(step) {
-    this.state.get('steps').push(step);
+    state.set('suppress_step_warning', true);
+
+    step.current_step_index = this.getWorkflowValue('steps').length;
+    const currentSteps = this.getWorkflowValue('steps') ?? [];
+    currentSteps.push(step);
+
+    this.setWorkflowValue('steps', currentSteps);
+
+    state.delete('suppress_step_warning');
     this.events.emit(this.events.event_names.WORKFLOW_STEP_ADDED, { workflow: this, step });
   }
 
   /**
    * Adds multiple steps to the end of the workflow.
-   * @param {Array} steps - An array of step objects to add to the workflow.
+   * Internally calls pushStep() for each step to ensure proper state initialization.
+   * 
+   * @param {Array<Step>} steps - An array of step objects to add to the workflow.
    * @returns {void}
+   * @example
+   * const workflow = new Workflow({ name: 'my-workflow' });
+   * workflow.pushSteps([step1, step2, step3]);
    */
   pushSteps(steps) {
-    this.state.set('steps', [...this.state.get('steps'), ...steps]);
+    if (!steps.length || !Array.isArray(steps)) {
+      console.warn('No steps provided to pushSteps.');
+      return;
+    }
+
+    for (const step of steps) {
+      this.pushStep(step);
+    }
+
     this.events.emit(this.events.event_names.WORKFLOW_STEPS_ADDED, { workflow: this, steps });
   }
 
@@ -310,7 +394,9 @@ export default class Workflow {
    * @returns {Array} An array containing the removed step.
    */
   removeStep(index) {
-    const removedStep = this.state.get('steps').splice(index, 1);
+    const steps = this.getWorkflowValue('steps');
+    const removedStep = steps.splice(index, 1);
+    this.setWorkflowValue('steps', steps);
     this.events.emit(this.events.event_names.WORKFLOW_STEP_REMOVED, { workflow: this, removedStep });
     return removedStep;
   }
@@ -375,25 +461,89 @@ export default class Workflow {
     if (isStep || isWorkflow) {
       // Check for circular reference
       if (seen.has(value)) {
-        return `[CircularReference: ${pathMap.get(value)}]`;
+        // Try to get ID for circular reference
+        let refId = null;
+        if (isWorkflow) {
+          refId = value.id;
+        } else if (isStep && value.current_step_index !== null) {
+          const activeWorkflowId = state.get('active_workflow_id');
+          if (activeWorkflowId) {
+            refId = state.get(`workflows.${activeWorkflowId}.steps.${value.current_step_index}.id`);
+          }
+        }
+        
+        if (refId) {
+          return `[CircularReference: ${refId}]`;
+        }
+        // Fallback to property name from path
+        const pathParts = pathMap.get(value).split('.');
+        const propertyName = pathParts[pathParts.length - 1];
+        return `[CircularReference: ${propertyName}]`;
       }
 
       seen.set(value, true);
       pathMap.set(value, path);
 
       const serialized = {
-        __type: isWorkflow ? 'Workflow' : 'Step',
-        name: value.state?.get('name') || 'unnamed',
-        id: value.state?.get('id')
+        __type: isWorkflow ? 'Workflow' : 'Step'
       };
 
-      if (isStep && value.state?.get('type')) {
-        serialized.type = value.state.get('type');
-      }
-
-      // Serialize the state if available
-      if (value.state && typeof value.state.getState === 'function') {
-        serialized.state = this.serializeValue(value.state, depth + 1, `${path}.state`, options, seen, pathMap);
+      if (isWorkflow) {
+        // Serialize workflow using namespaced state
+        const workflowId = value.id;
+        serialized.name = state.get(`workflows.${workflowId}.name`) || 'unnamed';
+        serialized.id = state.get(`workflows.${workflowId}.id`);
+        serialized.status = state.get(`workflows.${workflowId}.status`);
+        serialized.current_step_index = state.get(`workflows.${workflowId}.current_step_index`);
+        serialized.exit_on_failure = state.get(`workflows.${workflowId}.exit_on_failure`);
+        serialized.freeze_on_completion = state.get(`workflows.${workflowId}.freeze_on_completion`);
+        serialized.should_break = state.get(`workflows.${workflowId}.should_break`);
+        serialized.should_continue = state.get(`workflows.${workflowId}.should_continue`);
+        serialized.should_pause = state.get(`workflows.${workflowId}.should_pause`);
+        serialized.should_skip = state.get(`workflows.${workflowId}.should_skip`);
+        serialized.start_time = state.get(`workflows.${workflowId}.start_time`);
+        serialized.end_time = state.get(`workflows.${workflowId}.end_time`);
+        serialized.execution_time_ms = state.get(`workflows.${workflowId}.execution_time_ms`);
+        serialized.pause_time = state.get(`workflows.${workflowId}.pause_time`);
+        serialized.resume_time = state.get(`workflows.${workflowId}.resume_time`);
+        
+        // Serialize steps array
+        const steps = state.get(`workflows.${workflowId}.steps`);
+        if (steps && Array.isArray(steps)) {
+          serialized.steps = this.serializeValue(steps, depth + 1, `${path}.steps`, options, seen, pathMap);
+        }
+        
+        // Serialize output data
+        const outputData = state.get(`workflows.${workflowId}.output_data`);
+        if (outputData) {
+          serialized.output_data = this.serializeValue(outputData, depth + 1, `${path}.output_data`, options, seen, pathMap);
+        }
+      } else if (isStep) {
+        // Serialize step using its state path within the active workflow
+        const stepIndex = value.current_step_index;
+        const activeWorkflowId = state.get('active_workflow_id');
+        if (stepIndex !== null && activeWorkflowId) {
+          serialized.name = state.get(`workflows.${activeWorkflowId}.steps.${stepIndex}.name`) || 'unnamed';
+          serialized.id = state.get(`workflows.${activeWorkflowId}.steps.${stepIndex}.id`);
+          serialized.type = state.get(`workflows.${activeWorkflowId}.steps.${stepIndex}.type`);
+          serialized.status = value.status;
+          serialized.start_time = state.get(`workflows.${activeWorkflowId}.steps.${stepIndex}.start_time`);
+          serialized.end_time = state.get(`workflows.${activeWorkflowId}.steps.${stepIndex}.end_time`);
+          serialized.execution_time_ms = state.get(`workflows.${activeWorkflowId}.steps.${stepIndex}.execution_time_ms`);
+          
+          // Serialize callable if it's another Step or Workflow
+          const callable = state.get(`workflows.${activeWorkflowId}.steps.${stepIndex}.callable`);
+          if (callable && (callable instanceof Workflow || callable instanceof Step)) {
+            serialized.callable = this.serializeValue(callable, depth + 1, `${path}.callable`, options, seen, pathMap);
+          } else if (typeof callable === 'function') {
+            serialized.callable = `[Function: ${callable.name || 'anonymous'}]`;
+          }
+        } else {
+          // Step without index - use basic properties
+          serialized.name = value.name || 'unnamed';
+          serialized.type = value.type;
+          serialized.status = value.status;
+        }
       }
 
       seen.delete(value);
@@ -404,7 +554,10 @@ export default class Workflow {
     if (Array.isArray(value)) {
       // Check for circular reference
       if (seen.has(value)) {
-        return `[CircularReference: ${pathMap.get(value)}]`;
+        // Try to extract a meaningful identifier from the path
+        const pathParts = path.split('.');
+        const propertyName = pathParts[pathParts.length - 1];
+        return `[CircularReference: ${propertyName}]`;
       }
 
       seen.set(value, true);
@@ -422,7 +575,22 @@ export default class Workflow {
     if (valueType === 'object') {
       // Check for circular reference
       if (seen.has(value)) {
-        return `[CircularReference: ${pathMap.get(value)}]`;
+        // Try to get an ID from the object
+        let refId = null;
+        if (value.id) {
+          refId = value.id;
+        } else if (value.state && typeof value.state.get === 'function') {
+          refId = value.state.get('id');
+        }
+        
+        if (refId) {
+          return `[CircularReference: ${refId}]`;
+        }
+        
+        // Fallback to property name from path
+        const pathParts = path.split('.');
+        const propertyName = pathParts[pathParts.length - 1].replace(/\[.*\]$/, '');
+        return `[CircularReference: ${propertyName}]`;
       }
 
       seen.set(value, true);
@@ -492,107 +660,73 @@ export default class Workflow {
    */
   setListeners() {
     this.events.on(this.events.event_names.WORKFLOW_CANCELLED, (data) => {
-      this.logWorkflow(null, `Workflow "${this.state.get('name')}" cancelled at ${this.state.get('cancel_time')}.`);
-      this.state.set('status', workflow_statuses.CANCELLED);
-      this.state.prepare(this.state.get('start_time'), this.state.get('freeze_on_completion') ?? true);
+      this.setWorkflowValue('status', workflow_statuses.CANCELLED);
+      const end_time = Date.now();
+      this.setWorkflowValue('execution_time_ms', end_time - this.getWorkflowValue('start_time'));
+      this.setWorkflowValue('end_time', end_time);
     });
 
     this.events.on(this.events.event_names.WORKFLOW_COMPLETED, (data) => {
-      this.markAsComplete(false);
-      this.state.prepare(this.state.get('start_time'), this.state.get('freeze_on_completion') ?? true);
+      const end_time = Date.now();
+      this.setWorkflowValue('execution_time_ms', end_time - this.getWorkflowValue('start_time'));
+      this.setWorkflowValue('end_time', end_time);
+      this.setWorkflowValue('status', workflow_statuses.COMPLETE);
     });
 
     this.events.on(this.events.event_names.WORKFLOW_CREATED, (data) => {
-      this.markAsCreated(false);
+      // Status already set by markAsCreated()
     });
 
     this.events.on(this.events.event_names.WORKFLOW_ERRORED, (data) => {
-      this.logWorkflow(null, `Workflow "${this.state.get('name')}" errored: ${data.error}`);
-      this.state.set('status', workflow_statuses.ERRORED);
-      this.state.prepare(this.state.get('start_time'), this.state.get('freeze_on_completion') ?? true);
+      this.setWorkflowValue('status', workflow_statuses.ERRORED);
+      const end_time = Date.now();
+      this.setWorkflowValue('execution_time_ms', end_time - this.getWorkflowValue('start_time'));
+      this.setWorkflowValue('end_time', end_time);
     });
 
     this.events.on(this.events.event_names.WORKFLOW_FAILED, (data) => {
-      this.markAsFailed(data, false);
-      this.state.prepare(this.state.get('start_time'), this.state.get('freeze_on_completion') ?? true);
+      // Status and logging already handled by markAsFailed()
     });
 
     this.events.on(this.events.event_names.WORKFLOW_PAUSED, (data) => {
-      this.markAsPaused(false);
+      // Status already set by markAsPaused()
     });
 
     this.events.on(this.events.event_names.WORKFLOW_RESUMED, (data) => {
-      this.markAsResumed(false);
+      // Status already set by markAsResumed()
     });
 
     this.events.on(this.events.event_names.WORKFLOW_STARTED, (data) => {
-      this.state.set('start_time', Date.now());
-      this.logWorkflow(null, `Workflow "${this.state.get('name')}" started at ${this.state.get('start_time')}.`);
-      this.state.set('status', workflow_statuses.RUNNING);
+      // Status and start time already set by the execute() method
     });
 
     this.events.on(this.events.event_names.WORKFLOW_STEP_ADDED, (data) => {
-      this.logWorkflow(null, `Step added to workflow "${this.state.get('name')}" with ID: ${this.state.get('id')}.`);
+      // External hook for step addition
     });
 
     this.events.on(this.events.event_names.WORKFLOW_STEP_MOVED, (data) => {
-      this.logWorkflow(null, `Step moved in workflow "${this.state.get('name')}" with ID: ${this.state.get('id')}.`);
+      // External hook for step movement
     });
 
     this.events.on(this.events.event_names.WORKFLOW_STEP_REMOVED, (data) => {
-      this.logWorkflow(null, `Step removed from workflow "${this.state.get('name')}" with ID: ${this.state.get('id')}.`);
+      // External hook for step removal
     });
 
     this.events.on(this.events.event_names.WORKFLOW_STEP_SHIFTED, (data) => {
-      this.logWorkflow(null, `Step shifted from workflow "${this.state.get('name')}" with ID: ${this.state.get('id')}.`);
+      // External hook for step shifting
     });
 
     this.events.on(this.events.event_names.WORKFLOW_STEP_SKIPPED, (data) => {
-      this.logWorkflow(null, `Step skipped in workflow "${this.state.get('name')}" with ID: ${this.state.get('id')}.`);
+      // External hook for step skipping
     });
 
     this.events.on(this.events.event_names.WORKFLOW_STEPS_ADDED, (data) => {
-      this.logWorkflow(null, `Steps added to workflow "${this.state.get('name')}" with ID: ${this.state.get('id')}.`);
+      // External hook for steps addition
     });
 
     this.events.on(this.events.event_names.WORKFLOW_STEPS_CLEARED, (data) => {
-      this.logWorkflow(null, `Steps cleared from workflow "${this.state.get('name')}" with ID: ${this.state.get('id')}.`);
+      // External hook for steps clearing
     });
-  }
-
-  /**
-   * Sets the execution state for this workflow. Provides a snapshot of the workflow state
-   * at the time of execution. The state is an object containing state information
-   * accessible during workflow execution. Also creates a mapping of steps by their IDs
-   * for easy access.
-   * @param {Object} state - The state object to set.
-   * @returns {WorkflowState} The workflow state object.
-   */
-  setState(state) {
-    if (!state || typeof state.getState !== 'function') {
-      throw new Error('setState requires a State instance');
-    }
-
-    const stateClone = state.getStateClone();
-    const originalSteps = state.get('steps');
-    
-    this.state = new WorkflowState(stateClone);
-    
-    // Preserve the original step instances instead of cloned objects
-    this.state.set('steps', originalSteps);
-
-    const steps_by_id = {};
-    const steps = this.state.get('steps');
-
-    if (steps && steps.length) {
-      steps.forEach(step => {
-        steps_by_id[step.state.get('id')] = step;
-      });
-    }
-
-    this.state.set('steps_by_id', steps_by_id);
-
-    return this.state;
   }
 
   /**
@@ -600,15 +734,17 @@ export default class Workflow {
    * @returns {Object|undefined} The first step object, or undefined if the workflow is empty.
    */
   shiftStep() {
-    const shiftedStep = this.state.get('steps').shift();
+    const steps = this.getWorkflowValue('steps');
+    const shiftedStep = steps.shift();
+    this.setWorkflowValue('steps', steps);
     this.events.emit(this.events.event_names.WORKFLOW_STEP_SHIFTED, { workflow: this, shiftedStep });
     return shiftedStep;
   }
 
   /**
-   * Executes a step in the workflow. Sets the step's workflow reference via setWorkflow(),
-   * marks its status, executes it, and handles flow control flags (should_break, should_continue, should_skip).
-   * DELAY type steps are marked as waiting, all other steps are marked as running.
+   * Executes a step in the workflow. Marks its status, executes it, and handles flow
+   * control flags (should_break, should_continue, should_skip). DELAY type steps are marked as waiting,
+   * all other steps are marked as running.
    * @async
    * @param {Step} step - The step to execute.
    * @throws {Error} Throws an error if the workflow is empty or if a step execution fails.
@@ -619,13 +755,13 @@ export default class Workflow {
       throw new Error('No steps available in the workflow.');
     }
 
-    step.setWorkflow(this.state);
+    this.incrementStepIndex();
 
-    this.state.set('current_step', step);
+    this.setWorkflowValue('current_step', step);
 
-    if (step.state.get('type') === step_types.DELAY) {
-      const currentIndex = this.state.get('current_step_index');
-      const steps = this.state.get('steps');
+    if (step.getStepStateValue('type') === step_types.DELAY) {
+      const currentIndex = this.getWorkflowValue('current_step_index');
+      const steps = this.getWorkflowValue('steps');
       if (currentIndex + 1 < steps.length) {
         steps[currentIndex + 1].markAsPending();
       }
@@ -637,11 +773,11 @@ export default class Workflow {
     let result;
 
     try {
-      result = await step.execute(this.state ?? this.workflow.state);
+      result = await step.execute();
 
-      this.state.set('should_break', step.state.get('should_break') ?? this.state.get('should_break'));
-      this.state.set('should_continue', step.state.get('should_continue') ?? this.state.get('should_continue'));
-      this.state.set('should_skip', step.state.get('should_skip') ?? this.state.get('should_skip'));
+      this.setWorkflowValue('should_break', step.getStepStateValue('should_break') ?? this.getWorkflowValue('should_break'));
+      this.setWorkflowValue('should_continue', step.getStepStateValue('should_continue') ?? this.getWorkflowValue('should_continue'));
+      this.setWorkflowValue('should_skip', step.getStepStateValue('should_skip') ?? this.getWorkflowValue('should_skip'));
     } catch (error) {
       step.markAsFailed(error);
       throw error;
@@ -659,5 +795,69 @@ export default class Workflow {
    */
   toJSON(tabs = 2) {
     return JSON.stringify(this.serializeValue(this, 0, 'workflow'), null, tabs);
-  }  
+  }
+
+  /**
+   * Gets a value from this workflow's namespaced state.
+   * @param {string} path - The path within the workflow state to retrieve.
+   * @param {*} [defaultValue=null] - Default value to return if path doesn't exist.
+   * @returns {*} The value at the specified path.
+   */
+  getWorkflowValue(path, defaultValue = null) {
+    return state.get(`workflows.${this.id}.${path}`, defaultValue);
+  }
+
+  /**
+   * Sets a value in this workflow's namespaced state.
+   * @param {string} path - The path within the workflow state to set.
+   * @param {*} value - The value to set.
+   * @returns {void}
+   */
+  setWorkflowValue(path, value) {
+    state.set(`workflows.${this.id}.${path}`, value);
+  }
+
+  /**
+   * Gets the entire workflow state object.
+   * @returns {Object} The workflow state.
+   */
+  getWorkflowState() {
+    return state.get(`workflows.${this.id}`);
+  }
+
+  /**
+   * Pops this workflow from the execution stack and restores parent as active.
+   * @returns {void}
+   */
+  popWorkflowStack() {
+    const workflowStack = state.get('workflow_stack') || [];
+    workflowStack.pop();
+    state.set('workflow_stack', workflowStack);
+    
+    if (workflowStack.length > 0) {
+      state.set('active_workflow_id', workflowStack[workflowStack.length - 1]);
+    } else {
+      state.set('active_workflow_id', null);
+    }
+  }
+
+  /**
+   * Builds the return state combining workflow state and user data.
+   * @returns {Object} Combined state object.
+   */
+  buildReturnState() {
+    const clonedState = state.getStateClone();
+    return {
+      ...clonedState,
+      // Override with this workflow's specific state for backwards compatibility
+      id: this.getWorkflowValue('id'),
+      name: this.getWorkflowValue('name'),
+      steps: this.getWorkflowValue('steps'),
+      current_step_index: this.getWorkflowValue('current_step_index'),
+      status: this.getWorkflowValue('status'),
+      output_data: this.getWorkflowValue('output_data'),
+      exit_on_failure: this.getWorkflowValue('exit_on_failure'),
+      freeze_on_completion: this.getWorkflowValue('freeze_on_completion')
+    };
+  }
 }

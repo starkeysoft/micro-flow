@@ -1,6 +1,11 @@
+
 # Event Class
 
 The `Event` class provides cross-platform event management compatible with both Node.js and browsers. It extends `EventTarget` and provides both addEventListener/removeEventListener and EventEmitter-style on/off methods.
+
+## Relationship to Broadcast
+
+For global or cross-context event propagation (e.g., between browser tabs, windows, or workflows), use the [`Broadcast`](./broadcast.md) class. `Event` is for local workflow/step events, while `Broadcast` enables communication across broader scopes.
 
 ## Constructor
 
@@ -8,12 +13,49 @@ The `Event` class provides cross-platform event management compatible with both 
 new Event()
 ```
 
-### Example
+### Example: Local Event Usage
 
 ```javascript
-import { Event } from 'micro-flow';
+import Event from 'micro-flow/src/classes/event.js';
 
 const eventEmitter = new Event();
+eventEmitter.on('STARTED', () => {
+  console.log('Workflow started!');
+});
+eventEmitter.emit('STARTED');
+```
+
+## Example: Broadcast Usage
+
+```javascript
+import Broadcast from 'micro-flow/src/classes/broadcast.js';
+
+const broadcast = new Broadcast('notifications');
+broadcast.onReceive((data) => {
+  console.log('Received broadcast:', data);
+});
+broadcast.send({ action: 'refresh', timestamp: Date.now() });
+```
+
+## Example: Using Both Together
+
+```javascript
+import Event from 'micro-flow/src/classes/event.js';
+import Broadcast from 'micro-flow/src/classes/broadcast.js';
+
+const localEvent = new Event();
+const globalBroadcast = new Broadcast('workflow-global');
+
+localEvent.on('COMPLETE', () => {
+  globalBroadcast.send({ type: 'COMPLETE', time: Date.now() });
+});
+
+// Listen for global completion events
+globalBroadcast.onReceive((msg) => {
+  if (msg.type === 'COMPLETE') {
+    console.log('A workflow completed at', msg.time);
+  }
+});
 ```
 
 ## Properties
@@ -51,17 +93,18 @@ const eventNames = {
 
 eventEmitter.registerEvents(eventNames);
 ```
+emitter.emit('USER_LOGGED_IN', {
 
 ### `emit(event_name, data, bubbles, cancelable)`
 
-Emits a custom event with optional data payload.
+Emits a custom event with optional data payload, and also broadcasts the event using the Broadcast class (channel name = event name).
 
 ```javascript
 emit(event_name: string, data?: any, bubbles?: boolean, cancelable?: boolean): boolean
 ```
 
 **Parameters:**
-- `event_name` (string) - Name of the event to emit
+- `event_name` (string) - Name of the event to emit and broadcast
 - `data` (any, optional) - Data to pass with the event
 - `bubbles` (boolean, optional) - Whether event should bubble (default: `false`)
 - `cancelable` (boolean, optional) - Whether event is cancelable (default: `true`)
@@ -77,6 +120,55 @@ const emitter = new Event();
 emitter.emit('USER_LOGGED_IN', {
   userId: 123,
   timestamp: Date.now()
+});
+// This will also broadcast to all listeners on the 'USER_LOGGED_IN' channel
+```
+
+### `onBroadcast(event_name, listener)`
+
+Listen for broadcasts on a given event name (channel).
+
+```javascript
+onBroadcast(event_name: string, listener: Function): Broadcast
+```
+
+**Parameters:**
+- `event_name` (string) - Channel/event name to listen for
+- `listener` (Function) - Callback for broadcasted data
+
+**Returns:**
+- `Broadcast` - The Broadcast instance (can be destroyed manually)
+
+**Example:**
+
+```javascript
+const emitter = new Event();
+emitter.onBroadcast('USER_LOGGED_IN', (data) => {
+  console.log('Broadcast received:', data);
+});
+```
+
+### `onAny(event_name, listener)`
+
+Listen for both local and broadcast events.
+
+```javascript
+onAny(event_name: string, listener: Function): { event: Event, broadcast: Broadcast }
+```
+
+**Parameters:**
+- `event_name` (string) - Event name/channel
+- `listener` (Function) - Callback for event data
+
+**Returns:**
+- `{ event: Event, broadcast: Broadcast }` - Both event and broadcast listeners
+
+**Example:**
+
+```javascript
+const emitter = new Event();
+emitter.onAny('USER_LOGGED_IN', (data) => {
+  console.log('Received (any):', data);
 });
 ```
 

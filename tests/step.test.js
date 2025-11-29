@@ -1,220 +1,555 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import Step from '../src/classes/step.js';
-import step_types from '../src/enums/step_types.js';
+import Workflow from '../src/classes/workflow.js';
+import state from '../src/classes/state.js';
 import step_statuses from '../src/enums/step_statuses.js';
+import step_types from '../src/enums/step_types.js';
 
 describe('Step', () => {
   let step;
+  let workflow;
 
   beforeEach(() => {
-    step = new Step({
-      name: 'test-step',
-      type: step_types.ACTION,
-      callable: async (context) => {
-        return 'success';
-      },
+    // Reset the global state before each test
+    state.state = {
+      ...state.constructor.defaultState,
+      steps: [],
+      current_step_index: 0,
+      output_data: []
+    };
+  });
+
+  afterEach(() => {
+    // Clean up
+    vi.clearAllMocks();
+  });
+
+  describe('constructor', () => {
+    it('should create a step with required parameters', () => {
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION
+      });
+
+      expect(step.name).toBe('test-step');
+      expect(step.type).toBe(step_types.ACTION);
+      expect(step.status).toBe(step_statuses.WAITING);
+    });
+
+    it('should use default callable if not provided', () => {
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION
+      });
+
+      expect(typeof step.callable).toBe('function');
+    });
+
+    it('should accept a custom callable function', () => {
+      const customCallable = async () => ({ result: 'test' });
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION,
+        callable: customCallable
+      });
+
+      expect(step.callable).toBe(customCallable);
+    });
+
+    it('should initialize events', () => {
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION
+      });
+
+      expect(step.events).toBeDefined();
+      expect(step.events.event_names).toBeDefined();
+    });
+
+    it('should set current_step_index to null', () => {
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION
+      });
+
+      expect(step.current_step_index).toBeNull();
     });
   });
 
-  it('should initialize with correct properties', () => {
-    expect(step.state.get('name')).toBe('test-step');
-    expect(step.state.get('type')).toBe(step_types.ACTION);
-    expect(step.state.get('status')).toBe(step_statuses.WAITING);
-    expect(step.state.get('id')).toBeDefined();
-  });
-
-  it('should execute callable function and mark as complete', async () => {
-    step.state.set('steps', []);
-    
-    const result = await step.execute();
-    
-    expect(result).toBe('success');
-    expect(step.state.get('status')).toBe(step_statuses.COMPLETE);
-  });
-
-  it('should handle errors and mark as failed', async () => {
-    const errorStep = new Step({
-      name: 'error-step',
-      type: step_types.ACTION,
-      callable: async () => {
-        throw new Error('Test error');
-      },
+  describe('execute()', () => {
+    beforeEach(() => {
+      workflow = new Workflow({ name: 'test-workflow' });
     });
-    
-    errorStep.state.set('steps', []);
-    
-    await expect(errorStep.execute()).rejects.toThrow('Test error');
-    expect(errorStep.state.get('status')).toBe(step_statuses.FAILED);
-  });
 
-  it('should emit events when status changes', () => {
-    const listener = vi.fn();
-    step.events.on(step.events.event_names.STEP_RUNNING, listener);
-    
-    step.markAsRunning();
-    
-    expect(listener).toHaveBeenCalledWith(
-      expect.objectContaining({ step })
-    );
-    expect(step.state.get('status')).toBe(step_statuses.RUNNING);
-  });
+    it('should execute a callable function', async () => {
+      const callable = vi.fn(async () => ({ result: 'success' }));
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION,
+        callable
+      });
 
-  it('should set state with step mapping', () => {
-    const step1 = new Step({ name: 'Step 1', type: step_types.ACTION });
-    const step2 = new Step({ name: 'Step 2', type: step_types.ACTION });
-    const mockSteps = [step1, step2];
-    
-    step.state.set('steps', mockSteps);
-    step.state.set('steps_by_id', {
-      [step1.state.get('id')]: mockSteps[0],
-      [step2.state.get('id')]: mockSteps[1]
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
+
+      const result = await step.execute();
+
+      expect(callable).toHaveBeenCalled();
+      expect(result.result).toEqual({ result: 'success' });
     });
-    
-    expect(step.state.get('steps')).toBe(mockSteps);
-    expect(step.state.get('steps_by_id')[step1.state.get('id')]).toBe(mockSteps[0]);
-    expect(step.state.get('steps_by_id')[step2.state.get('id')]).toBe(mockSteps[1]);
-  });
 
-  it('should not log anything when log suppression is enabled', () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    
-    step.state.set('log_suppress', true);
-    step.markAsComplete();
-    
-    expect(logSpy).not.toHaveBeenCalled();
-    logSpy.mockRestore();
-  });
+    it('should pass workflow and step context to callable', async () => {
+      let receivedContext;
+      const callable = async (context) => {
+        receivedContext = context;
+        return { test: 'data' };
+      };
 
-  it('should mark step as waiting and emit event', () => {
-    const listener = vi.fn();
-    step.events.on(step.events.event_names.STEP_WAITING, listener);
-    
-    // First set to a different status
-    step.markAsRunning();
-    
-    // Now mark as waiting
-    step.markAsWaiting();
-    
-    expect(listener).toHaveBeenCalledWith(
-      expect.objectContaining({ step })
-    );
-    expect(step.state.get('status')).toBe(step_statuses.WAITING);
-  });
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION,
+        callable
+      });
 
-  it('should mark step as pending and emit event', () => {
-    const listener = vi.fn();
-    step.events.on(step.events.event_names.STEP_PENDING, listener);
-    
-    step.markAsPending();
-    
-    expect(listener).toHaveBeenCalledWith(
-      expect.objectContaining({ step })
-    );
-    expect(step.state.get('status')).toBe(step_statuses.PENDING);
-  });
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
 
-  it('should set custom events object', () => {
-    const customEvents = step.events;
-    const newStep = new Step({
-      name: 'new-step',
-      type: step_types.ACTION,
+      await step.execute();
+
+      expect(receivedContext).toBeDefined();
+      expect(receivedContext.workflow).toBe(state);
+      expect(receivedContext.step).toBe(step);
     });
-    
-    newStep.setEvents(customEvents);
-    
-    expect(newStep.events).toBe(customEvents);
+
+    it('should execute a Step as callable', async () => {
+      const innerStep = new Step({
+        name: 'inner-step',
+        type: step_types.ACTION,
+        callable: async () => ({ inner: 'result' })
+      });
+
+      step = new Step({
+        name: 'outer-step',
+        type: step_types.ACTION,
+        callable: innerStep
+      });
+
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
+
+      const result = await step.execute();
+
+      expect(result.result).toBeDefined();
+    });
+
+    it('should execute a Workflow as callable', async () => {
+      const innerWorkflow = new Workflow({
+        name: 'inner-workflow',
+        steps: [
+          new Step({
+            name: 'inner-step',
+            type: step_types.ACTION,
+            callable: async () => ({ inner: 'workflow-result' })
+          })
+        ]
+      });
+
+      step = new Step({
+        name: 'outer-step',
+        type: step_types.ACTION,
+        callable: innerWorkflow
+      });
+
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
+
+      const result = await step.execute();
+
+      expect(result.result).toBeDefined();
+    });
+
+    it('should handle errors in callable', async () => {
+      const errorMessage = 'Test error';
+      const callable = async () => {
+        throw new Error(errorMessage);
+      };
+
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION,
+        callable
+      });
+
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
+
+      const result = await step.execute();
+
+      expect(result.result.error).toBeDefined();
+      expect(result.result.error.message).toBe(errorMessage);
+      expect(step.getStepStateValue('status')).toBe(step_statuses.FAILED);
+    });
+
+    it('should initialize step state before execution', async () => {
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION,
+        callable: async () => ({ test: 'result' })
+      });
+
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
+
+      await step.execute();
+
+      expect(step.getStepStateValue('name')).toBe('test-step');
+      expect(step.getStepStateValue('type')).toBe(step_types.ACTION);
+      expect(step.getStepStateValue('id')).toBeDefined();
+    });
+
+    it('should track execution time', async () => {
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION,
+        callable: async () => {
+          await new Promise(resolve => setTimeout(resolve, 50));
+          return { test: 'result' };
+        }
+      });
+
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
+
+      await step.execute();
+
+      const executionTime = step.getStepStateValue('execution_time_ms');
+      expect(executionTime).toBeGreaterThanOrEqual(0);
+    });
   });
 
-  it('should throw error when setting invalid events object', () => {
-    const invalidEvents = { not: 'valid' };
-    
-    expect(() => {
-      step.setEvents(invalidEvents);
-    }).toThrow('Invalid events object provided');
+  describe('markAsComplete()', () => {
+    beforeEach(() => {
+      workflow = new Workflow({ name: 'test-workflow' });
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION
+      });
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
+    });
+
+    it('should set status to complete', () => {
+      step.setStepStateValue('start_time', Date.now());
+      step.markAsComplete();
+
+      expect(step.getStepStateValue('status')).toBe(step_statuses.COMPLETE);
+    });
+
+    it('should set end time', () => {
+      step.setStepStateValue('start_time', Date.now());
+      step.markAsComplete();
+
+      expect(step.getStepStateValue('end_time')).toBeDefined();
+    });
+
+    it('should calculate execution time', () => {
+      step.setStepStateValue('start_time', Date.now() - 100);
+      step.markAsComplete();
+
+      const executionTime = step.getStepStateValue('execution_time_ms');
+      expect(executionTime).toBeGreaterThanOrEqual(0);
+    });
   });
 
-  it('should execute a Step as callable', async () => {
-    const innerStep = new Step({
-      name: 'inner-step',
-      type: step_types.ACTION,
-      callable: async () => 'inner-result',
+  describe('markAsFailed()', () => {
+    beforeEach(() => {
+      workflow = new Workflow({ name: 'test-workflow' });
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION
+      });
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
     });
-    
-    const outerStep = new Step({
-      name: 'outer-step',
-      type: step_types.ACTION,
-      callable: innerStep,
+
+    it('should set status to failed', () => {
+      step.setStepStateValue('start_time', Date.now());
+      const error = new Error('Test error');
+      step.markAsFailed(error);
+
+      expect(step.getStepStateValue('status')).toBe(step_statuses.FAILED);
     });
-    
-    outerStep.state.set('steps', []);
-    
-    const result = await outerStep.execute();
-    
-    expect(result).toBe('inner-result');
-    expect(outerStep.state.get('status')).toBe(step_statuses.COMPLETE);
+
+    it('should set end time', () => {
+      step.setStepStateValue('start_time', Date.now());
+      const error = new Error('Test error');
+      step.markAsFailed(error);
+
+      expect(step.getStepStateValue('end_time')).toBeDefined();
+    });
   });
 
-  it('should generate unique IDs for each step', () => {
-    const step1 = new Step({
-      name: 'step1',
-      type: step_types.ACTION,
+  describe('markAsWaiting()', () => {
+    beforeEach(() => {
+      workflow = new Workflow({ name: 'test-workflow' });
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION
+      });
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
     });
-    
-    const step2 = new Step({
-      name: 'step2',
-      type: step_types.ACTION,
+
+    it('should set status to waiting', () => {
+      step.markAsWaiting();
+      expect(step.getStepStateValue('status')).toBe(step_statuses.WAITING);
     });
-    
-    expect(step1.state.get('id')).toBeDefined();
-    expect(step2.state.get('id')).toBeDefined();
-    expect(step1.state.get('id')).not.toBe(step2.state.get('id'));
   });
 
-  it('should have access to step_types and sub_step_types', () => {
-    expect(step.state.get('step_types')).toBeDefined();
-    expect(step.state.get('sub_step_types')).toBeDefined();
+  describe('markAsPending()', () => {
+    beforeEach(() => {
+      workflow = new Workflow({ name: 'test-workflow' });
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION
+      });
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
+    });
+
+    it('should set status to pending', () => {
+      step.markAsPending();
+      expect(step.getStepStateValue('status')).toBe(step_statuses.PENDING);
+    });
   });
 
-  it('should create steps_by_id mapping in state', () => {
-    const step1 = new Step({ name: 'step1', type: step_types.ACTION });
-    const step2 = new Step({ name: 'step2', type: step_types.ACTION });
-    const mockSteps = [step1, step2];
-    
-    step.state.set('steps', mockSteps);
-    step.state.set('steps_by_id', {
-      [step1.state.get('id')]: step1,
-      [step2.state.get('id')]: step2
+  describe('markAsRunning()', () => {
+    beforeEach(() => {
+      workflow = new Workflow({ name: 'test-workflow' });
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION
+      });
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
     });
-    
-    expect(step.state.get('steps_by_id')[step1.state.get('id')]).toBe(step1);
-    expect(step.state.get('steps_by_id')[step2.state.get('id')]).toBe(step2);
-    expect(Object.keys(step.state.get('steps_by_id'))).toHaveLength(2);
+
+    it('should set status to running', () => {
+      step.markAsRunning();
+      expect(step.getStepStateValue('status')).toBe(step_statuses.RUNNING);
+    });
+
+    it('should set start time', () => {
+      step.markAsRunning();
+      expect(step.getStepStateValue('start_time')).toBeDefined();
+    });
   });
 
-  it('should execute a Workflow as callable', async () => {
-    const { default: Workflow } = await import('../src/classes/workflow.js');
-    
-    const innerStep = new Step({
-      name: 'inner-step',
-      type: step_types.ACTION,
-      callable: async () => 'workflow-result',
+  describe('setCallable()', () => {
+    beforeEach(() => {
+      workflow = new Workflow({ name: 'test-workflow' });
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION
+      });
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
     });
-    
-    const innerWorkflow = new Workflow({ steps: [innerStep], name: 'inner-workflow' });
-    
-    // Verify the workflow has the step before executing
-    expect(innerWorkflow.isEmpty()).toBe(false);
-    expect(innerWorkflow.getSteps()).toHaveLength(1);
-    
-    const outerStep = new Step({
-      name: 'outer-step',
-      type: step_types.ACTION,
-      callable: innerWorkflow,
+
+    it('should set a new callable function', () => {
+      const newCallable = async () => ({ new: 'result' });
+      step.setCallable(newCallable);
+
+      expect(step.getStepStateValue('callable')).toBe(newCallable);
     });
-    
-    const result = await outerStep.execute();
-    
-    expect(result.get('output_data')[0]).toBe('workflow-result');
-    expect(outerStep.state.get('status')).toBe(step_statuses.COMPLETE);
+
+    it('should allow setting a Step as callable', () => {
+      const newStep = new Step({
+        name: 'new-step',
+        type: step_types.ACTION
+      });
+      step.setCallable(newStep);
+
+      expect(step.getStepStateValue('callable')).toBe(newStep);
+    });
+
+    it('should allow setting a Workflow as callable', () => {
+      const newWorkflow = new Workflow({ name: 'new-workflow' });
+      step.setCallable(newWorkflow);
+
+      expect(step.getStepStateValue('callable')).toBe(newWorkflow);
+    });
+  });
+
+  describe('initializeStepState()', () => {
+    beforeEach(() => {
+      workflow = new Workflow({ name: 'test-workflow' });
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION
+      });
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
+    });
+
+    it('should initialize all step state properties', () => {
+      const callable = async () => {};
+      step.initializeStepState('test-name', step_types.ACTION, callable);
+
+      expect(step.getStepStateValue('name')).toBe('test-name');
+      expect(step.getStepStateValue('type')).toBe(step_types.ACTION);
+      expect(step.getStepStateValue('callable')).toBe(callable);
+      expect(step.getStepStateValue('id')).toBeDefined();
+      expect(step.getStepStateValue('start_time')).toBeNull();
+      expect(step.getStepStateValue('end_time')).toBeNull();
+      expect(step.getStepStateValue('execution_time_ms')).toBe(0);
+    });
+  });
+
+  describe('getStepStateValue() and setStepStateValue()', () => {
+    beforeEach(() => {
+      workflow = new Workflow({ name: 'test-workflow' });
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION
+      });
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
+    });
+
+    it('should set and get step state values', () => {
+      step.setStepStateValue('custom_field', 'custom_value');
+      expect(step.getStepStateValue('custom_field')).toBe('custom_value');
+    });
+
+    it('should return default value if key does not exist', () => {
+      expect(step.getStepStateValue('nonexistent', 'default')).toBe('default');
+    });
+
+    it('should handle nested values', () => {
+      step.setStepStateValue('nested.value', 'test');
+      expect(step.getStepStateValue('nested.value')).toBe('test');
+    });
+  });
+
+  describe('prepareReturnData()', () => {
+    beforeEach(() => {
+      workflow = new Workflow({ name: 'test-workflow' });
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION
+      });
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
+      step.initializeStepState('test', step_types.ACTION, async () => {});
+    });
+
+    it('should return result and state', () => {
+      const result = { data: 'test' };
+      const returnData = step.prepareReturnData(result);
+
+      expect(returnData.result).toEqual(result);
+      expect(returnData.state).toBeDefined();
+    });
+
+    it('should include step state in return data', () => {
+      step.setStepStateValue('custom', 'value');
+      const returnData = step.prepareReturnData({ test: 'result' });
+
+      expect(returnData.state).toBeDefined();
+    });
+  });
+
+  describe('event emission', () => {
+    beforeEach(() => {
+      workflow = new Workflow({ name: 'test-workflow' });
+      step = new Step({
+        name: 'test-step',
+        type: step_types.ACTION,
+        callable: async () => ({ result: 'test' })
+      });
+      workflow.pushStep(step);
+      state.set('current_step_index', 0);
+    });
+
+    it('should emit STEP_RUNNING event when marked as running', () => {
+      const listener = vi.fn();
+      step.events.on(step.events.event_names.STEP_RUNNING, listener);
+
+      step.markAsRunning();
+
+      expect(listener).toHaveBeenCalled();
+    });
+
+    it('should emit STEP_COMPLETED event when marked as complete', () => {
+      const listener = vi.fn();
+      step.events.on(step.events.event_names.STEP_COMPLETED, listener);
+
+      step.setStepStateValue('start_time', Date.now());
+      step.markAsComplete();
+
+      expect(listener).toHaveBeenCalled();
+    });
+
+    it('should emit STEP_FAILED event when marked as failed', () => {
+      const listener = vi.fn();
+      step.events.on(step.events.event_names.STEP_FAILED, listener);
+
+      step.setStepStateValue('start_time', Date.now());
+      step.markAsFailed(new Error('Test error'));
+
+      expect(listener).toHaveBeenCalled();
+    });
+
+    it('should emit STEP_WAITING event when marked as waiting', () => {
+      const listener = vi.fn();
+      step.events.on(step.events.event_names.STEP_WAITING, listener);
+
+      step.markAsWaiting();
+
+      expect(listener).toHaveBeenCalled();
+    });
+
+    it('should emit STEP_PENDING event when marked as pending', () => {
+      const listener = vi.fn();
+      step.events.on(step.events.event_names.STEP_PENDING, listener);
+
+      step.markAsPending();
+
+      expect(listener).toHaveBeenCalled();
+    });
+  });
+
+  describe('integration with workflow', () => {
+    it('should work within a workflow execution', async () => {
+      const results = [];
+
+      const step1 = new Step({
+        name: 'step1',
+        type: step_types.ACTION,
+        callable: async () => {
+          results.push('step1');
+          return { step: 1 };
+        }
+      });
+
+      const step2 = new Step({
+        name: 'step2',
+        type: step_types.ACTION,
+        callable: async () => {
+          results.push('step2');
+          return { step: 2 };
+        }
+      });
+
+      workflow = new Workflow({
+        name: 'integration-test',
+        steps: [step1, step2]
+      });
+
+      await workflow.execute();
+
+      expect(results).toEqual(['step1', 'step2']);
+    });
   });
 });

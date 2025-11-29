@@ -228,7 +228,7 @@ function createMaintenanceWorkflow() {
     type: StepTypes.ACTION,
     callable: async function() {
       const result = await DatabaseMaintenance.vacuum();
-      this.workflow.set('vacuumResult', result);
+      this.state.set('vacuumResult', result);
       return result;
     }
   });
@@ -239,7 +239,7 @@ function createMaintenanceWorkflow() {
     type: StepTypes.ACTION,
     callable: async function() {
       const result = await DatabaseMaintenance.analyze();
-      this.workflow.set('analyzeResult', result);
+      this.state.set('analyzeResult', result);
       return result;
     }
   });
@@ -250,7 +250,7 @@ function createMaintenanceWorkflow() {
     type: StepTypes.ACTION,
     callable: async function() {
       const result = await DatabaseMaintenance.backup();
-      this.workflow.set('backupResult', result);
+      this.state.set('backupResult', result);
       return result;
     }
   });
@@ -260,9 +260,9 @@ function createMaintenanceWorkflow() {
     name: 'Notify Maintenance Complete',
     type: StepTypes.ACTION,
     callable: async function() {
-      const vacuum = this.workflow.get('vacuumResult');
-      const analyze = this.workflow.get('analyzeResult');
-      const backup = this.workflow.get('backupResult');
+      const vacuum = this.state.get('vacuumResult');
+      const analyze = this.state.get('analyzeResult');
+      const backup = this.state.get('backupResult');
       
       const message = `
 Maintenance completed:
@@ -316,7 +316,7 @@ function createTaskProcessorWorkflow(taskQueue) {
       const task = taskQueue.dequeue();
       
       if (!task) {
-        this.workflow.set('noMoreTasks', true);
+        this.state.set('noMoreTasks', true);
         return { noTasks: true };
       }
       
@@ -375,7 +375,7 @@ function createTaskProcessorWorkflow(taskQueue) {
     name: 'Process All Tasks',
     callable: processingWorkflow,
     subject: function() {
-      return this.workflow.get('noMoreTasks') !== true;
+      return this.state.get('noMoreTasks') !== true;
     },
     operator: '===',
     value: true,
@@ -414,7 +414,7 @@ function createHealthMonitorWorkflow() {
     type: StepTypes.ACTION,
     callable: async function() {
       const health = await SystemMonitor.checkHealth();
-      this.workflow.set('systemHealth', health);
+      this.state.set('systemHealth', health);
       
       console.log('System Health:', health.healthy ? '✓ Healthy' : '✗ Unhealthy');
       console.log('Metrics:', health.metrics);
@@ -429,7 +429,7 @@ function createHealthMonitorWorkflow() {
     type: StepTypes.ACTION,
     callable: async function() {
       const services = await SystemMonitor.checkServices();
-      this.workflow.set('servicesStatus', services);
+      this.state.set('servicesStatus', services);
       
       console.log('Services:', services.allUp ? '✓ All up' : '✗ Some down');
       console.log('Status:', services.statuses);
@@ -442,8 +442,8 @@ function createHealthMonitorWorkflow() {
   const alertStep = new ConditionalStep({
     name: 'Check Alert Needed',
     subject: function() {
-      const health = this.workflow.get('systemHealth');
-      const services = this.workflow.get('servicesStatus');
+      const health = this.state.get('systemHealth');
+      const services = this.state.get('servicesStatus');
       return !health.healthy || !services.allUp;
     },
     operator: '===',
@@ -452,8 +452,8 @@ function createHealthMonitorWorkflow() {
       name: 'Send Alert',
       type: StepTypes.ACTION,
       callable: async function() {
-        const health = this.workflow.get('systemHealth');
-        const services = this.workflow.get('servicesStatus');
+        const health = this.state.get('systemHealth');
+        const services = this.state.get('servicesStatus');
         
         let message = 'System health alert:\n';
         

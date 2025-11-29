@@ -21,9 +21,9 @@ export default class SwitchStep extends LogicStep {
    * @param {string} [options.name=''] - The name of the switch step.
    */
   constructor({
-    name = '',
     cases = [],
-    default_case = null
+    default_case = null,
+    name = '',
   }) {
     super({
       type: logic_step_types.SWITCH,
@@ -31,9 +31,9 @@ export default class SwitchStep extends LogicStep {
       callable: async () => {}
     });
 
-    this.state.set('default_case', default_case);
-    this.state.set('cases', cases);
-    this.state.set('callable', this.getMatchedCase.bind(this));
+    this.setStepStateValue('default_case', default_case);
+    this.setStepStateValue('cases', cases);
+    this.setStepStateValue('callable', this.getMatchedCase.bind(this));
   }
 
   /**
@@ -43,16 +43,16 @@ export default class SwitchStep extends LogicStep {
    * @returns {Promise<Workflow>} The switch workflow instance with final state.
    */
   async getMatchedCase() {
-    const cases = this.state.get('cases');
-    const default_case = this.state.get('default_case');
-    const switch_workflow = new Workflow({ steps: cases, name: `Switch Step Workflow: ${this.state.get('id')}` });
-    this.logStep(`Executing SwitchStep ${this.state.get('name')} with ${cases.length} cases`);
+    const cases = this.getStepStateValue('cases');
+    const default_case = this.getStepStateValue('default_case');
+    const switch_workflow = new Workflow({ steps: cases, name: `Switch Step Workflow: ${this.getStepStateValue('id')}` });
+    this.logStep(`Executing SwitchStep ${this.getStepStateValue('name')} with ${cases.length} cases`);
 
     if (default_case) {
       switch_workflow.pushStep(default_case);
     }
 
     const result = await switch_workflow.execute();
-    return { message: `SwitchStep ${this.state.get('name') ?? this.state.get('id')} executed case`, ...result };
+    return { message: `SwitchStep ${this.getStepStateValue('name') ?? this.getStepStateValue('id')} executed case`, ...result };
   }
 }

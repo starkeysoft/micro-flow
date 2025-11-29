@@ -246,7 +246,7 @@ function ImageUploadWorkflow() {
         this.updateProgress(10, 'Validating file...');
         await new Promise(resolve => setTimeout(resolve, 500));
         
-        const file = this.workflow.get('file');
+        const file = this.state.get('file');
         
         if (!file) {
           throw new Error('No file selected');
@@ -271,7 +271,7 @@ function ImageUploadWorkflow() {
       name: 'Upload File',
       type: StepTypes.ACTION,
       callable: async function() {
-        const file = this.workflow.get('file');
+        const file = this.state.get('file');
         
         this.updateProgress(0, 'Starting upload...');
         
@@ -283,7 +283,7 @@ function ImageUploadWorkflow() {
         
         // Simulate upload completion
         const uploadUrl = `https://cdn.example.com/${Date.now()}_${file.name}`;
-        this.workflow.set('uploadUrl', uploadUrl);
+        this.state.set('uploadUrl', uploadUrl);
         
         this.updateProgress(100, 'Upload complete');
         
@@ -314,13 +314,13 @@ function ImageUploadWorkflow() {
           
           thumbnails.push({
             size: size.name,
-            url: `${this.workflow.get('uploadUrl')}_${size.name}`,
+            url: `${this.state.get('uploadUrl')}_${size.name}`,
             width: size.width,
             height: size.height
           });
         }
         
-        this.workflow.set('thumbnails', thumbnails);
+        this.state.set('thumbnails', thumbnails);
         this.updateProgress(100, 'Thumbnails generated');
         
         return { thumbnails };
@@ -337,11 +337,11 @@ function ImageUploadWorkflow() {
         await new Promise(resolve => setTimeout(resolve, 300));
         
         const metadata = {
-          originalUrl: this.workflow.get('uploadUrl'),
-          thumbnails: this.workflow.get('thumbnails'),
+          originalUrl: this.state.get('uploadUrl'),
+          thumbnails: this.state.get('thumbnails'),
           uploadedAt: new Date().toISOString(),
-          fileSize: this.workflow.get('file').size,
-          fileName: this.workflow.get('file').name
+          fileSize: this.state.get('file').size,
+          fileName: this.state.get('file').name
         };
         
         this.updateProgress(100, 'Metadata saved');
@@ -529,7 +529,7 @@ function DataFetchingWorkflow() {
           { id: 3, name: 'Charlie', role: 'user' }
         ];
         
-        this.workflow.set('users', users);
+        this.state.set('users', users);
         this.updateProgress(100, `Fetched ${users.length} users`);
         
         return { users, count: users.length };
@@ -541,7 +541,7 @@ function DataFetchingWorkflow() {
       name: 'Fetch Posts',
       type: StepTypes.ACTION,
       callable: async function() {
-        const users = this.workflow.get('users');
+        const users = this.state.get('users');
         const allPosts = [];
         
         for (let i = 0; i < users.length; i++) {
@@ -558,7 +558,7 @@ function DataFetchingWorkflow() {
           allPosts.push(...posts);
         }
         
-        this.workflow.set('posts', allPosts);
+        this.state.set('posts', allPosts);
         this.updateProgress(100, `Fetched ${allPosts.length} total posts`);
         
         return { posts: allPosts, count: allPosts.length };
@@ -573,8 +573,8 @@ function DataFetchingWorkflow() {
         this.updateProgress(50, 'Aggregating data...');
         await new Promise(resolve => setTimeout(resolve, 200));
         
-        const users = this.workflow.get('users');
-        const posts = this.workflow.get('posts');
+        const users = this.state.get('users');
+        const posts = this.state.get('posts');
         
         const aggregated = users.map(user => ({
           ...user,

@@ -1,6 +1,44 @@
+
 # Events
 
 Micro Flow provides a comprehensive event system that allows you to monitor and react to workflow and step lifecycle changes. The event system is compatible with both browser (EventTarget) and Node.js (EventEmitter) patterns.
+
+## Global Event Propagation via Event
+
+The `Event` class in Micro Flow not only handles local workflow and step events, but also implements global (broadcast) event propagation internally. When you emit an event using the `Event` class, it automatically broadcasts the event to all listeners across contexts (such as browser tabs, windows, workers, or Node.js processes) using the built-in broadcast mechanism.
+
+This means you do not need to use a separate `Broadcast` class for most use cases—simply use the `Event` class and its API for both local and global events.
+
+### Example: Local and Broadcast Events with Event
+
+```javascript
+import Event from 'micro-flow/src/classes/event.js';
+
+const events = new Event();
+
+// Listen for local events
+events.on('COMPLETE', (data) => {
+  console.log('Local event received:', data);
+});
+
+// Listen for broadcasted events (from other contexts)
+events.onBroadcast('COMPLETE', (data) => {
+  console.log('Broadcast event received:', data);
+});
+
+// Emit an event (will trigger both local and broadcast listeners)
+events.emit('COMPLETE', { time: Date.now() });
+```
+
+You can also use `onAny` to listen for both local and broadcast events with a single call:
+
+```javascript
+events.onAny('COMPLETE', (data) => {
+  console.log('Received (local or broadcast):', data);
+});
+```
+
+See [API Reference - Event](../api/classes/event.md) for more details on broadcast integration.
 
 ## Overview
 
@@ -363,8 +401,8 @@ function WorkflowComponent() {
     });
     
     workflow.events.on('STEP_COMPLETED', (data) => {
-      const currentIndex = data.step.workflow.get('current_step_index');
-      const totalSteps = data.step.workflow.get('steps').length;
+      const currentIndex = data.step.state.get('current_step_index');
+      const totalSteps = data.step.state.get('steps').length;
       setProgress((currentIndex / totalSteps) * 100);
     });
     
@@ -415,9 +453,11 @@ workflow.events.emit('CUSTOM_EVENT', { data: 'value' }, true); // bubbles = true
 6. **Avoid Memory Leaks** - Clean up listeners in long-running applications
 7. **Use Once When Appropriate** - Use `once()` for one-time notifications
 
+
 ## See Also
 
 - [Workflows](./workflows.md)
 - [Steps](./steps.md)
 - [Event Listeners](../advanced/event-listeners.md)
 - [API Reference - Event](../api/classes/event.md)
+- [API Reference - Broadcast](../api/classes/broadcast.md)

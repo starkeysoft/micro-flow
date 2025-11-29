@@ -33,14 +33,17 @@ export default class DelayStep extends Step {
       name
     });
 
-    this.state.set('delay_duration', delay_duration);
-    this.state.set('delay_type', delay_type);
-    this.state.set('delay_timestamp', delay_timestamp);
-    this.state.set('scheduled_job', null);
-    
-    // Set the callable based on delay type
-    const method = delay_type === delay_types.ABSOLUTE ? this.absolute : this.relative;
-    this.state.set('callable', method.bind(this));
+    if (!Object.values(delay_types).includes(delay_type)) {
+      throw new Error(`Invalid delay type: ${delay_type}`);
+    }
+
+    this.setStepStateValue('delay_duration', delay_duration);
+    this.setStepStateValue('delay_type', delay_type);
+    this.setStepStateValue('delay_timestamp', delay_timestamp);
+    this.setStepStateValue('scheduled_job', null);
+
+    const callable = this[this.getStepStateValue('delay_type')];
+    this.setStepStateValue('callable', callable.bind(this));
   }
 
   /**
@@ -51,18 +54,18 @@ export default class DelayStep extends Step {
    * @returns {Promise<Object>} Resolves with a message object when delay completes.
    */
   async absolute() {
-    if (!this.state.get('delay_timestamp')) {
+    if (!this.getStepStateValue('delay_timestamp')) {
       throw new Error('Timestamp is required for absolute delay');
     }
 
     const result = await new Promise((resolve, reject) => {
       let target_date;
-      if (this.state.get('delay_timestamp') instanceof Date) {
-        target_date = this.state.get('delay_timestamp');
-      } else if (typeof this.state.get('delay_timestamp') === 'string') {
-        target_date = parseISO(this.state.get('delay_timestamp'));
-      } else if (typeof this.state.get('delay_timestamp') === 'number') {
-        target_date = new Date(this.state.get('delay_timestamp'));
+      if (this.getStepStateValue('delay_timestamp') instanceof Date) {
+        target_date = this.getStepStateValue('delay_timestamp');
+      } else if (typeof this.getStepStateValue('delay_timestamp') === 'string') {
+        target_date = parseISO(this.getStepStateValue('delay_timestamp'));
+      } else if (typeof this.getStepStateValue('delay_timestamp') === 'number') {
+        target_date = new Date(this.getStepStateValue('delay_timestamp'));
       } else {
         reject(new Error('Invalid timestamp format'));
         return;
@@ -82,10 +85,31 @@ export default class DelayStep extends Step {
       };
 
       const job = schedule.scheduleJob(target_date, callback);
-      this.state.set('scheduled_job', job);
+      this.setStepStateValue('scheduled_job', job);
     });
 
-    return { message: `Absolute delay step: ${this.state.get('name')} until ${this.state.get('delay_timestamp')} scheduled`, ...result };
+    return { message: `Absolute delay step: ${this.getStepStateValue('name')} until ${this.getStepStateValue('delay_timestamp')} scheduled`, ...result };
+  }
+
+  /**
+   * Cancels any scheduled job for this delay step.
+   * @returns {void}
+   */
+  cancel() {
+    const job = this.getStepStateValue('scheduled_job');
+    if (job) {
+      job.cancel();
+      this.setStepStateValue('scheduled_job', null);
+    }
+  }
+
+  /**
+   * Executes a cron-based delay.
+   * @async
+   * @returns {Promise<void>} Resolves when the delay period completes.
+   */
+  async cron() {
+    throw new Error('Cron delay type is not yet implemented');
   }
 
   /**
@@ -96,17 +120,17 @@ export default class DelayStep extends Step {
    * @returns {Promise<void>} Resolves when the delay period completes.
    */
   async relative() {
-    if (!this.state.get('delay_duration') && this.state.get('delay_duration') !== 0) {
+    if (!this.getStepStateValue('delay_duration') && this.getStepStateValue('delay_duration') !== 0) {
       throw new Error('Duration is required for relative delay');
     }
 
     const result = await new Promise((resolve, reject) => {
-      if (typeof this.state.get('delay_duration') !== 'number' || this.state.get('delay_duration') < 0) {
+      if (typeof this.getStepStateValue('delay_duration') !== 'number' || this.getStepStateValue('delay_duration') < 0) {
         reject(new Error('Duration must be a positive number'));
         return;
       }
 
-      if (this.state.get('delay_duration') === 0) {
+      if (this.getStepStateValue('delay_duration') === 0) {
         resolve();
         return;
       }
@@ -114,30 +138,18 @@ export default class DelayStep extends Step {
       const callback = () => {
         this.events.emit(step_event_names.DELAY_STEP_RELATIVE_COMPLETE, {
           step: this,
-          duration: this.state.get('delay_duration'),
+          duration: this.getStepStateValue('delay_duration'),
           completed_at: new Date()
         });
         resolve();
       };
 
-      const target_date = addMilliseconds(new Date(), this.state.get('delay_duration'));
+      const target_date = addMilliseconds(new Date(), this.getStepStateValue('delay_duration'));
 
       const job = schedule.scheduleJob(target_date, callback);
-      this.state.set('scheduled_job', job);
+      this.setStepStateValue('scheduled_job', job);
     });
 
-    return { message: `Relative delay step: ${this.state.get('name')} for duration ${this.state.get('delay_duration')}ms scheduled`, ...result };
-  }
-
-  /**
-   * Cancels any scheduled job for this delay step.
-   * @returns {void}
-   */
-  cancel() {
-    const job = this.state.get('scheduled_job');
-    if (job) {
-      job.cancel();
-      this.state.set('scheduled_job', null);
-    }
+    return { message: `Relative delay step: ${this.getStepStateValue('name')} for duration ${this.getStepStateValue('delay_duration')}ms scheduled`, ...result };
   }
 }

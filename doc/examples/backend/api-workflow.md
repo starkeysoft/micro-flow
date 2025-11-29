@@ -82,8 +82,8 @@ async function createUserDataWorkflow(userId, apiKey) {
     callable: async function() {
       console.log('Authenticating...');
       const token = await client.authenticate(apiKey);
-      this.workflow.set('authToken', token);
-      this.workflow.set('userId', userId);
+      this.state.set('authToken', token);
+      this.state.set('userId', userId);
       return { authenticated: true, token };
     }
   });
@@ -93,10 +93,10 @@ async function createUserDataWorkflow(userId, apiKey) {
     name: 'Fetch User',
     type: StepTypes.ACTION,
     callable: async function() {
-      const userId = this.workflow.get('userId');
+      const userId = this.state.get('userId');
       console.log(`Fetching user ${userId}...`);
       const user = await client.fetchUser(userId);
-      this.workflow.set('userData', user);
+      this.state.set('userData', user);
       return user;
     }
   });
@@ -104,14 +104,14 @@ async function createUserDataWorkflow(userId, apiKey) {
   // Step 3: Check if premium user (conditional processing)
   const checkPremiumStep = new ConditionalStep({
     name: 'Check Premium Status',
-    subject: function() { return this.workflow.get('userData')?.accountType; },
+    subject: function() { return this.state.get('userData')?.accountType; },
     operator: '===',
     value: 'premium',
     step_left: new Step({
       name: 'Fetch Premium Data',
       type: StepTypes.ACTION,
       callable: async function() {
-        const userId = this.workflow.get('userId');
+        const userId = this.state.get('userId');
         console.log('Fetching premium user data...');
         
         // Fetch additional data for premium users
@@ -120,8 +120,8 @@ async function createUserDataWorkflow(userId, apiKey) {
           client.fetchUserPreferences(userId)
         ]);
         
-        this.workflow.set('orders', orders);
-        this.workflow.set('preferences', preferences);
+        this.state.set('orders', orders);
+        this.state.set('preferences', preferences);
         
         return { orders, preferences };
       }
@@ -131,8 +131,8 @@ async function createUserDataWorkflow(userId, apiKey) {
       type: StepTypes.ACTION,
       callable: async function() {
         console.log('Standard user - skipping premium data');
-        this.workflow.set('orders', []);
-        this.workflow.set('preferences', {});
+        this.state.set('orders', []);
+        this.state.set('preferences', {});
         return { message: 'Standard user' };
       }
     })
@@ -145,9 +145,9 @@ async function createUserDataWorkflow(userId, apiKey) {
     callable: async function() {
       console.log('Transforming data...');
       
-      const userData = this.workflow.get('userData');
-      const orders = this.workflow.get('orders') || [];
-      const preferences = this.workflow.get('preferences') || {};
+      const userData = this.state.get('userData');
+      const orders = this.state.get('orders') || [];
+      const preferences = this.state.get('preferences') || {};
       
       const aggregated = {
         userId: userData.id,
@@ -165,7 +165,7 @@ async function createUserDataWorkflow(userId, apiKey) {
         lastUpdated: new Date().toISOString()
       };
       
-      this.workflow.set('aggregatedData', aggregated);
+      this.state.set('aggregatedData', aggregated);
       return aggregated;
     }
   });
@@ -176,7 +176,7 @@ async function createUserDataWorkflow(userId, apiKey) {
     type: StepTypes.ACTION,
     callable: async function() {
       console.log('Saving to database...');
-      const data = this.workflow.get('aggregatedData');
+      const data = this.state.get('aggregatedData');
       const result = await Database.saveUserData(data);
       return result;
     }
@@ -297,7 +297,7 @@ const fetchWithRetry = new Step({
     
     while (attempts < maxAttempts) {
       try {
-        return await client.fetchUser(this.workflow.get('userId'));
+        return await client.fetchUser(this.state.get('userId'));
       } catch (error) {
         attempts++;
         if (attempts === maxAttempts) throw error;

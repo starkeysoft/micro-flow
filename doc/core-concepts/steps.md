@@ -14,7 +14,7 @@ import { Step, StepTypes } from 'micro-flow';
 const step = new Step({
   name: 'Fetch User Data',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
+  callable: async (state, step) => {
     const response = await fetch('/api/user');
     return response.json();
   }
@@ -43,7 +43,7 @@ See [Step Types](../step-types/README.md) for detailed documentation on speciali
 
 ### execute()
 
-Executes the step's callable function. The callable receives a context object `{ workflow, step }` as its first parameter. The `workflow` is the parent workflow's state object, and `step` is the current Step instance. Changes to the workflow state will affect the workflow itself. 
+Executes the step's callable function. The callable receives two parameters: `state` (the global state singleton) and `step` (the current Step instance). Changes to the state will affect all workflows and steps. 
 
 ```javascript
 const result = await step.execute();
@@ -78,8 +78,8 @@ Sets the workflow state reference for this step. This is called by the parent wo
 step.setWorkflow(workflowState);
 
 // Access in callable via context parameter
-callable: async ({ workflow, step }) => {
-  const workflowData = workflow.get('customData');
+callable: async (state, step) => {
+  const workflowData = state.get('customData');
   // ...
 }
 ```
@@ -147,10 +147,10 @@ Steps have access to workflow and step state during execution through the contex
 const step = new Step({
   name: 'Process with Context',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
+  callable: async (state, step) => {
     // Access workflow state
-    const userId = workflow.get('userId');
-    const steps = workflow.get('steps');
+    const userId = state.get('userId');
+    const steps = state.get('steps');
     
     // Access step state
     const stepName = step.state.get('name');
@@ -163,7 +163,7 @@ const step = new Step({
 });
 ```
 
-**Important:** Callables receive a context object `{ workflow, step }` as their first parameter.
+**Important:** Callables receive two parameters: `state` (the global state singleton) and `step` (the current Step instance).
 
 ## Step State Properties
 
@@ -276,7 +276,7 @@ const processStep = new Step({
   type: StepTypes.ACTION,
   callable: async function() {
     // Access workflow state
-    const inputData = this.workflow.get('inputData');
+    const inputData = this.state.get('inputData');
     
     // Process data
     const processed = inputData.map(item => item * 2);
