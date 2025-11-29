@@ -30,8 +30,8 @@ class SkipStep extends LogicStep {
     });
 
     this.setConditional({ subject, operator, value });
-    this.state.set('should_skip', false);
-    this.state.set('callable', this.skipStep.bind(this));
+    this.setStepStateValue('should_skip', false);
+    this.setStepStateValue('callable', this.skipStep.bind(this));
   }
 
   /**
@@ -41,10 +41,10 @@ class SkipStep extends LogicStep {
    */
   async skipStep() {
     if (this.checkCondition()) {
-      this.state.set('should_skip', true);
+      this.setStepStateValue('should_skip', true);
     }
 
-    return { message: `SkipStep ${this.state.get('name') ?? this.state.get('id')}: Next step ${this.state.get('should_skip') ? 'will be skipped' : 'will not be skipped'}`, should_skip: this.state.get('should_skip')};
+    return { message: `SkipStep ${this.getStepStateValue('name') ?? this.getStepStateValue('id')}: Next step ${this.getStepStateValue('should_skip') ? 'will be skipped' : 'will not be skipped'}`, should_skip: this.getStepStateValue('should_skip')};
   }
 }
 

@@ -24,7 +24,7 @@ import { Step, StepTypes } from 'micro-flow';
 const step = new Step({
   name: 'Fetch Data',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
+  callable: async (state, step) => {
     const response = await fetch('/api/data');
     return response.json();
   }
@@ -61,9 +61,9 @@ const result = step.state.get('result');
 
 ```javascript
 // Access workflow state from within step callable
-const callable = async function({ workflow, step }) {
-  const workflowStatus = workflow.get('status');
-  const allSteps = workflow.get('steps');
+const callable = async function(state, step) {
+  const workflowStatus = state.get('status');
+  const allSteps = state.get('steps');
   return processData(workflow);
 };
 ```
@@ -290,17 +290,17 @@ const step = new Step({
   type: StepTypes.ACTION,
   callable: async ({ workflow, step }, data) => {
     // Get workflow status
-    const workflowStatus = workflow.get('status');
+    const workflowStatus = state.get('status');
     
     // Get all workflow steps
-    const allSteps = workflow.get('steps');
+    const allSteps = state.get('steps');
     
     // Get step name
     const stepName = step.state.get('name');
     
     // Set workflow flag
     if (condition) {
-      workflow.set('should_skip', true);
+      state.set('should_skip', true);
     }
     
     return { workflowStatus, stepCount: allSteps.length, stepName };
@@ -371,12 +371,12 @@ const step = new Step({
   type: StepTypes.ACTION,
   callable: async ({ workflow, step }, data) => {
     // Access workflow state
-    const userId = workflow.get('userId');
-    const previousResults = workflow.get('output_data');
+    const userId = state.get('userId');
+    const previousResults = state.get('output_data');
     
     // Conditional skip
     if (previousResults.length > 10) {
-      workflow.set('should_skip', true);
+      state.set('should_skip', true);
     }
     
     return { userId, resultCount: previousResults.length };

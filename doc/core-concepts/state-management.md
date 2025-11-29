@@ -1,10 +1,15 @@
 # State Management
 
-Micro Flow uses a flexible state management system that allows workflows and steps to maintain and share data throughout execution.
+Micro Flow uses a flexible state management system with namespaced workflow state and shared user data.
 
 ## Overview
 
-The `State` class provides a simple key-value store with getter/setter functionality, deep cloning capabilities, and optional immutability. Both workflows and steps maintain their own state instances.
+The `State` class provides a singleton key-value store with:
+- **Namespaced workflow metadata**: Each workflow's execution context (id, name, steps, status) is isolated under `workflows.{workflow_id}`
+- **Shared user data**: Custom data is stored at the root level and accessible across all workflows
+- **Workflow stack tracking**: Supports nested workflow execution via `workflow_stack` and `active_workflow_id`
+
+This architecture prevents child workflows from overwriting parent workflow metadata while allowing data sharing.
 
 ## State Class
 
@@ -31,35 +36,148 @@ constructor(initialState = {})
 **Parameters:**
 - `initialState` (Object) - Initial state data to merge with default state
 
+## Property Path Notation
+
+State supports flexible path notation for accessing nested properties, array elements, and dynamic keys.
+
+### Dot Notation
+
+Access nested objects using dot-separated paths:
+
+```javascript
+state.set('user.profile.name', 'Alice');
+state.get('user.profile.name'); // 'Alice'
+
+state.set('config.database.host', 'localhost');
+state.get('config.database.host'); // 'localhost'
+```
+
+### Bracket Notation
+
+Access array elements and keys with special characters using brackets:
+
+```javascript
+// Array indices
+state.set('users[0].name', 'Bob');
+state.set('users[1].name', 'Charlie');
+state.get('users[0].name'); // 'Bob'
+
+// Keys with special characters (hyphens, spaces, etc.)
+state.set("settings['api-key']", 'secret123');
+state.set("config['my-setting']", 'value');
+state.get("settings['api-key']"); // 'secret123'
+
+// Nested arrays
+state.set('matrix[0][1]', 42);
+state.get('matrix[0][1]'); // 42
+```
+
+### Mixed Notation
+
+Combine dot and bracket notation in a single path:
+
+```javascript
+// Arrays within nested objects
+state.set('data.items[0].properties.name', 'First Item');
+state.get('data.items[0].properties.name'); // 'First Item'
+
+// Complex paths with special characters
+state.set("users[0].settings['theme-preference'].color", 'dark');
+state.get("users[0].settings['theme-preference'].color"); // 'dark'
+```
+
+### Automatic Structure Creation
+
+When setting values, intermediate objects and arrays are created automatically:
+
+```javascript
+// Creates: { users: [{ name: 'Alice', tags: ['admin'] }] }
+state.set('users[0].name', 'Alice');
+state.set('users[0].tags[0]', 'admin');
+
+// Creates: { config: { 'api-key': 'secret', endpoints: { primary: '...' } } }
+state.set("config['api-key']", 'secret');
+state.set('config.endpoints.primary', 'https://api.example.com');
+```
+
+**Type Detection:** When creating intermediate structures:
+- Numeric keys create arrays: `items[0]` → `items: []`
+- Non-numeric keys create objects: `data.key` → `data: {}`
+
+### Path Notation Examples
+
+```javascript
+// Simple nested access
+state.set('user.email', 'user@example.com');
+state.get('user.email'); // 'user@example.com'
+
+// Array of objects
+state.set('todos[0]', { title: 'Task 1', done: false });
+state.set('todos[1]', { title: 'Task 2', done: true });
+state.get('todos[0].title'); // 'Task 1'
+
+// Dynamic keys
+state.set("metadata['created-at']", '2025-01-01');
+state.set("metadata['updated-by']", 'admin');
+state.get("metadata['created-at']"); // '2025-01-01'
+
+// Complex nested structures
+state.set('app.modules[0].components[0].props.enabled', true);
+state.get('app.modules[0].components[0].props.enabled'); // true
+
+// Deleting with paths
+state.delete('users[0].email');
+state.delete("config['api-key']");
+state.delete('data.items[0].properties.name');
+```
+
 ## Key Methods
 
-### get(key, defaultValue)
+### get(path, defaultValue)
 
-Gets the value of a state property.
+Gets the value of a state property using path notation.
 
 ```javascript
+// Dot notation
 const userId = state.get('userId');
-const count = state.get('processedCount', 0); // with default
+
+// Bracket notation
+const firstUser = state.get('users[0]');
+
+// Mixed notation
+const userName = state.get('users[0].profile.name');
+
+// With default value
+const count = state.get('processedCount', 0);
 ```
 
 **Parameters:**
-- `key` (string) - The key to retrieve
-- `defaultValue` (any, optional) - Default value if key doesn't exist (default: `null`)
+- `path` (string) - Path to the property (dot notation, bracket notation, or mixed)
+- `defaultValue` (any, optional) - Default value if path doesn't exist (default: `null`)
 
 **Returns:**
-- The value at the key, or `defaultValue` if not found
+- The value at the path, or `defaultValue` if not found
 
-### set(key, value)
+### set(path, value)
 
-Sets the value of a state property.
+Sets the value of a state property using path notation. Creates intermediate structures automatically.
 
 ```javascript
+// Dot notation
 state.set('userId', 456);
-state.set('data', [1, 2, 3]);
+
+// Bracket notation for arrays
+state.set('users[0].name', 'Alice');
+
+// Bracket notation for special keys
+state.set("config['api-key']", 'secret');
+
+// Mixed notation
+state.set('data.items[0].properties.name', 'Item 1');
 ```
 
 **Parameters:**
-- `key` (string) - The key to set
+- `path` (string) - Path to the property (dot notation, bracket notation, or mixed)
 - `value` (any) - The value to set
 
 ### getState()
@@ -138,32 +256,47 @@ The State class includes these default properties:
 }
 ```
 
-## Workflow State
+## State Structure
 
-Workflows use `WorkflowState`, which extends `State` with additional workflow-specific properties:
+The global state object has this structure:
 
 ```javascript
 {
-  id: string,              // UUID
-  name: string,            // Workflow name
-  status: string,          // Current status
-  steps: Array<Step>,      // Array of steps
-  current_step: Step,      // Currently executing step
-  current_step_index: number,
-  output_data: Array,      // Results from steps
-  create_time: number,
-  start_time: number,
-  complete_time: number,
-  pause_time: number,
-  resume_time: number,
-  cancel_time: number,
-  execution_time_ms: number,
-  exit_on_failure: boolean,
-  freeze_on_completion: boolean,
-  should_break: boolean,
-  should_continue: boolean,
-  should_skip: boolean,
-  should_pause: boolean
+  // Workflow namespaces (isolated per workflow)
+  workflows: {
+    "workflow-id-1": {
+      id: string,              // UUID
+      name: string,            // Workflow name
+      status: string,          // Current status
+      steps: Array<Step>,      // Array of steps
+      current_step: Step,      // Currently executing step
+      current_step_index: number,
+      output_data: Array,      // Results from steps
+      create_time: number,
+      start_time: number,
+      complete_time: number,
+      pause_time: number,
+      resume_time: number,
+      cancel_time: number,
+      execution_time_ms: number,
+      exit_on_failure: boolean,
+      freeze_on_completion: boolean,
+      should_break: boolean,
+      should_continue: boolean,
+      should_skip: boolean,
+      should_pause: boolean
+    },
+    "workflow-id-2": { /* another workflow */ }
+  },
+  
+  // Workflow execution tracking
+  active_workflow_id: string,    // Currently executing workflow ID
+  workflow_stack: Array<string>, // Stack of workflow IDs for nested execution
+  
+  // Shared user data (accessible by all workflows)
+  userId: any,
+  customData: any,
+  // ... any other user-defined properties
 }
 ```
 
@@ -175,40 +308,54 @@ Steps can access workflow and step state through the context object passed to ca
 const step = new Step({
   name: 'Access State',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
-    // Get workflow state
-    const userId = workflow.get('userId');
-    const allSteps = workflow.get('steps');
+  callable: async (state, step) => {
+    // Access shared user data (root level)
+    const userId = state.get('userId');
+    const customData = state.get('customData');
+    
+    // Workflow metadata is isolated (automatically handled internally)
+    // The workflow's own id, name, steps, etc. are namespaced
     
     // Get step state
-    const stepName = step.state.get('name');
+    const stepName = step.getStepStateValue('name');
+    const stepType = step.getStepStateValue('type');
     
     // Perform operations
     const userData = await fetchUser(userId);
+    
+    // Set shared user data
+    state.set('userData', userData);
     
     return userData;
   }
 });
 ```
 
-**Important:** Callables receive a context object `{ workflow, step }` as their first parameter.
+**Important:** 
+- Callables receive two parameters: `state` (the global state singleton) and `step` (the current Step instance)
+- The `state` parameter provides access to the global state, use it for shared user data
+- Use `step.getStepStateValue()` and `step.setStepStateValue()` for step-specific data
+- Workflow metadata (id, name, steps, status) is automatically namespaced and isolated
 
 ## Passing Initial State
 
-You can pass initial state to a workflow when executing:
+You can pass initial state (user data) to a workflow when executing:
 
 ```javascript
 const workflow = new Workflow({ name: 'Process User' });
 
-// Create initial state
-const initialState = new WorkflowState({
+// Pass user data as plain object
+const initialState = {
   userId: 123,
   environment: 'production',
   customData: { key: 'value' }
-});
+};
 
-// Execute with initial state
+// Execute with initial state - this merges into the root level
 await workflow.execute(initialState);
+
+// Inside steps, access via state.get()
+// The workflow's metadata remains isolated in workflows.{id}
 ```
 
 ## State Immutability
@@ -257,24 +404,24 @@ const workflow = new Workflow({ name: 'Data Processor' });
 const step1 = new Step({
   name: 'Initialize',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
+  callable: async (state, step) => {
     // Set workflow state
-    workflow.set('processedItems', []);
-    workflow.set('totalCount', 0);
+    state.set('processedItems', []);
+    state.set('totalCount', 0);
   }
 });
 
 const step2 = new Step({
   name: 'Process',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
+  callable: async (state, step) => {
     // Read workflow state
-    const items = workflow.get('processedItems');
+    const items = state.get('processedItems');
     
     // Modify and update
     items.push({ id: 1, data: 'processed' });
-    workflow.set('processedItems', items);
-    workflow.set('totalCount', items.length);
+    state.set('processedItems', items);
+    state.set('totalCount', items.length);
   }
 });
 
@@ -292,9 +439,9 @@ const workflow = new Workflow({ name: 'Data Pipeline' });
 const fetchStep = new Step({
   name: 'Fetch',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
+  callable: async (state, step) => {
     const data = await fetchData();
-    workflow.set('fetchedData', data);
+    state.set('fetchedData', data);
     return data;
   }
 });
@@ -302,10 +449,10 @@ const fetchStep = new Step({
 const transformStep = new Step({
   name: 'Transform',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
-    const data = workflow.get('fetchedData');
+  callable: async (state, step) => {
+    const data = state.get('fetchedData');
     const transformed = data.map(item => transform(item));
-    workflow.set('transformedData', transformed);
+    state.set('transformedData', transformed);
     return transformed;
   }
 });
@@ -313,8 +460,8 @@ const transformStep = new Step({
 const saveStep = new Step({
   name: 'Save',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
-    const data = workflow.get('transformedData');
+  callable: async (state, step) => {
+    const data = state.get('transformedData');
     await saveData(data);
     return { saved: data.length };
   }
@@ -332,20 +479,20 @@ const workflow = new Workflow({ name: 'User Processor' });
 workflow.pushStep(new Step({
   name: 'Process User',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
-    // Access initial state
-    const userId = workflow.get('userId');
-    const config = workflow.get('config');
+  callable: async (state, step) => {
+    // Access initial state (shared user data)
+    const userId = state.get('userId');
+    const config = state.get('config');
     
     return await processUser(userId, config);
   }
 }));
 
-// Execute with initial state
-const initialState = new WorkflowState({
+// Execute with initial state (plain object)
+const initialState = {
   userId: 123,
   config: { option: 'value' }
-});
+};
 
 await workflow.execute(initialState);
 ```
@@ -379,6 +526,64 @@ console.log(results);
 // ]
 ```
 
+### Nested Workflows with Isolated State
+
+Nested workflows maintain isolated metadata while sharing user data:
+
+```javascript
+const childWorkflow = new Workflow({
+  name: 'Child Workflow',
+  steps: [
+    new Step({
+      name: 'Child Step',
+      type: StepTypes.ACTION,
+      callable: async (state, step) => {
+        // Access shared user data from parent
+        const parentData = state.get('parentData');
+        
+        // Set shared data accessible to parent
+        state.set('childData', 'from child');
+        
+        // Child's workflow metadata (id, name, steps) is isolated
+        return { processed: parentData };
+      }
+    })
+  ]
+});
+
+const parentWorkflow = new Workflow({
+  name: 'Parent Workflow',
+  steps: [
+    new Step({
+      name: 'Parent Step',
+      type: StepTypes.ACTION,
+      callable: async ({ workflow }) => {
+        state.set('parentData', 'from parent');
+      }
+    }),
+    new Step({
+      name: 'Execute Child',
+      type: StepTypes.ACTION,
+      callable: childWorkflow  // Child workflow as callable
+    }),
+    new Step({
+      name: 'After Child',
+      type: StepTypes.ACTION,
+      callable: async ({ workflow }) => {
+        // Parent's id and name are preserved (not overwritten)
+        // Shared data from child is accessible
+        const childData = state.get('childData');
+        return { childData };
+      }
+    })
+  ]
+});
+
+// Parent and child workflows maintain separate metadata
+// User data is shared between them
+await parentWorkflow.execute();
+```
+
 ## Best Practices
 
 1. **Use Meaningful Keys** - Use descriptive state keys for clarity
@@ -387,7 +592,9 @@ console.log(results);
 4. **Initialize Early** - Set initial state in first step or via initialState
 5. **Document State Shape** - Document what state keys your workflow expects
 6. **Avoid Large Objects** - Keep state lean; store references or IDs instead of full objects
-7. **Use Context Parameter** - Callables receive `{ workflow, step }` as the first parameter for state access
+7. **Use Function Parameters** - Callables receive `state` and `step` as parameters for state access
+8. **Understand Namespacing** - Workflow metadata is automatically isolated; user data is shared
+9. **Nested Workflows** - Use nested workflows freely; their metadata won't conflict
 
 ## See Also
 

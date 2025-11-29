@@ -1,5 +1,6 @@
 export { default as ConditionalStepComparators } from './conditional_step_comparators.js';
 export { default as DelayTypes } from './delay_types.js';
+export { default as Errors } from './errors.js';
 export { default as FlowControlTypes } from './flow_control_types.js';
 export { default as LogicStepTypes } from './logic_step_types.js';
 export { default as LoopTypes } from './loop_types.js';

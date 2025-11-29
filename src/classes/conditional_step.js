@@ -1,6 +1,7 @@
 import LogicStep from './logic_step.js';
 import Step from './step.js';
 import logic_step_types from '../enums/logic_step_types.js';
+import { state } from 'happy-dom/lib/PropertySymbol.js';
 
 /**
  * Represents a conditional step that executes one of two possible paths based on a condition.
@@ -34,12 +35,12 @@ export default class ConditionalStep extends LogicStep {
       callable: async () => {}
     });
     
-    this.state.set('subject', subject);
-    this.state.set('operator', operator);
-    this.state.set('value', value);
-    this.state.set('step_left', step_left);
-    this.state.set('step_right', step_right);
-    this.state.set('callable', this.conditional.bind(this));
+    this.setStepStateValue('subject', subject);
+    this.setStepStateValue('operator', operator);
+    this.setStepStateValue('value', value);
+    this.setStepStateValue('step_left', step_left);
+    this.setStepStateValue('step_right', step_right);
+    this.setStepStateValue('callable', this.conditional.bind(this));
   }
 
   /**
@@ -49,18 +50,29 @@ export default class ConditionalStep extends LogicStep {
    * @returns {Promise<Object|null>} The result of executing the chosen step {result, state}, or null if no step is provided.
    */
   async conditional() {
-    const step_left = this.state.get('step_left');
-    const step_right = this.state.get('step_right');
+    const step_left = this.getStepStateValue('step_left');
+    const step_right = this.getStepStateValue('step_right');
+
+    let result = null;
     
     if (this.checkCondition()) {
-      this.logStep(`Condition met for step: ${this.state.get('name')}, executing left branch '${step_left.state.get('name')}'`);
+      this.logStep(`Condition met for step: ${this.getStepStateValue('name')}, executing left branch '${step_left.getStateStepValue('name')}'`);
 
-      const result = step_left && typeof step_left.markAsComplete === 'function' ? await step_left.execute({ workflow: this.workflow, step: step_left }) : null;
+      if (typeof step_left === 'function') {
+        result = await step_left(state);
+      } else {
+        result = await step_left.execute(state);
+      }
+    } else {
+      this.logStep(`Condition not met for step: ${this.getStepStateValue('name')}, executing right branch '${step_right.getStateStepValue('name')}'`);
+
+      if (typeof step_right === 'function') {
+        result = await step_right(state);
+      } else {
+        result = await step_right.execute(state);
+      }
     }
-
-    this.logStep(`Condition not met for step: ${this.state.get('name')}, executing right branch '${step_right.state.get('name')}'`);
-    const result = step_right && typeof step_right.markAsComplete === 'function' ? await step_right.execute({ workflow: this.workflow, step: step_right }) : null;
   
-    return { message: `ConditionalStep ${this.state.get('name') ?? this.state.get('id')} executed ${this.checkCondition() ? `left ('${step_left.state.get('name')}')` : `right ('${step_right.state.get('name')}')`} branch`, ...result };
+    return { message: `ConditionalStep ${this.getStepStateValue('name') ?? this.getStepStateValue('id')} executed ${this.checkCondition() ? `left ('${step_left.getStateStepValue('name')}')` : `right ('${step_right.getStateStepValue('name')}')`} branch`, ...result };
   }
 }

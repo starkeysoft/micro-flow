@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import logic_step_types from './logic_step_types.js';
 import step_types from './step_types.js';
+import { sub } from 'date-fns';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -20,21 +21,28 @@ const __dirname = dirname(__filename);
  * resolves the actual string value from the imported enum objects.
  * 
  * The built-in classes directory is always scanned. Additional directories can be provided
- * to scan for custom step classes. This is typically used via workflow.sub_step_type_paths,
- * which is merged with the default when setWorkflow() is called on a step.
+ * to scan for custom step classes. This is typically used via the workflow's sub_step_type_paths
+ * configuration option.
  * 
- * @param {string[]} directories - An array of additional directory paths to scan for class files. 
+ * @function generate_sub_step_types
+ * @param {string[]} [directories=[]] - An array of additional directory paths to scan for class files. 
  *   The built-in classes directory is always included. Defaults to an empty array.
  * @returns {Object.<string, string|null>} An object mapping class names to their step_name values.
  *   Classes without a step_name property are mapped to null.
  * @example
+ * // Default usage (scans built-in classes only)
+ * const types = generate_sub_step_types();
  * // Returns:
  * // {
  * //   "Step": null,
  * //   "ConditionalStep": "conditional",
  * //   "LogicStep": "logic",
+ * //   "DelayStep": "delay",
  * //   ...
  * // }
+ * 
+ * // With custom directories
+ * const types = generate_sub_step_types(['/path/to/custom/steps']);
  */
 const generate_sub_step_types = (directories = []) => {
   const types = {};
@@ -92,4 +100,31 @@ const generate_sub_step_types = (directories = []) => {
   return types;
 }
 
-export default generate_sub_step_types;
+/**
+ * Pre-generated mapping of all built-in Step class names to their step_name identifiers.
+ * This is a singleton object exported as the default export.
+ * 
+ * **Changed in recent version:** Previously exported as a function, now exported as a
+ * pre-generated object for improved performance and consistency.
+ * 
+ * @constant {Object.<string, string|null>}
+ * @example
+ * import sub_step_types from 'micro-flow';
+ * 
+ * console.log(sub_step_types);
+ * // {
+ * //   "Step": null,
+ * //   "ConditionalStep": "conditional",
+ * //   "DelayStep": "delay",
+ * //   "LoopStep": "loop",
+ * //   ...
+ * // }
+ * 
+ * // Check if a class name is a registered step type
+ * if (sub_step_types['ConditionalStep']) {
+ *   console.log('ConditionalStep is a registered step type');
+ * }
+ */
+const sub_step_types = generate_sub_step_types();
+
+export default sub_step_types;

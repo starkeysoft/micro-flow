@@ -33,15 +33,15 @@ export default class FlowControlStep extends LogicStep {
       callable: async () => {}
     });
 
-    this.state.set('subject', subject);
-    this.state.set('operator', operator);
-    this.state.set('value', value);
-    this.state.set('flow_control_type', flow_control_type);
-    this.state.set('should_break', false);
-    this.state.set('should_continue', false);
+    this.setStepStateValue('subject', subject);
+    this.setStepStateValue('operator', operator);
+    this.setStepStateValue('value', value);
+    this.setStepStateValue('flow_control_type', flow_control_type);
+    this.setStepStateValue('should_break', false);
+    this.setStepStateValue('should_continue', false);
     
     // Now properly bind the callable after super
-    this.state.set('callable', flow_control_type === flow_control_types.BREAK
+    this.setStepStateValue('callable', flow_control_type === flow_control_types.BREAK
       ? this.shouldBreakFlow.bind(this)
       : this.shouldContinueFlow.bind(this));
   }
@@ -53,14 +53,14 @@ export default class FlowControlStep extends LogicStep {
    */
   async shouldBreakFlow() {
     if (this.checkCondition()) {
-      this.logStep(`Flow control condition met for step: ${this.state.get('name')}`);
-      this.state.set('should_break', true);
+      this.logStep(`Flow control condition met for step: ${this.getStepStateValue('name')}`);
+      this.setStepStateValue('should_break', true);
     } else {
-      this.logStep(`Flow control condition not met for step: ${this.state.get('name')}`);
-      this.state.set('should_break', false);
+      this.logStep(`Flow control condition not met for step: ${this.getStepStateValue('name')}`);
+      this.setStepStateValue('should_break', false);
     }
 
-    return {message: `Break flow control step: ${this.state.get('name')} ${this.state.get('should_break') ? 'will break' : 'will not break'}`, result: this.state.getState()};
+    return {message: `Break flow control step: ${this.getStepStateValue('name')} ${this.getStepStateValue('should_break') ? 'will break' : 'will not break'}`, result: this.getStepStateValue()};
   }
 
   /**
@@ -70,13 +70,13 @@ export default class FlowControlStep extends LogicStep {
    */
   async shouldContinueFlow() {
     if (this.checkCondition()) {
-      this.logStep(`Flow control condition met for step: ${this.state.get('name')}`);
-      this.state.set('should_continue', false);
+      this.logStep(`Flow control condition met for step: ${this.getStepStateValue('name')}`);
+      this.setStepStateValue('should_continue', false);
     } else {
-      this.logStep(`Flow control condition not met for step: ${this.state.get('name')}`);
-      this.state.set('should_continue', true);
+      this.logStep(`Flow control condition not met for step: ${this.getStepStateValue('name')}`);
+      this.setStepStateValue('should_continue', true);
     }
 
-    return { message: `Continue flow control step: ${this.state.get('name')} ${this.state.get('should_continue') ? 'will continue' : 'will not continue'}`, result: this.state.getState() };
+    return { message: `Continue flow control step: ${this.getStepStateValue('name')} ${this.getStepStateValue('should_continue') ? 'will continue' : 'will not continue'}`, result: this.getStepStateValue() };
   }
 }

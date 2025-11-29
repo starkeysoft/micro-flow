@@ -137,9 +137,9 @@ async function createDataPipeline(inputFile, outputDir) {
       const content = await fs.readFile(inputFile, 'utf-8');
       const records = JSON.parse(content);
       
-      this.workflow.set('inputRecords', records);
+      this.state.set('inputRecords', records);
       
-      const stats = this.workflow.get('stats');
+      const stats = this.state.get('stats');
       stats.totalRecords = records.length;
       
       console.log(`Loaded ${records.length} records`);
@@ -154,16 +154,16 @@ async function createDataPipeline(inputFile, outputDir) {
     callable: async function() {
       console.log('Validating records...');
       
-      const records = this.workflow.get('inputRecords');
+      const records = this.state.get('inputRecords');
       const validationResults = records.map(DataValidator.validate);
       
       const validRecords = validationResults.filter(r => r.valid).map(r => r.record);
       const invalidRecords = validationResults.filter(r => !r.valid);
       
-      this.workflow.set('validRecords', validRecords);
-      this.workflow.set('invalidRecords', invalidRecords);
+      this.state.set('validRecords', validRecords);
+      this.state.set('invalidRecords', invalidRecords);
       
-      const stats = this.workflow.get('stats');
+      const stats = this.state.get('stats');
       stats.validRecords = validRecords.length;
       stats.invalidRecords = invalidRecords.length;
       
@@ -192,9 +192,9 @@ async function createDataPipeline(inputFile, outputDir) {
     name: 'Process Batch',
     type: StepTypes.ACTION,
     callable: async function() {
-      const validRecords = this.workflow.get('validRecords');
-      const stats = this.workflow.get('stats');
-      const processedRecords = this.workflow.get('processedRecords') || [];
+      const validRecords = this.state.get('validRecords');
+      const stats = this.state.get('stats');
+      const processedRecords = this.state.get('processedRecords') || [];
       
       const start = currentBatch * batchSize;
       const end = Math.min(start + batchSize, validRecords.length);
@@ -228,7 +228,7 @@ async function createDataPipeline(inputFile, outputDir) {
       });
       
       processedRecords.push(...successfullyProcessed);
-      this.workflow.set('processedRecords', processedRecords);
+      this.state.set('processedRecords', processedRecords);
       
       currentBatch++;
       
@@ -240,7 +240,7 @@ async function createDataPipeline(inputFile, outputDir) {
   const checkMoreBatches = new FlowControlStep({
     name: 'Check More Batches',
     subject: function() {
-      const validRecords = this.workflow.get('validRecords');
+      const validRecords = this.state.get('validRecords');
       return currentBatch * batchSize < validRecords.length;
     },
     operator: '===',
@@ -254,7 +254,7 @@ async function createDataPipeline(inputFile, outputDir) {
     name: 'Process All Batches',
     callable: processBatchWorkflow,
     subject: function() {
-      const validRecords = this.workflow.get('validRecords');
+      const validRecords = this.state.get('validRecords');
       return currentBatch * batchSize < validRecords.length;
     },
     operator: '===',
@@ -270,7 +270,7 @@ async function createDataPipeline(inputFile, outputDir) {
     callable: async function() {
       console.log('Saving processed data...');
       
-      const processedRecords = this.workflow.get('processedRecords');
+      const processedRecords = this.state.get('processedRecords');
       const outputFile = path.join(outputDir, 'processed_data.json');
       
       await fs.mkdir(outputDir, { recursive: true });
@@ -288,7 +288,7 @@ async function createDataPipeline(inputFile, outputDir) {
     callable: async function() {
       console.log('Generating report...');
       
-      const stats = this.workflow.get('stats');
+      const stats = this.state.get('stats');
       stats.processingTime = Date.now() - stats.startTime;
       
       const report = ReportGenerator.generate(stats);

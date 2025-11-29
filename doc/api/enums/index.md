@@ -25,7 +25,10 @@ Enums provide standardized constants for step types, statuses, and other categor
 - **[flow_control_types](./flow-control-types.md)** - Flow control operations (BREAK, CONTINUE)
 
 ### Delay Enums
-- **[delay_types](./delay-types.md)** - Delay timing strategies (ABSOLUTE, RELATIVE)
+- **[delay_types](./delay-types.md)** - Delay timing strategies (ABSOLUTE, CRON, RELATIVE)
+
+### Error Enums
+- **[errors](./errors.md)** - Error messages and warnings used throughout the library
 
 ## Import Examples
 

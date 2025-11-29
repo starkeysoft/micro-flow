@@ -29,9 +29,9 @@ export default class LogicStep extends Step {
       callable,
     });
     
-    this.state.set('subject', undefined);
-    this.state.set('operator', undefined);
-    this.state.set('value', undefined);
+    this.setStepStateValue('subject', undefined);
+    this.setStepStateValue('operator', undefined);
+    this.setStepStateValue('value', undefined);
   }
 
   /**
@@ -41,10 +41,10 @@ export default class LogicStep extends Step {
    * @throws {Error} If the operator is unknown.
    */
   checkCondition() {
-    const subject = this.state.get('subject');
-    const operator = this.state.get('operator');
-    const value = this.state.get('value');
-    
+    const subject = this.getStepStateValue('subject');
+    const operator = this.getStepStateValue('operator');
+    const value = this.getStepStateValue('value');
+
     switch (operator) {
       case conditional_step_comparators.STRICT_EQUALS:
       case conditional_step_comparators.SIGN_STRICT_EQUALS:
@@ -77,15 +77,49 @@ export default class LogicStep extends Step {
 
   /**
    * Sets the conditional properties for this logic step.
-   * @param {Object} options - The conditional configuration.
-   * @param {*} options.subject - The value to compare against.
-   * @param {string} options.operator - The comparison operator to use.
-   * @param {*} options.value - The value to compare the subject with.
-   * @returns {void}
+   * @param {Object} options - The conditional properties to set. Optional. If not provided, uses the current state values.
+   * May be either a static value or a string path to resolve from state.
+   * @param {*} [options.subject] - Optional. The subject to evaluate. If not provided, uses the subject from the current state.
+   * @param {string} [options.operator] - Optional. The operator to use for evaluation. If not provided, uses the operator from the current state.
+   * @param {*} [options.value] - Optional. The value to compare against. If not provided, uses the value from the current state.
+   * @param {boolean} [options.shouldResolve=true] - Optional. Whether to resolve the values from a dot-delimited path string. Defaults to true.
+   * If you need to pass in a string for the subject or value, set this to false, otherwise it will attempt to resolve it from state.
+   * @returns {Object} An object containing the resolved subject, operator, and value.
    */
-  setConditional({ subject, operator, value }) {
-    this.state.set('subject', subject);
-    this.state.set('operator', operator);
-    this.state.set('value', value);
+  setConditional({ subject, operator, value, shouldResolve = true } = {}) {
+    const currentSubject = subject ?? this.getStepStateValue('subject');
+    const resolvedSubject = shouldResolve ? this.getStepStateValue(currentSubject) : currentSubject;
+    this.setStepStateValue(
+      'subject',
+      resolvedSubject
+    );
+  
+    const currentOperator = operator ?? this.getStepStateValue('operator');
+    const resolvedOperator = shouldResolve ? this.getStepStateValue(currentOperator) : currentOperator;
+    this.setStepStateValue(
+      'operator',
+      resolvedOperator
+    );
+
+    const currentValue = value ?? this.getStepStateValue('value');
+    const resolvedValue = shouldResolve ? this.getStepStateValue(currentValue) : currentValue;
+    this.setStepStateValue(
+      'value',
+      resolvedValue
+    );
+
+    return { resolvedSubject, resolvedOperator, resolvedValue };
+  }
+
+  /**
+   * Gets the conditional properties for this logic step.
+   * @returns {Object} An object containing the subject, operator, and value.
+   */
+  getConditional() {
+    return {
+      subject: this.getStepStateValue('subject'),
+      operator: this.getStepStateValue('operator'),
+      value: this.getStepStateValue('value'),
+    };
   }
 }

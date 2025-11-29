@@ -18,7 +18,7 @@ The most common callable type is an async function:
 const step = new Step({
   name: 'Fetch User',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
+  callable: async (state, step) => {
     const response = await fetch('/api/user');
     return response.json();
   }
@@ -33,15 +33,15 @@ Async function callables receive a context object with `workflow` and `step` pro
 const step = new Step({
   name: 'Process Data',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
+  callable: async (state, step) => {
     // Access workflow state
-    const userId = workflow.get('userId');
+    const userId = state.get('userId');
     
     // Fetch data
     const data = await fetchUserData(userId);
     
     // Update workflow state
-    workflow.set('userData', data);
+    state.set('userData', data);
     
     // Access step properties
     const stepName = step.state.get('name');
@@ -51,7 +51,7 @@ const step = new Step({
 });
 ```
 
-> **Note**: Callables receive a context object `{ workflow, step }` as their first parameter. The `workflow` is the parent workflow's state object, and `step` is the current Step instance.
+> **Note**: Callables receive two parameters: `state` (the global state singleton) and `step` (the current Step instance).
 
 ### Accessing Previous Step Data
 
@@ -64,22 +64,22 @@ workflow.pushSteps([
   new Step({
     name: 'Fetch Data',
     type: StepTypes.ACTION,
-    callable: async ({ workflow, step }) => {
+    callable: async (state, step) => {
       const data = { id: 123, name: 'John' };
       // Store in workflow state for later access
-      workflow.set('userData', data);
+      state.set('userData', data);
       return data;
     }
   }),
   new Step({
     name: 'Transform Data',
     type: StepTypes.ACTION,
-    callable: async ({ workflow, step }) => {
+    callable: async (state, step) => {
       // Access data from workflow state
-      const userData = workflow.get('userData');
+      const userData = state.get('userData');
       
       // Or access output_data array from previous steps
-      const outputData = workflow.get('output_data');
+      const outputData = state.get('output_data');
       const previousResult = outputData[outputData.length - 1];
       
       return {
@@ -92,8 +92,8 @@ workflow.pushSteps([
   new Step({
     name: 'Save Data',
     type: StepTypes.ACTION,
-    callable: async ({ workflow, step }) => {
-      const transformedData = workflow.get('userData');
+    callable: async (state, step) => {
+      const transformedData = state.get('userData');
       await saveToDatabase(transformedData);
       return { saved: true };
     }
@@ -109,9 +109,9 @@ You can also access steps by their ID using `steps_by_id`:
 const step = new Step({
   name: 'Access Specific Step',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
+  callable: async (state, step) => {
     // Get a specific step by its ID
-    const stepsById = workflow.get('steps_by_id');
+    const stepsById = state.get('steps_by_id');
     const specificStep = stepsById['some-step-id'];
     const stepResult = specificStep.state.get('result');
     
@@ -160,7 +160,7 @@ validationWorkflow.pushSteps([
     name: 'Check Required Fields',
     type: StepTypes.ACTION,
     callable: async function() {
-      const data = this.workflow.get('inputData');
+      const data = this.state.get('inputData');
       if (!data.email || !data.name) {
         throw new Error('Missing required fields');
       }
@@ -171,11 +171,11 @@ validationWorkflow.pushSteps([
     name: 'Validate Email',
     type: StepTypes.ACTION,
     callable: async function() {
-      const data = this.workflow.get('inputData');
+      const data = this.state.get('inputData');
       if (!data.email.includes('@')) {
         throw new Error('Invalid email');
       }
-      this.workflow.set('isValid', true);
+      this.state.set('isValid', true);
       return data;
     }
   })
@@ -194,8 +194,8 @@ mainWorkflow.pushSteps([
   new Step({
     name: 'Process Valid Data',
     type: StepTypes.ACTION,
-    callable: async ({ workflow, step }) => {
-      const data = workflow.get('inputData');
+    callable: async (state, step) => {
+      const data = state.get('inputData');
       return await processData(data);
     }
   })
@@ -223,12 +223,12 @@ Callables receive a context object as their first parameter with `workflow` and 
 const step = new Step({
   name: 'Access Context',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
+  callable: async (state, step) => {
     // workflow - The parent workflow's state object
     // step - The current Step instance
     
-    const config = workflow.get('config');
-    workflow.set('result', 'processed');
+    const config = state.get('config');
+    state.set('result', 'processed');
     
     // Access step properties
     const stepName = step.state.get('name');
@@ -244,7 +244,7 @@ const step = new Step({
 The context object passed to callables contains:
 
 - **`workflow`** - The parent workflow's state object (WorkflowState instance)
-  - Access with `workflow.get(key)` and `workflow.set(key, value)`
+  - Access with `state.get(key)` and `state.set(key, value)`
   - Contains all workflow-level data and step results
   
 - **`step`** - The current Step instance
@@ -256,10 +256,10 @@ The context object passed to callables contains:
 const step = new Step({
   name: 'Use Context',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
+  callable: async (state, step) => {
     // Workflow state access
-    const userId = workflow.get('userId');
-    const previousStepResults = workflow.get('output_data');
+    const userId = state.get('userId');
+    const previousStepResults = state.get('output_data');
     
     // Step state access
     const stepId = step.state.get('id');
@@ -281,16 +281,16 @@ workflow.pushSteps([
   new Step({
     name: 'Step 1',
     type: StepTypes.ACTION,
-    callable: async ({ workflow, step }) => {
+    callable: async (state, step) => {
       return { userId: 123 }; // Stored in output_data
     }
   }),
   new Step({
     name: 'Step 2',
     type: StepTypes.ACTION,
-    callable: async ({ workflow, step }) => {
+    callable: async (state, step) => {
       // Access previous step's result from output_data
-      const outputData = workflow.get('output_data');
+      const outputData = state.get('output_data');
       const previousResult = outputData[outputData.length - 1]?.result;
       
       return { userId: previousResult.userId, name: 'John' };
@@ -299,9 +299,9 @@ workflow.pushSteps([
   new Step({
     name: 'Step 3',
     type: StepTypes.ACTION,
-    callable: async ({ workflow, step }) => {
+    callable: async (state, step) => {
       // Access any previous step's result
-      const outputData = workflow.get('output_data');
+      const outputData = state.get('output_data');
       const step2Result = outputData[1]?.result; // Index 1 = Step 2
       
       console.log(step2Result.name); // "John"
@@ -341,7 +341,7 @@ const conditional = new ConditionalStep({
 const loopBody = new Step({
   name: 'Process Item',
   type: StepTypes.ACTION,
-  callable: async ({ workflow, step }) => {
+  callable: async (state, step) => {
     // Access current iteration data from the parent loop step's state
     // Note: In a loop, you'd typically access this from the loop step context
     const currentItem = step.state.get('current_item');
@@ -402,7 +402,7 @@ const step = new Step({
       return await processData(data);
     } catch (error) {
       // Handle or re-throw
-      workflow.set('error', error);
+      state.set('error', error);
       throw error;
     }
   }
@@ -486,17 +486,17 @@ workflow.pushSteps([
   new Step({
     name: 'Set Config',
     type: StepTypes.ACTION,
-    callable: async ({ workflow, step }) => {
-      workflow.set('apiUrl', 'https://api.example.com');
-      workflow.set('timeout', 5000);
+    callable: async (state, step) => {
+      state.set('apiUrl', 'https://api.example.com');
+      state.set('timeout', 5000);
     }
   }),
   new Step({
     name: 'Use Config',
     type: StepTypes.ACTION,
-    callable: async ({ workflow, step }) => {
-      const url = workflow.get('apiUrl');
-      const timeout = workflow.get('timeout');
+    callable: async (state, step) => {
+      const url = state.get('apiUrl');
+      const timeout = state.get('timeout');
       return await fetch(url, { timeout });
     }
   })
@@ -544,7 +544,7 @@ const robustStep = new Step({
       return { success: true, result };
     } catch (error) {
       // Log error to workflow state
-      workflow.set('lastError', {
+      state.set('lastError', {
         step: 'Robust Operation',
         error: error.message,
         timestamp: Date.now()
@@ -593,8 +593,8 @@ mainWorkflow.pushSteps([
 
 ```javascript
 function createApiCallable(endpoint, method = 'GET') {
-  return async ({ workflow, step }) => {
-    const baseUrl = workflow.get('apiUrl');
+  return async (state, step) => {
+    const baseUrl = state.get('apiUrl');
     const response = await fetch(`${baseUrl}${endpoint}`, { method });
     return response.json();
   };
@@ -638,7 +638,7 @@ function createRetryCallable(fn, maxRetries = 3) {
 const step = new Step({
   name: 'Fetch with Retry',
   type: StepTypes.ACTION,
-  callable: createRetryCallable(async ({ workflow, step }) => {
+  callable: createRetryCallable(async (state, step) => {
     const response = await fetch('https://api.example.com/data');
     return response.json();
   })
@@ -668,7 +668,7 @@ function withLogging(callable) {
 const step = new Step({
   name: 'Logged Operation',
   type: StepTypes.ACTION,
-  callable: withLogging(async ({ workflow, step }) => {
+  callable: withLogging(async (state, step) => {
     return await performOperation();
   })
 });

@@ -1,12 +1,13 @@
 # delay_types Enum
 
-Defines the two strategies for calculating delays in DelayStep.
+Defines the three strategies for calculating delays in DelayStep.
 
 ## Values
 
 | Constant | Value | Description |
 |----------|-------|-------------|
 | `ABSOLUTE` | `'absolute'` | Delay until a specific timestamp |
+| `CRON` | `'cron'` | Delay using cron expression for scheduled execution |
 | `RELATIVE` | `'relative'` | Delay for a duration in milliseconds |
 
 ## Import

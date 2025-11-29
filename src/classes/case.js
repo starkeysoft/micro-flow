@@ -27,11 +27,11 @@ export default class Case extends Logic {
       callable,
     });
 
-    this.state.set('subject', subject);
-    this.state.set('operator', operator);
-    this.state.set('value', value);
-    this.state.set('shouldBreak', false);
-    this.state.set('callable', callable);
+    state.set('subject', subject);
+    state.set('operator', operator);
+    state.set('value', value);
+    state.set('shouldBreak', false);
+    state.set('callable', callable);
   }
 
   /**
@@ -43,13 +43,13 @@ export default class Case extends Logic {
   async check() {
     if (this.checkCondition()) {
       this.logStep(`Case condition met.`);
-      this.state.set('shouldBreak', true);
-      const callable = this.state.get('callable');
+      state.set('shouldBreak', true);
+      const callable = state.get('callable');
       const result = await callable.execute();
-      return { message: `ConditionalStep Case ${this.state.get('name') ?? this.state.get('id')} condition met`, ...result };
+      return { message: `ConditionalStep Case ${state.get('name') ?? state.get('id')} condition met`, ...result };
     } else {
       this.logStep(`Case condition not met.`);
-      return { message: `ConditionalStep Case ${this.state.get('name') ?? this.state.get('id')} condition not met` };
+      return { message: `ConditionalStep Case ${state.get('name') ?? state.get('id')} condition not met` };
     }
   }
 }

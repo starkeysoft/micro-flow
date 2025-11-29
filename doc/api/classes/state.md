@@ -1,40 +1,104 @@
 # State Class
 
-The `State` class provides a structured way to manage state for workflows, steps, and processes. It offers getter/setter functionality, state merging, cloning, and immutability through freezing.
+The `State` class provides a singleton state management system for workflows, steps, and processes. It offers getter/setter functionality with flexible path access (dot notation and bracket notation), state merging, cloning, and immutability through freezing.
 
-## Constructor
+**Important:** State is exported as a **singleton instance**, not a class. All workflows and steps share the same global state object.
 
-```javascript
-new State(initialState)
-```
-
-### Parameters
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `initialState` | `Object` | No | `{}` | Initial state properties to merge with defaults |
-
-### Example
+## Import
 
 ```javascript
-import { State } from 'micro-flow';
-
-const state = new State({
-  userId: 123,
-  status: 'active',
-  data: []
-});
+import state from 'micro-flow';
+// or
+import state from './src/classes/state.js';
 ```
 
-## Default State
+## Property Path Notation
 
-The State class includes these default properties:
+State uses a path notation that is a string just like the way you'd access data in an object or an array, including dynamic keys:
+
+### Dot Notation
+
+Traditional dot-separated paths for accessing nested objects:
+
+```javascript
+state.set('user.profile.name', 'Alice');
+state.get('user.profile.name'); // 'Alice'
+```
+
+### Bracket Notation
+
+Use brackets to access array indices or object keys with special characters:
+
+```javascript
+// Array indices
+state.set('users[0].name', 'Bob');
+state.get('users[0].name'); // 'Bob'
+
+// Dynamic or special keys
+state.set("config['api-key']", 'secret123');
+state.get("config['api-key']"); // 'secret123'
+
+// Nested arrays
+state.set('matrix[0][1]', 42);
+state.get('matrix[0][1]'); // 42
+```
+
+### Mixed Notation
+
+You can combine both notations in a single path:
+
+```javascript
+// Accessing nested structures
+state.set('data.items[0].properties.name', 'First Item');
+state.get('data.items[0].properties.name'); // 'First Item'
+
+// Complex paths
+state.set("users[0].settings['theme-preference'].color", 'dark');
+state.get("users[0].settings['theme-preference'].color"); // 'dark'
+```
+
+### Path Notation Rules
+
+1. **Array Indices**: Use numeric indices in brackets: `items[0]`, `items[1]`
+2. **Object Keys**: Use quoted keys in brackets for special characters: `data['api-key']`, `config["my-setting"]`
+3. **Nesting**: Combine dots and brackets: `data.items[0].name`
+4. **Automatic Creation**: When setting values, intermediate objects and arrays are created automatically
+5. **Type Detection**: If the next key is numeric, an array is created; otherwise, an object is created
+
+### Examples
+
+```javascript
+// Initialize state with nested data
+state.set('users', []);
+
+// Add users using bracket notation
+state.set('users[0]', { name: 'Alice', age: 30 });
+state.set('users[1]', { name: 'Bob', age: 25 });
+
+// Access nested properties
+state.get('users[0].name'); // 'Alice'
+state.get('users[1].age'); // 25
+
+// Update specific array elements
+state.set('users[0].age', 31);
+
+// Work with keys containing special characters
+state.set("config['api-endpoints'].primary", 'https://api.example.com');
+state.set("config['api-endpoints'].secondary", 'https://backup.example.com');
+state.get("config['api-endpoints'].primary"); // 'https://api.example.com'
+
+// Complex nested structures
+state.set('data.records[0].metadata["created-at"]', '2025-01-01');
+state.get('data.records[0].metadata["created-at"]'); // '2025-01-01'
+```
+
+## Default State Properties
 
 ```javascript
 {
   id: null,
   name: null,
-  exit_on_failure: false,
+  exit_on_failure: true,
   current_step: null,
   steps: [],
   events: null,
@@ -45,355 +109,214 @@ The State class includes these default properties:
 
 ## Methods
 
-### `get(key, defaultValue)`
+### `get(path, defaultValue)`
 
-Retrieves the value of a state property.
-
-```javascript
-get(key: string, defaultValue?: any): any
-```
+Retrieves the value of a state property using dot-notation or bracket-notation path access.
 
 **Parameters:**
-- `key` (string) - The property key to retrieve
-- `defaultValue` (any, optional) - Value to return if key doesn't exist (default: `null`)
+- `path` (string|null) - Path to the property. Supports:
+  - Dot notation: `"user.profile.name"`
+  - Bracket notation: `"users[0].name"` or `"data['api-key']"`
+  - Mixed: `"data.items[0].properties.name"`
+  - Special values: `null`, `""`, or `"*"` returns entire state
+- `defaultValue` (any) - Value to return if the path doesn't exist (default: `null`)
 
-**Returns:**
-- The value of the property, or `defaultValue` if not found
+**Returns:** The value at the specified path, or `defaultValue` if not found.
 
-**Example:**
-
-```javascript
-const state = new State({ userId: 123 });
-
-console.log(state.get('userId')); // 123
-console.log(state.get('unknown')); // null
-console.log(state.get('unknown', 'default')); // 'default'
-```
-
-### `getState()`
-
-Retrieves the entire state object.
+**Examples:**
 
 ```javascript
-getState(): Object
+// Get top-level properties
+state.get('id'); // 'workflow-123'
+
+// Get nested values with dot notation
+state.get('user.profile.name'); // 'Alice'
+
+// Get array elements with bracket notation
+state.get('users[0]'); // { name: 'Bob', age: 25 }
+state.get('users[0].name'); // 'Bob'
+
+// Get keys with special characters
+state.get("config['api-key']"); // 'secret123'
+
+// Mixed notation
+state.get('data.items[0].properties.name'); // 'First Item'
+
+// Get with default
+state.get('user.email', 'no-email@example.com');
+
+// Get entire state
+const allState = state.get(); // or state.get('*') or state.get('')
 ```
 
-**Returns:**
-- The complete state object
+### `set(path, value)`
 
-**Example:**
-
-```javascript
-const state = new State({ userId: 123, status: 'active' });
-const fullState = state.getState();
-
-console.log(fullState);
-// { id: null, name: null, ..., userId: 123, status: 'active' }
-```
-
-### `getStateClone()`
-
-Creates a deep clone of the entire state object.
-
-```javascript
-getStateClone(): Object
-```
-
-**Returns:**
-- A deep copy of the state object
-
-**Example:**
-
-```javascript
-const state = new State({ 
-  user: { id: 123, name: 'John' },
-  items: [1, 2, 3]
-});
-
-const cloned = state.getStateClone();
-cloned.user.name = 'Jane'; // Original unchanged
-
-console.log(state.get('user').name); // 'John'
-console.log(cloned.user.name); // 'Jane'
-```
-
-### `set(key, value)`
-
-Sets the value of a state property.
-
-```javascript
-set(key: string, value: any): void
-```
+Sets the value of a state property using dot-notation or bracket-notation path access. Creates intermediate objects and arrays automatically as needed.
 
 **Parameters:**
-- `key` (string) - The property key to set
-- `value` (any) - The value to assign
+- `path` (string) - Path to the property. Supports:
+  - Dot notation: `"user.profile.name"`
+  - Bracket notation: `"users[0].name"` or `"data['api-key']"`
+  - Mixed: `"data.items[0].properties.name"`
+- `value` (any) - Value to set at the specified path
 
-**Example:**
+**Throws:** Error if path is empty or invalid.
+
+**Examples:**
 
 ```javascript
-const state = new State();
+// Set top-level properties
+state.set('id', 'workflow-123');
 
-state.set('userId', 123);
-state.set('status', 'active');
-state.set('data', [1, 2, 3]);
+// Set nested properties (creates intermediate objects)
+state.set('user.profile.name', 'Alice');
+state.set('user.profile.age', 30);
 
-console.log(state.get('userId')); // 123
+// Set array elements (creates arrays automatically)
+state.set('users[0].name', 'Bob');
+state.set('users[1].name', 'Charlie');
+
+// Set keys with special characters
+state.set("config['api-key']", 'secret123');
+state.set("settings['theme-preference']", 'dark');
+
+// Mixed notation with automatic structure creation
+state.set('data.items[0].properties.name', 'First Item');
+state.set('data.items[0].properties.tags[0]', 'important');
+
+// Deep nested values
+state.set('config.database.connection.host', 'localhost');
+```
+
+### `delete(path)`
+
+Deletes a state property using dot-notation or bracket-notation path access.
+
+**Parameters:**
+- `path` (string) - Path to the property to delete. Supports:
+  - Dot notation: `"user.profile.age"`
+  - Bracket notation: `"users[0].email"` or `"data['api-key']"`
+  - Mixed: `"data.items[0].properties.name"`
+
+**Throws:** Error if path is empty or invalid.
+
+**Examples:**
+
+```javascript
+// Delete top-level property
+state.delete('temporary_data');
+
+// Delete nested property
+state.delete('user.profile.age');
+
+// Delete array element property
+state.delete('users[0].email');
+
+// Delete key with special characters
+state.delete("config['api-key']");
+
+// Mixed notation
+state.delete('data.items[0].properties.tags[0]');
 ```
 
 ### `merge(newState)`
 
-Merges an object into the current state.
-
-```javascript
-merge(newState: Object): void
-```
+Merges new properties into the current state. Existing properties are overwritten.
 
 **Parameters:**
-- `newState` (Object) - Object to merge into current state
+- `newState` (object) - Object containing properties to merge into state
 
-**Example:**
+**Examples:**
 
 ```javascript
-const state = new State({ userId: 123 });
-
-state.merge({
-  status: 'active',
-  role: 'admin',
-  permissions: ['read', 'write']
+state.merge({ 
+  id: 'new-id',
+  custom_field: 'value' 
 });
+```
 
-console.log(state.get('userId')); // 123 (preserved)
-console.log(state.get('status')); // 'active' (added)
-console.log(state.get('role')); // 'admin' (added)
+### `getState()`
+
+Returns a reference to the entire state object. Modifications to the returned object will affect the internal state.
+
+**Returns:** Object containing all state properties.
+
+**Examples:**
+
+```javascript
+const currentState = state.getState();
+console.log(currentState.id);
+```
+
+### `getStateClone()`
+
+Returns a deep clone of the entire state object. Modifications to the returned object will not affect the internal state.
+
+**Returns:** Deep cloned copy of all state properties.
+
+**Examples:**
+
+```javascript
+const snapshot = state.getStateClone();
+snapshot.id = 'different-id'; // Does not affect state
 ```
 
 ### `freeze()`
 
-Freezes the state object to prevent further modifications.
+Freezes the state object, making it immutable. No further modifications can be made.
+
+**Examples:**
 
 ```javascript
-freeze(): void
-```
-
-**Example:**
-
-```javascript
-const state = new State({ userId: 123 });
-
 state.freeze();
-
-// Attempting to modify frozen state will fail silently
-state.set('userId', 456);
-console.log(state.get('userId')); // Still 123
-
-state.merge({ status: 'active' }); // No effect
+// Any subsequent set() calls will throw an error
 ```
 
-### `prepare(start_time, freeze)`
+### `getFromPropertyPath(path)`
 
-Calculates execution time and optionally freezes the state.
-
-```javascript
-prepare(start_time: number, freeze?: boolean): void
-```
+Resolves a path (dot notation or bracket notation) and returns the value at that location.
 
 **Parameters:**
-- `start_time` (number) - Timestamp when execution started
-- `freeze` (boolean, optional) - Whether to freeze state (default: `true`)
+- `path` (string) - Path to resolve. Supports dot notation, bracket notation, or mixed.
 
-**Example:**
+**Returns:** The value at the path, or `undefined` if not found.
 
-```javascript
-const state = new State({ name: 'My Process' });
-const startTime = Date.now();
-
-// ... perform work ...
-
-state.prepare(startTime, true);
-
-console.log(state.get('execution_time_ms')); // e.g., 1523
-// State is now frozen
-```
-
-## Usage Examples
-
-### Basic State Management
+**Examples:**
 
 ```javascript
-const state = new State();
+// Dot notation
+const name = state.getFromPropertyPath('user.profile.name');
 
-// Set individual properties
-state.set('step', 1);
-state.set('total', 5);
-state.set('progress', 20);
+// Bracket notation
+const firstUser = state.getFromPropertyPath('users[0]');
 
-// Get properties
-const step = state.get('step'); // 1
-const progress = state.get('progress'); // 20
+// Mixed notation
+const itemName = state.getFromPropertyPath('data.items[0].name');
 ```
 
-### Initialization with Data
+### `setToPropertyPath(path, value)`
+
+Sets a value at a path (dot notation or bracket notation), creating intermediate objects and arrays as needed.
+
+**Parameters:**
+- `path` (string) - Path where to set the value. Supports dot notation, bracket notation, or mixed.
+- `value` (any) - Value to set
+
+**Examples:**
 
 ```javascript
-const state = new State({
-  userId: 123,
-  sessionId: 'abc-def-ghi',
-  permissions: ['read', 'write'],
-  settings: {
-    theme: 'dark',
-    notifications: true
-  }
-});
+// Dot notation
+state.setToPropertyPath('deeply.nested.value', 42);
 
-console.log(state.get('userId')); // 123
-console.log(state.get('settings').theme); // 'dark'
+// Bracket notation
+state.setToPropertyPath('users[0].name', 'Alice');
+
+// Mixed notation
+state.setToPropertyPath('data.items[0].properties.name', 'Item 1');
 ```
-
-### State Merging
-
-```javascript
-const state = new State({ step: 1 });
-
-// Merge additional data
-state.merge({
-  step: 2,  // Overwrites existing
-  data: { results: [1, 2, 3] },  // Adds new
-  status: 'processing'  // Adds new
-});
-
-console.log(state.get('step')); // 2
-console.log(state.get('data')); // { results: [1, 2, 3] }
-```
-
-### Deep Cloning
-
-```javascript
-const state = new State({
-  user: { id: 1, profile: { name: 'John' } },
-  items: [{ id: 1 }, { id: 2 }]
-});
-
-const clone = state.getStateClone();
-
-// Modify clone without affecting original
-clone.user.profile.name = 'Jane';
-clone.items[0].id = 999;
-
-console.log(state.get('user').profile.name); // 'John' (unchanged)
-console.log(state.get('items')[0].id); // 1 (unchanged)
-```
-
-### Workflow State Usage
-
-```javascript
-class WorkflowState extends State {
-  constructor(initialState = {}) {
-    super({
-      steps: [],
-      current_step_index: 0,
-      output_data: [],
-      status: 'pending',
-      ...initialState
-    });
-  }
-}
-
-const workflowState = new WorkflowState({
-  name: 'Data Pipeline',
-  userId: 123
-});
-
-workflowState.set('status', 'running');
-workflowState.merge({
-  current_step_index: 1,
-  output_data: [{ result: 'step1' }]
-});
-```
-
-### Step State Usage
-
-```javascript
-const stepState = new State({
-  id: 'step-123',
-  name: 'Fetch Data',
-  type: 'action',
-  status: 'pending',
-  result: null,
-  error: null,
-  retry_count: 0,
-  max_retries: 3
-});
-
-// During execution
-stepState.set('status', 'running');
-stepState.set('start_time', Date.now());
-
-// On completion
-stepState.set('status', 'completed');
-stepState.set('result', { data: [1, 2, 3] });
-stepState.prepare(stepState.get('start_time'), false);
-```
-
-### Immutable State
-
-```javascript
-const state = new State({
-  config: { timeout: 5000, retries: 3 },
-  readonly: true
-});
-
-// Freeze to make immutable
-state.freeze();
-
-// All modification attempts will fail silently
-state.set('config', { timeout: 10000 }); // No effect
-state.merge({ newProp: 'value' }); // No effect
-
-console.log(state.get('config').timeout); // Still 5000
-```
-
-### State with Execution Timing
-
-```javascript
-async function executeWithTiming() {
-  const state = new State({ name: 'Timed Operation' });
-  const startTime = Date.now();
-  
-  // Perform work
-  await performOperation();
-  
-  // Calculate execution time and freeze
-  state.prepare(startTime, true);
-  
-  console.log('Execution time:', state.get('execution_time_ms'), 'ms');
-  
-  return state;
-}
-```
-
-### Default Values
-
-```javascript
-const state = new State();
-
-// Get with default values
-const timeout = state.get('timeout', 5000); // 5000 (default)
-const maxRetries = state.get('max_retries', 3); // 3 (default)
-const config = state.get('config', {}); // {} (default)
-```
-
-## Internal Usage
-
-The State class is used internally by:
-
-- **Workflow:** `WorkflowState` extends State
-- **Step:** Each step has a State instance
-- **Events:** State snapshots in event data
 
 ## See Also
 
-- [Workflow Class](./workflow.md) - Uses WorkflowState
-- [Step Class](./step.md) - Uses State for step state
-- [deep_clone Helper](../helpers/deep-clone.md) - Used by getStateClone()
-- [Core Concepts - State Management](../../core-concepts/state-management.md)
+- [Workflow Class](./workflow.md)
+- [Step Class](./step.md)
+- [Errors Enum](../enums/errors.md)
