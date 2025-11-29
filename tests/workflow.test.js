@@ -10,11 +10,23 @@ describe('Workflow', () => {
   let workflow;
 
   beforeEach(() => {
-    // Reset global state to minimal structure
+    // Reset global state to minimal structure and set up a valid workflow context
     state.state = {
-      workflows: {},
-      active_workflow_id: null,
-      workflow_stack: []
+      workflows: {
+        test_workflow_id: {
+          steps: [],
+          output_data: [],
+          current_step: null,
+          status: null,
+        }
+      },
+      active_workflow_id: 'test_workflow_id',
+      workflow_stack: ['test_workflow_id'],
+      steps: [],
+      output_data: [],
+      current_step: null,
+      status: null,
+      current_step_index: 0,
     };
   });
 
