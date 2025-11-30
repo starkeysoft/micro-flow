@@ -280,7 +280,6 @@ The global state object has this structure:
       cancel_time: number,
       execution_time_ms: number,
       exit_on_failure: boolean,
-      freeze_on_completion: boolean,
       should_break: boolean,
       should_continue: boolean,
       should_skip: boolean,
@@ -360,19 +359,8 @@ await workflow.execute(initialState);
 
 ## State Immutability
 
-By default, workflow state is frozen after completion when `freeze_on_completion` is `true`:
-
-```javascript
-const workflow = new Workflow({
-  name: 'My Workflow',
-  freeze_on_completion: true  // Default
-});
-
-await workflow.execute();
-
-// State is now frozen and cannot be modified
-// workflow.state.set('key', 'value'); // This will fail
-```
+By default, workflow state is prepared after completion; use `State.freeze()` if you
+want to manually prevent further modifications.
 
 ## Deep Cloning
 

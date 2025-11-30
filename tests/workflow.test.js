@@ -68,11 +68,7 @@ describe('Workflow', () => {
       expect(workflow.getWorkflowValue('exit_on_failure')).toBe(true);
     });
 
-    it('should set freeze_on_completion option', () => {
-      workflow = new Workflow({ freeze_on_completion: false });
 
-      expect(workflow.getWorkflowValue('freeze_on_completion')).toBe(false);
-    });
 
     it('should initialize workflow events', () => {
       workflow = new Workflow();

@@ -34,7 +34,7 @@ PENDING → RUNNING → COMPLETED
               ↓
          CANCELLED
 
-FROZEN (final state modifier)
+// FROZEN is a terminal modifier; the library does not automatically set it.
 ```
 
 ## Usage
@@ -109,11 +109,11 @@ await workflow.execute();
 ### COMPLETED
 - **Set:** When all steps finish successfully
 - **Meaning:** Workflow executed all steps without errors
-- **Final State:** Yes (may transition to FROZEN)
+**Final State:** Yes
 
 ```javascript
 await workflow.execute();
-console.log(workflow.state.get('status')); // 'completed' or 'frozen'
+console.log(workflow.state.get('status')); // 'completed'
 ```
 
 ### FAILED
@@ -168,21 +168,8 @@ await emptyWorkflow.execute(); // Throws error or sets EMPTY
 ```
 
 ### FROZEN
-- **Set:** After completion when freeze_on_completion is true
-- **Meaning:** Workflow state is immutable
-- **Final State:** Yes
-
-```javascript
-const workflow = new Workflow({
-  steps: [step1, step2],
-  freeze_on_completion: true
-});
-
-await workflow.execute();
-console.log(workflow.state.get('status')); // 'frozen'
-
-// Attempting to modify state will fail
-```
+**Note:** The library no longer sets a `FROZEN` status automatically. Use `state.freeze()`
+manually if you need to make the workflow state immutable after completion.
 
 ## Complete Example
 
@@ -196,8 +183,7 @@ import {
 
 async function monitorWorkflowStatus() {
   const workflow = new Workflow({
-    name: 'Status Demo',
-    freeze_on_completion: true
+    name: 'Status Demo'
   });
   
   console.log('Initial:', workflow.state.get('status')); // 'pending'
@@ -285,7 +271,6 @@ async function pauseResumeDemo() {
 | RUNNING | COMPLETED | All steps finish successfully |
 | RUNNING | FAILED | Step fails (exit_on_failure: true) |
 | RUNNING | PAUSED | pause() called and step completes |
-| COMPLETED | FROZEN | freeze_on_completion: true |
 | PAUSED | RESUMED | resume() called |
 | RESUMED | RUNNING | Execution resumes |
 

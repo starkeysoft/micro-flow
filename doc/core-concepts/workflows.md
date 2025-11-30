@@ -14,8 +14,7 @@ import { Workflow } from 'micro-flow';
 const workflow = new Workflow({
   steps: [],                    // Array of step objects (optional)
   name: 'My Workflow',          // Workflow name (optional, auto-generated if not provided)
-  exit_on_failure: false,       // Stop execution on step failure (default: false)
-  freeze_on_completion: true,   // Freeze state after completion (default: true)
+  exit_on_failure: false       // Stop execution on step failure (default: false)
   sub_step_type_paths: []       // Additional directories for custom step classes (default: [])
 });
 ```
@@ -27,7 +26,7 @@ const workflow = new Workflow({
 | `steps` | `Array<Step>` | `[]` | Initial array of steps to execute |
 | `name` | `string` | `workflow_{uuid}` | Name for the workflow |
 | `exit_on_failure` | `boolean` | `false` | Whether to stop execution when a step fails |
-| `freeze_on_completion` | `boolean` | `true` | Whether to freeze state after workflow completes |
+| `sub_step_type_paths` | `Array<string>` | `[]` | Additional directory paths to scan for custom step classes. The built-in classes directory is always included. |
 | `sub_step_type_paths` | `Array<string>` | `[]` | Additional directory paths to scan for custom step classes. The built-in classes directory is always included. |
 
 ## Key Methods

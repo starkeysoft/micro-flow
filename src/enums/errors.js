@@ -27,7 +27,8 @@ const errors = {
  * }
  */
 const warnings = {
-  DO_NOT_SET_STEPS_DIRECTLY: 'Directly setting the "steps" property is not recommended.\n\tState will not be initialized correctly.\n\tUse workflow methods to manage steps.\n',
+  DO_NOT_SET_STEPS_DIRECTLY: 'Using state.set("steps", ...) is not recommended. ' +
+    'State will not be initialized correctly. Use workflow methods to manage steps instead.',
   BROADCAST_FAILED: 'Broadcast failed or is not supported in this environment. The error has more detail:\n',
 };
 

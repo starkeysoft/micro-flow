@@ -207,8 +207,8 @@ workflow.events.on(WorkflowEventNames.WORKFLOW_STATE_CHANGED, ({ workflow, chang
 ```
 
 #### WORKFLOW_FROZEN
-- **When:** State is frozen after completion (freeze_on_completion: true)
-- **Data:** `{ workflow: Workflow }`
+**When:** Emitted when the workflow state is frozen via `state.freeze()`
+**Data:** `{ workflow: Workflow }`
 
 ```javascript
 workflow.events.on(WorkflowEventNames.WORKFLOW_FROZEN, ({ workflow }) => {
@@ -222,8 +222,7 @@ workflow.events.on(WorkflowEventNames.WORKFLOW_FROZEN, ({ workflow }) => {
 import { Workflow, Step, StepTypes, WorkflowEventNames } from 'micro-flow';
 
 const workflow = new Workflow({ 
-  name: 'Monitored Workflow',
-  freeze_on_completion: true
+  name: 'Monitored Workflow'
 });
 
 // Lifecycle tracking
@@ -289,7 +288,7 @@ await workflow.execute();
 // 3. WORKFLOW_STARTED
 // 4. (Step events fire for each step)
 // 5. WORKFLOW_COMPLETED
-// 6. WORKFLOW_FROZEN (if freeze_on_completion: true)
+// 6. WORKFLOW_FROZEN (if state.freeze() is called)
 
 // With pause/resume:
 // 1. WORKFLOW_CREATED

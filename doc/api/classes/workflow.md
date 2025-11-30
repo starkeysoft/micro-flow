@@ -15,7 +15,7 @@ new Workflow(options)
 | `options.steps` | `Array<Step>` | No | `[]` | Initial array of steps to execute |
 | `options.name` | `string` | No | `workflow_{uuid}` | Name for the workflow |
 | `options.exit_on_failure` | `boolean` | No | `false` | Whether to stop execution when a step fails |
-| `options.freeze_on_completion` | `boolean` | No | `true` | Whether to freeze state after completion |
+| `options.exit_on_failure` | `boolean` | No | `false` | Whether to stop execution when a step fails |
 | `options.sub_step_type_paths` | `Array<string>` | No | `[]` | Additional directory paths to scan for custom step classes. The built-in classes directory is always included. Paths are merged when `setWorkflow()` is called on each step. |
 
 ### Example
@@ -31,7 +31,6 @@ const workflow = new Workflow({
   steps: [step1, step2, step3],
   name: 'Data Processing',
   exit_on_failure: false,
-  freeze_on_completion: true,
   sub_step_type_paths: [join(__dirname, './custom-steps')]
 });
 ```
@@ -389,7 +388,6 @@ The workflow state includes the following properties accessible via `workflow.st
 | `cancel_time` | `number` | Timestamp when cancelled |
 | `execution_time_ms` | `number` | Total execution time in milliseconds |
 | `exit_on_failure` | `boolean` | Whether to exit on step failure |
-| `freeze_on_completion` | `boolean` | Whether to freeze state on completion |
 | `should_break` | `boolean` | Flag to break from loops |
 | `should_continue` | `boolean` | Flag to continue loops |
 | `should_skip` | `boolean` | Flag to skip next step |

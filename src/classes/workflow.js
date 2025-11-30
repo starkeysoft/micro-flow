@@ -20,15 +20,14 @@ export default class Workflow {
    * @param {Array} [options.steps=[]] - An array of step objects to be executed in the workflow.
    * @param {string} [options.name=null] - Optional name for the workflow. If not provided, generates a unique name.
    * @param {boolean} [options.exit_on_failure=false] - Whether to exit the workflow when a step fails.
-   * @param {boolean} [options.freeze_on_completion=true] - Whether to freeze the state after completion.
    * @param {string[]} [options.sub_step_type_paths=[]] - Additional directories to scan for sub step types.
    */
-  constructor({ steps = [], name = null, exit_on_failure = false, freeze_on_completion = true, sub_step_type_paths = [] } = {}) {
+  constructor({ steps = [], name = null, exit_on_failure = false, sub_step_type_paths = [] } = {}) {
     this.id = uuidv4();
     const workflowName = name ?? `workflow_${this.id}`;
     this.events = new WorkflowEvents();
 
-    this.initializeWorkflowState(this.id, steps, workflowName, exit_on_failure, freeze_on_completion, sub_step_type_paths);
+    this.initializeWorkflowState(this.id, steps, workflowName, exit_on_failure, sub_step_type_paths);
 
     this.setListeners();
 
@@ -158,7 +157,7 @@ export default class Workflow {
    * 
    * Sets up:
    * - Workflow identification (id, name)
-   * - Execution configuration (exit_on_failure, freeze_on_completion)
+   * - Execution configuration (exit_on_failure)
    * - Control flags (should_break, should_continue, should_pause, should_skip)
    * - Timing properties (start_time, pause_time, resume_time, etc.)
    * - Steps array via pushSteps()
@@ -167,12 +166,11 @@ export default class Workflow {
    * @param {Array} steps - Initial array of steps to add.
    * @param {string} name - Name of the workflow.
    * @param {boolean} exit_on_failure - Whether to stop execution on step failure.
-   * @param {boolean} freeze_on_completion - Whether to freeze state after completion.
    * @param {Array<string>} sub_step_type_paths - Additional directories for custom step types.
    * @returns {void}
    * @private
    */
-  initializeWorkflowState(id, steps, name, exit_on_failure, freeze_on_completion, sub_step_type_paths) {
+  initializeWorkflowState(id, steps, name, exit_on_failure, sub_step_type_paths) {
     // Ensure workflows object exists
     if (!state.get('workflows')) {
       state.set('workflows', {});
@@ -183,7 +181,6 @@ export default class Workflow {
       id: id,
       name: name,
       exit_on_failure: exit_on_failure,
-      freeze_on_completion: freeze_on_completion,
       complete_time: null,
       create_time: null,
       cancel_time: null,
@@ -496,7 +493,6 @@ export default class Workflow {
         serialized.status = state.get(`workflows.${workflowId}.status`);
         serialized.current_step_index = state.get(`workflows.${workflowId}.current_step_index`);
         serialized.exit_on_failure = state.get(`workflows.${workflowId}.exit_on_failure`);
-        serialized.freeze_on_completion = state.get(`workflows.${workflowId}.freeze_on_completion`);
         serialized.should_break = state.get(`workflows.${workflowId}.should_break`);
         serialized.should_continue = state.get(`workflows.${workflowId}.should_continue`);
         serialized.should_pause = state.get(`workflows.${workflowId}.should_pause`);
@@ -673,59 +669,11 @@ export default class Workflow {
       this.setWorkflowValue('status', workflow_statuses.COMPLETE);
     });
 
-    this.events.on(this.events.event_names.WORKFLOW_CREATED, (data) => {
-      // Status already set by markAsCreated()
-    });
-
     this.events.on(this.events.event_names.WORKFLOW_ERRORED, (data) => {
       this.setWorkflowValue('status', workflow_statuses.ERRORED);
       const end_time = Date.now();
       this.setWorkflowValue('execution_time_ms', end_time - this.getWorkflowValue('start_time'));
       this.setWorkflowValue('end_time', end_time);
-    });
-
-    this.events.on(this.events.event_names.WORKFLOW_FAILED, (data) => {
-      // Status and logging already handled by markAsFailed()
-    });
-
-    this.events.on(this.events.event_names.WORKFLOW_PAUSED, (data) => {
-      // Status already set by markAsPaused()
-    });
-
-    this.events.on(this.events.event_names.WORKFLOW_RESUMED, (data) => {
-      // Status already set by markAsResumed()
-    });
-
-    this.events.on(this.events.event_names.WORKFLOW_STARTED, (data) => {
-      // Status and start time already set by the execute() method
-    });
-
-    this.events.on(this.events.event_names.WORKFLOW_STEP_ADDED, (data) => {
-      // External hook for step addition
-    });
-
-    this.events.on(this.events.event_names.WORKFLOW_STEP_MOVED, (data) => {
-      // External hook for step movement
-    });
-
-    this.events.on(this.events.event_names.WORKFLOW_STEP_REMOVED, (data) => {
-      // External hook for step removal
-    });
-
-    this.events.on(this.events.event_names.WORKFLOW_STEP_SHIFTED, (data) => {
-      // External hook for step shifting
-    });
-
-    this.events.on(this.events.event_names.WORKFLOW_STEP_SKIPPED, (data) => {
-      // External hook for step skipping
-    });
-
-    this.events.on(this.events.event_names.WORKFLOW_STEPS_ADDED, (data) => {
-      // External hook for steps addition
-    });
-
-    this.events.on(this.events.event_names.WORKFLOW_STEPS_CLEARED, (data) => {
-      // External hook for steps clearing
     });
   }
 
@@ -846,9 +794,9 @@ export default class Workflow {
    * @returns {Object} Combined state object.
    */
   buildReturnState() {
-    const clonedState = state.getStateClone();
+    const stateCopy = state.getState();
     return {
-      ...clonedState,
+      ...stateCopy,
       // Override with this workflow's specific state for backwards compatibility
       id: this.getWorkflowValue('id'),
       name: this.getWorkflowValue('name'),
@@ -856,8 +804,11 @@ export default class Workflow {
       current_step_index: this.getWorkflowValue('current_step_index'),
       status: this.getWorkflowValue('status'),
       output_data: this.getWorkflowValue('output_data'),
-      exit_on_failure: this.getWorkflowValue('exit_on_failure'),
-      freeze_on_completion: this.getWorkflowValue('freeze_on_completion')
+      exit_on_failure: this.getWorkflowValue('exit_on_failure')
     };
+  }
+
+  set steps(steps) {
+    this.pushSteps(steps);
   }
 }

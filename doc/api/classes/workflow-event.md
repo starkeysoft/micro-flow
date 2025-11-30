@@ -98,8 +98,7 @@ await workflow.execute();
 
 ```javascript
 const workflow = new Workflow({ 
-  name: 'Tracked Workflow',
-  freeze_on_completion: true
+  name: 'Tracked Workflow'
 });
 
 // Lifecycle tracking
