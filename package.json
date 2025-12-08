@@ -1,0 +1,24 @@
+{
+  "name": "micro-flow",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "node build.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "date-fns": "^4.1.0",
+    "node-schedule": "^2.1.1",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.0.14",
+    "esbuild": "^0.27.0",
+    "vitest": "^4.0.14"
+  }
+}
