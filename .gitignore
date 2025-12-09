@@ -13,3 +13,7 @@ dist
 .DS_Store
 
 .idea
+
+*.tgz
+*.zip
+*.gz

@@ -74,6 +74,26 @@ class State {
   }
 
   /**
+   * Iterates over a collection (array or object) located at the specified state path,
+   * executing a callback function for each item.
+   * 
+   * @param {string} path - The path of the state property to iterate over.
+   * @param {Function} callback - The function to execute for each item in the collection.
+   * @throws {Error} Throws if the state property at the path is not an array or object.
+   */
+  static each(path, callback) {
+    const collection = this.get(path);
+
+    if (Array.isArray(collection)) {
+      collection.forEach((item, index) => callback(item, index));
+    } else if (typeof collection === 'object' && collection !== null) {
+      Object.keys(collection).forEach(key => callback(collection[key], key));
+    } else {
+      throw new Error(errors.INVALID_STATE_PATH);
+    }
+  }
+
+  /**
    * Gets the value of a state property using dot-notation or bracket-notation path access.
    * 
    * @param {string} path - The path of the state property to get. Supports both dot notation

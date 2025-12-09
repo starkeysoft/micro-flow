@@ -1,16 +1,45 @@
 {
-  "name": "micro-flow",
+  "name": "@ronaldroe/micro-flow",
   "version": "1.0.0",
-  "description": "",
+  "description": "A lightweight, flexible workflow orchestration library for Node.js and browser environments. Build complex, sequential processes with ease using an intuitive API that supports conditional logic, flow control, event handling, and state management.",
   "main": "index.js",
   "scripts": {
     "build": "node build.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepublishOnly": "npm run build"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "workflow",
+    "orchestration",
+    "state-machine",
+    "flow-control",
+    "event-driven",
+    "browser",
+    "nodejs",
+    "state-management",
+    "sequential",
+    "process-automation"
+  ],
+  "author": "Starkey Software",
+  "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/starkeysoft/micro-flow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/starkeysoft/micro-flow/issues"
+  },
+  "homepage": "https://github.com/starkeysoft/micro-flow#readme",
+  "files": [
+    "index.js",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "date-fns": "^4.1.0",
     "node-schedule": "^2.1.1",

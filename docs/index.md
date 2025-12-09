@@ -191,7 +191,7 @@ Steps are individual units of work that can:
 
 ### State Management
 Global state accessible across all workflows and steps:
-- Dot-notation path access
+- Dot-notation path access - Access data using a string representation of the same syntax JavaScript uses to access array indices and object keys. `"users[0].email"`
 - Nested object support
 - Array indexing
 - Type-safe operations
