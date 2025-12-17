@@ -47,7 +47,10 @@ export default class ConditionalStep extends LogicStep {
    */
   async conditional() {
     const true_callable = this.true_callable;
+    true_callable.parentWorkflowId = this.parentWorkflowId;
+
     const false_callable = this.false_callable;
+    false_callable.parentWorkflowId = this.parentWorkflowId;
 
     let result = null;
 
@@ -57,9 +60,12 @@ export default class ConditionalStep extends LogicStep {
         `Condition met for step: ${this.name}, executing true branch`
       );
 
+      // Normally, the callable is automatically set according to its type
+      // here, they are set separately, so we need to account for types
       if (typeof true_callable === 'function') {
         result = await true_callable();
       } else {
+        true_callable.parentWorkflowId = this.parentWorkflowId;
         result = await true_callable.execute();
       }
     } else {
@@ -68,13 +74,16 @@ export default class ConditionalStep extends LogicStep {
         `Condition not met for step: ${this.name}, executing false branch`
       );
 
+      // Normally, the callable is automatically set according to its type
+      // here, they are set separately, so we need to account for types
       if (typeof false_callable === 'function') {
         result = await false_callable();
       } else {
+        false_callable.parentWorkflowId = this.parentWorkflowId;
         result = await false_callable.execute();
       }
     }
 
-    return result;
+    return { message: `Conditional step ${this.name} completed`, result };
   }
 }

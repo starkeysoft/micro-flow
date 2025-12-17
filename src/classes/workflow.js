@@ -12,7 +12,7 @@ export default class Workflow extends Base {
    * @param {Object} options - Configuration options.
    * @param {string} [options.name] - Name of the workflow.
    * @param {boolean} [options.exit_on_error=false] - Whether to exit on error.
-   * @param {Array} [options.steps=[]] - Array of steps to add to the workflow.
+   * @param {Array<Step>} [options.steps=[]] - Array of steps to add to the workflow.
    * @param {boolean} [options.throw_on_empty=false] - Whether to throw error if workflow is empty.
    */
   constructor({
@@ -51,10 +51,10 @@ export default class Workflow extends Base {
     this.markAsRunning();
 
     for (let i = 0; i < this._steps.length; i++) {
-      if (this.getState('should_pause')) {
+      if (this.should_pause) {
         this.markAsPaused();
-        this.setState('should_pause', false);
-        break;
+        this.should_pause = false;
+        return this;
       }
   
       if (this.getState('should_break')) {
@@ -116,6 +116,7 @@ export default class Workflow extends Base {
 
     let result;
     try {
+      step.parentWorkflowId = this.id;
       result = await step.execute();
       this.results.push(result);
     } catch (error) {
@@ -228,7 +229,7 @@ export default class Workflow extends Base {
    * @returns {boolean} True if the workflow is empty.
    */
   isEmpty() {
-    return !this._steps && !this._steps.length
+    return !this._steps || !this._steps.length
   }
   
   /**
@@ -243,7 +244,7 @@ export default class Workflow extends Base {
       `Workflow "${this.name}" created.`
     );
 
-    return this.getState('workflow.statuses').CREATED;
+    return this.getState('statuses.workflow').CREATED;
   }
   
   /**
@@ -251,7 +252,7 @@ export default class Workflow extends Base {
    */
   markAsPaused() {
     this.timing.pause_time = new Date();
-    this.status = this.getState('workflow.statuses').PAUSED;
+    this.status = this.getState('statuses.workflow').PAUSED;
 
     this.getState('events.workflow').emit(
       this.getState('event_names.workflow').WORKFLOW_PAUSED,
@@ -264,7 +265,7 @@ export default class Workflow extends Base {
    */
   markAsResumed() {
     this.timing.resume_time = new Date();
-    this.status = this.getState('workflow.statuses').RUNNING;
+    this.status = this.getState('statuses.workflow').RUNNING;
 
     this.getState('events.workflow').emit(
       this.getState('event_names.workflow').WORKFLOW_RESUMED,
@@ -374,6 +375,12 @@ export default class Workflow extends Base {
    * @param {Step[]} steps - Array of steps to add.
    */
   set steps(steps) {
+    steps.forEach((step, index) => {
+      if (typeof step.getCallableType !== 'function') {
+        throw new Error(`Invalid step type. Step at index ${index} is not an instance of Step.`);
+      }
+    });
+
     this.addSteps(steps);
   }
 }

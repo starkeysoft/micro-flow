@@ -27,12 +27,12 @@ export default class LogicStep extends Step {
    */
   constructor({
     name,
+    callable = async () => {},
     conditional = {
-      subject: null,
       operator: null,
+      subject: null,
       value: null,
     },
-    callable = async () => {},
   }) {
     super({
       name,
@@ -40,7 +40,7 @@ export default class LogicStep extends Step {
       callable
     });
 
-    this.validateAndSetConditional(conditional);
+    this.setConditional(conditional);
   }
 
   /**
@@ -84,17 +84,26 @@ export default class LogicStep extends Step {
   }
 
   /**
-   * Validates and sets the conditional properties.
+   * Checks if the conditional configuration is valid.
+   * @returns {boolean} True if conditional is valid.
+   */
+  conditionalIsValid() {
+    return (
+      this.subject !== null &&
+      this.subject !== undefined &&
+      this.operator !== null &&
+      this.operator !== undefined &&
+      this.value !== null &&
+      this.value !== undefined
+    );
+  }
+
+  /**
+   * Sets the conditional properties.
    * @param {Object} conditional - Conditional configuration object.
    * @throws {Error} Throws if conditional is invalid.
    */
-  validateAndSetConditional(conditional) {
-    for (const [key, value] of Object.entries(conditional)) {
-      if (!value || !Object.values(conditional_keys).includes(key)) {
-        throw new Error(this.getState('messages.errors.INVALID_CONDITIONAL'));
-      }
-    }
-
+  setConditional(conditional) {
     this.subject = conditional.subject;
     this.operator = conditional.operator;
     this.value = conditional.value;

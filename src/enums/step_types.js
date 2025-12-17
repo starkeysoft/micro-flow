@@ -7,8 +7,9 @@
  */
 const step_types = {
   ACTION: 'action',
-  LOGIC: 'logic',
   DELAY: 'delay',
+  LOGIC: 'logic',
+  LOOP: 'loop',
 };
 
 export default step_types;

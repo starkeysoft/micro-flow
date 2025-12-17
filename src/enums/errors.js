@@ -7,6 +7,8 @@
 const errors = {
   INVALID_STATE_PATH: 'The provided state path is invalid.\n',
   INVALID_CONDITIONAL: 'Conditional properties are required for LogicStep.',
+  OBJECT_NOT_PARSEABLE: 'The provided object could not be parsed.\n',
+  VALUE_NOT_ITERABLE: 'The provided value is not iterable.\n',
 };
 
 /**

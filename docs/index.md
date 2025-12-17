@@ -26,6 +26,7 @@ Complete API documentation for micro-flow, a lightweight workflow orchestration 
 - [Event](classes/events/event.md) - Base event emitter
 - [WorkflowEvent](classes/events/workflow_event.md) - Workflow-specific events
 - [StepEvent](classes/events/step_event.md) - Step-specific events
+- [StateEvent](classes/events/state_event.md) - State-specific events
 - [Broadcast](classes/events/broadcast.md) - Cross-tab/window communication
 
 ### Enumerations
@@ -45,6 +46,7 @@ Complete API documentation for micro-flow, a lightweight workflow orchestration 
 #### Event Enums
 - [Step Event Names](enums/step_event_names.md) - Step lifecycle events
 - [Workflow Event Names](enums/workflow_event_names.md) - Workflow lifecycle events
+- [State Event Names](enums/state_event_names.md) - State operation events
 
 #### Operator Enums
 - [Conditional Step Comparators](enums/conditional_step_comparators.md) - Comparison operators

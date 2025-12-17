@@ -349,11 +349,26 @@ const timeout = State.get('config.timeout', 3000); // with default
 
 // Delete values
 State.delete('user.name');
+
+// Merge objects into state
+State.merge({ settings: { theme: 'dark', lang: 'en' } });
+
+// Iterate over collections
+State.set('users', [{ name: 'Alice' }, { name: 'Bob' }]);
+State.each('users', (user, index) => {
+  console.log(`User ${index}: ${user.name}`);
+});
+
+// Freeze state (make immutable)
+State.freeze();
+
+// Reset state to defaults
+State.reset();
 ```
 
 ### Events
 
-Listen to workflow and step lifecycle events. You can do this using Node's EventEmitter syntax or the browser's CustomEvent syntax:
+Listen to workflow, step, and state lifecycle events. You can do this using Node's EventEmitter syntax or the browser's CustomEvent syntax:
 
 ```javascript
 import { State } from 'micro-flow';
@@ -368,6 +383,16 @@ const stepEvents = State.get('events.step');
 
 stepEvents.on('step_failed', (data) => {
   console.error(`Step ${data.name} failed:`, data.errors);
+});
+
+const stateEvents = State.get('events.state');
+
+stateEvents.on('set', (data) => {
+  console.log('State modified:', data.state);
+});
+
+stateEvents.on('deleted', (data) => {
+  console.log('State property deleted');
 });
 ```
 
@@ -537,12 +562,16 @@ Full documentation is available in the [docs](docs/) directory:
 - [Event System](docs/classes/events/event.md)
 - [WorkflowEvent API](docs/classes/events/workflow_event.md)
 - [StepEvent API](docs/classes/events/step_event.md)
+- [StateEvent API](docs/classes/events/state_event.md)
 - [Broadcast API](docs/classes/events/broadcast.md)
 
 **Enumerations:**
 - [Step Types](docs/enums/step_types.md)
 - [Step Statuses](docs/enums/step_statuses.md)
 - [Workflow Statuses](docs/enums/workflow_statuses.md)
+- [Step Event Names](docs/enums/step_event_names.md)
+- [Workflow Event Names](docs/enums/workflow_event_names.md)
+- [State Event Names](docs/enums/state_event_names.md)
 - [Delay Types](docs/enums/delay_types.md)
 - [Loop Types](docs/enums/loop_types.md)
 

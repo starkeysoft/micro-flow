@@ -32,6 +32,90 @@ State.set('cache.data', { items: [] });
 State.delete('cache.data');
 ```
 
+**Events:** Emits the `deleted` event on the state event emitter.
+
+---
+
+### `State.each(path, callback)`
+
+Iterates over a collection (array or object) located at the specified state path, executing a callback function for each item.
+
+**Parameters:**
+- `path` (string) - The path of the state property to iterate over
+- `callback` (Function) - The function to execute for each item in the collection. Receives `(item, index/key)` as parameters
+
+**Throws:** Error if the state property at the path is not an array or object
+
+**Example (Node.js):**
+```javascript
+import { State } from 'micro-flow';
+
+// Set an array
+State.set('users', [
+  { name: 'Alice', age: 30 },
+  { name: 'Bob', age: 25 }
+]);
+
+// Iterate over array
+State.each('users', (user, index) => {
+  console.log(`${index}: ${user.name}`);
+});
+// Output:
+// 0: Alice
+// 1: Bob
+
+// Set an object
+State.set('config', { host: 'localhost', port: 3000 });
+
+// Iterate over object
+State.each('config', (value, key) => {
+  console.log(`${key}: ${value}`);
+});
+// Output:
+// host: localhost
+// port: 3000
+```
+
+**Events:** Emits the `each` event on the state event emitter.
+
+---
+
+### `State.freeze()`
+
+Freezes the entire state object, making it immutable. After calling this method, any attempts to modify the state will throw an error.
+
+**Returns:** Object - The frozen state object
+
+**Example (Node.js):**
+```javascript
+import { State } from 'micro-flow';
+
+State.set('app.version', '1.0.0');
+const frozenState = State.freeze();
+
+// This will throw an error
+try {
+  State.set('app.version', '2.0.0');
+} catch (error) {
+  console.error('Cannot modify frozen state');
+}
+```
+
+**Example (Browser):**
+```javascript
+import { State } from './micro-flow.js';
+
+// Freeze state for read-only access
+State.set('readonly.data', { value: 42 });
+State.freeze();
+
+console.log(State.get('readonly.data')); // { value: 42 }
+```
+
+**Events:** Emits the `frozen` event on the state event emitter.
+
+**Note:** This operation is typically irreversible. To regain mutability, you would need to call `State.reset()`.
+
 ---
 
 ### `State.get(path, defaultValue)`
@@ -44,8 +128,11 @@ Gets the value of a state property using dot-notation or bracket-notation path a
     - Falsy values (null, undefined, false): Returns entire state object
     - "*" or "": Returns entire state object
 - `defaultValue` (any, optional) - Default value to return if the path doesn't exist (default: `null`)
+- `type` (string, optional) - Type to convert value to. Must be one of `'string'`, `'boolean'`, `'number'` or `null`. If null, or any other value, no conversion is attempted (default: `null`)
 
 **Returns:** any - The value of the state property, or defaultValue if not found
+
+**Events:** Emits the `get` event on the state event emitter.
 
 **Example (Node.js):**
 ```javascript
@@ -95,6 +182,8 @@ Gets the entire state object.
 
 **Returns:** Object - The entire state object
 
+**Events:** Emits the `get_state` event on the state event emitter.
+
 **Example (Node.js):**
 ```javascript
 import { State } from 'micro-flow';
@@ -115,6 +204,8 @@ Sets the value of a state property using dot-notation or bracket-notation path a
 - `value` (any) - The value to set for the state property
 
 **Throws:** Error if path is empty or invalid
+
+**Events:** Emits the `set` event on the state event emitter.
 
 **Example (Node.js):**
 ```javascript
@@ -164,6 +255,10 @@ Merges an object into the current State.
 **Parameters:**
 - `newState` (Object) - The object to merge into the current State
 
+**Returns:** Object - The updated state object
+
+**Events:** Emits the `merge` event on the state event emitter.
+
 **Example (Node.js):**
 ```javascript
 import { State } from 'micro-flow';
@@ -174,6 +269,50 @@ State.merge({
     language: 'en'
   }
 });
+```
+
+---
+
+### `State.reset()`
+
+Resets the state to its default values. This restores the state to the initial configuration that was present when the State class was first loaded.
+
+**Returns:** Object - The reset state object
+
+**Events:** Emits the `reset` event on the state event emitter.
+
+**Example (Node.js):**
+```javascript
+import { State } from 'micro-flow';
+
+// Modify state
+State.set('custom.data', { value: 42 });
+State.merge({ temp: 'data' });
+
+console.log(State.get('custom.data')); // { value: 42 }
+
+// Reset to defaults
+State.reset();
+
+console.log(State.get('custom.data')); // null (no longer exists)
+console.log(State.get('temp')); // null (no longer exists)
+```
+
+**Example (Browser):**
+```javascript
+import { State } from './micro-flow.js';
+
+// Clear all application state
+function clearAppState() {
+  State.reset();
+  console.log('Application state cleared');
+}
+
+// Use in logout function
+function logout() {
+  clearAppState();
+  window.location.href = '/login';
+}
 ```
 
 ---
@@ -203,24 +342,30 @@ const parts3 = State.parsePath("data['key-name'].value");
 
 ---
 
-### `State.getFromPropertyPath(path)`
+### `State.getFromPropertyPath(path, emit)`
 
 Resolves a nested property path within the state object. Supports both dot notation and bracket notation.
 
 **Parameters:**
 - `path` (string) - The path to the property (e.g., "user.profile.name", "users[0].name", "data['key-name']")
+- `emit` (boolean, optional) - Whether to emit the `get_from_property_path` event (default: `true`)
 
 **Returns:** any - The value at the specified path, or undefined if not found
 
+**Events:** Emits the `get_from_property_path` event on the state event emitter if `emit` is `true`.
+
 ---
 
-### `State.setToPropertyPath(path, value)`
+### `State.setToPropertyPath(path, value, emit)`
 
 Sets a nested property value within the state object based on a path. Supports both dot notation and bracket notation. Creates intermediate objects/arrays as needed.
 
 **Parameters:**
 - `path` (string) - The path to the property (e.g., "user.profile.name", "users[0].name", "data['key-name']")
 - `value` (any) - The value to set at the specified path
+- `emit` (boolean, optional) - Whether to emit the `set_to_property_path` event (default: `true`)
+
+**Events:** Emits the `set_to_property_path` event on the state event emitter if `emit` is `true`.
 
 ## Default State Structure
 
@@ -238,11 +383,13 @@ The State singleton initializes with the following structure:
   },
   event_names: {
     workflow: { /* Workflow event names */ },
-    step: { /* Step event names */ }
+    step: { /* Step event names */ },
+    state: { /* State event names */ }
   },
   events: {
     workflow: WorkflowEvent,
-    step: StepEvent
+    step: StepEvent,
+    state: StateEvent
   },
   types: {
     base_types: { /* Base type constants */ },
@@ -315,4 +462,6 @@ function DataDisplay() {
 
 - [Base](base.md) - Uses State for state management
 - [Workflow](workflow.md) - Stores workflow instances in State
+- [StateEvent](events/state_event.md) - State event emitter
+- [State Event Names](../enums/state_event_names.md) - State event name constants
 - [Event System](events/event.md) - Event emitters stored in State

@@ -9,6 +9,7 @@ import { base_types, step_types } from '../../enums/index.js';
  */
 export default class Step extends Base {
   static step_name = 'step';
+  #callable_object = null;
 
   /**
    * Creates a new Step instance.
@@ -30,7 +31,7 @@ export default class Step extends Base {
 
     // Store off the original callable object, because if it's a Step or Workflow,
     // this.callable is set to the execute method of that object, but we may need to access its properties later.
-    this.callable_object = callable;
+    this.#callable_object = callable;
 
     this.step_type = step_type;
     this.sub_step_type = sub_step_type;
@@ -67,7 +68,7 @@ export default class Step extends Base {
     }
 
     if (['step', 'workflow'].includes(this.callable_type)) {
-      this.callable_object.prepareReturnData();
+      return this.#callable_object;
     }
 
     return this;
@@ -80,15 +81,32 @@ export default class Step extends Base {
    * @throws {Error} Throws if callable type is invalid.
    */
   getCallableType(callable) {
-    if (callable instanceof Workflow) {
+    if (callable && callable.base_type === base_types.WORKFLOW) {
       return 'workflow';
-    } else if (callable instanceof Step) {
+    } else if (callable && callable.base_type === base_types.STEP) {
       return 'step';
     } else if (typeof callable === 'function') {
       return 'function';
     } 
 
     throw new Error('Invalid callable type. Must be one of function, Step, or Workflow.');
+  }
+
+  /**
+   * Sets a value in the parent workflow's state.
+   * @param {string} workflowId - ID of the parent workflow.
+   * @param {string} path - Path in the workflow state to set.
+   * @param {*} value - Value to set at the specified path.
+   * @throws {Error} Throws if parent workflow is not found.
+   */
+  setParentWorkflowValue(workflowId, path, value) {
+    const parentWorkflow = this.getState('workflows')[workflowId];
+
+    if (!parentWorkflow) {
+      throw new Error(`Parent workflow with ID ${workflowId} not found.`);
+    }
+
+    parentWorkflow.setState(path, value);
   }
 
   /**
@@ -105,7 +123,7 @@ export default class Step extends Base {
 
       this._callable = callable.execute.bind(callable);
     } else {
-      this._callable = callable;
+      this._callable = callable.bind(this);
     }
   }
 }

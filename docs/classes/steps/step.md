@@ -70,7 +70,6 @@ const parentStep = new Step({
 ## Properties
 
 - `callable` (Function) - The function to execute
-- `callable_object` (Function|Step|Workflow) - Original callable object
 - `callable_type` (string) - Type of callable: 'function', 'step', or 'workflow'
 - `step_type` (string) - Type of the step
 - `sub_step_type` (string|null) - Sub-type of the step
