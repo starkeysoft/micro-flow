@@ -509,7 +509,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 Micro-flow is designed to be:
 
-- **Lightweight** - Small footprint, zero dependencies
+- **Lightweight** - Small footprint, minimal dependencies
 - **Simple** - Easy to learn and use
 - **Flexible** - Works in Node.js and browsers
 - **Powerful** - Handles complex workflows with ease
