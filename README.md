@@ -234,103 +234,11 @@ const step = new Step({
 });
 ```
 
-### Conditional Steps
+### Callables
 
-Execute different code paths based on conditions:
+Most step types accept a `callable` parameter. Callables are the individual actions a step can take.
 
-```javascript
-import { ConditionalStep } from 'micro-flow';
-
-const conditionalStep = new ConditionalStep({
-  name: 'environment-check',
-  conditional: {
-    subject: process.env.NODE_ENV,
-    operator: '===',
-    value: 'production'
-  },
-  true_callable: async () => {
-    return loadProductionConfig();
-  },
-  false_callable: async () => {
-    return loadDevelopmentConfig();
-  }
-});
-```
-
-### Loop Steps
-
-Iterate over collections or repeat while conditions are met:
-
-```javascript
-import { LoopStep, loop_types } from 'micro-flow';
-
-// For-each loop
-const forEachLoop = new LoopStep({
-  name: 'process-items',
-  loop_type: loop_types.FOR_EACH,
-  items: [1, 2, 3, 4, 5],
-  callable: async (item) => {
-    console.log('Processing:', item);
-  }
-});
-
-// While loop
-const whileLoop = new LoopStep({
-  name: 'retry-until-success',
-  loop_type: loop_types.WHILE,
-  condition: () => retryCount < maxRetries,
-  callable: async () => {
-    await attemptOperation();
-  }
-});
-```
-
-### Delay Steps
-
-Delay workflow execution with various timing strategies:
-
-```javascript
-import { DelayStep, delay_types } from 'micro-flow';
-
-// Relative delay (milliseconds)
-const relativeDelay = new DelayStep({
-  name: 'wait-5-seconds',
-  delay_type: delay_types.RELATIVE,
-  delay_duration: 5000
-});
-
-// Absolute delay (specific time)
-const absoluteDelay = new DelayStep({
-  name: 'wait-until-midnight',
-  delay_type: delay_types.ABSOLUTE,
-  delay_timestamp: new Date('2025-12-31T23:59:59')
-});
-
-// Cron-based delay (scheduled)
-const cronDelay = new DelayStep({
-  name: 'daily-task',
-  delay_type: delay_types.CRON,
-  cron_expression: '0 9 * * *'  // Every day at 9 AM
-});
-```
-
-### Flow Control
-
-Control workflow execution with break and skip logic:
-
-```javascript
-import { FlowControlStep, flow_control_types } from 'micro-flow';
-
-const breakStep = new FlowControlStep({
-  name: 'error-check',
-  conditional: {
-    subject: errorCount,
-    operator: '>',
-    value: 0
-  },
-  flow_control_type: flow_control_types.BREAK
-});
-```
+A callable can be any async function, another step, or even a whole workflow. That flexibility allows for everything from very simple workflows to large, modularized flows broken down into logical units for execution.
 
 ### State Management
 
