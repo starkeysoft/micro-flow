@@ -513,6 +513,5 @@ Micro-flow is designed to be:
 - **Simple** - Easy to learn and use
 - **Flexible** - Works in Node.js and browsers
 - **Powerful** - Handles complex workflows with ease
-- **Type-Safe Ready** - Can be extended with TypeScript definitions
 
 Perfect for projects that need workflow orchestration without the complexity of enterprise solutions.
