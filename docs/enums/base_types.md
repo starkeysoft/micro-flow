@@ -74,6 +74,5 @@ function setupEventListeners(instance) {
 
 ## See Also
 
-- [Base](../classes/base.md) - Base class that uses base_types
 - [Workflow](../classes/workflow.md) - Uses WORKFLOW base type
 - [Step](../classes/steps/step.md) - Uses STEP base type

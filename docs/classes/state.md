@@ -460,7 +460,6 @@ function DataDisplay() {
 
 ## See Also
 
-- [Base](base.md) - Uses State for state management
 - [Workflow](workflow.md) - Stores workflow instances in State
 - [StateEvent](events/state_event.md) - State event emitter
 - [State Event Names](../enums/state_event_names.md) - State event name constants

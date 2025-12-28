@@ -12,7 +12,6 @@ Complete API documentation for micro-flow, a lightweight workflow orchestration 
 ### Core Classes
 
 #### Base Classes
-- [Base](classes/base.md) - Base class for workflows and steps
 - [Workflow](classes/workflow.md) - Workflow orchestration class
 - [State](classes/state.md) - Global state management
 

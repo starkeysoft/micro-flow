@@ -1,4 +1,4 @@
-import { LogicStep } from './index.js';
+import LogicStep from './logic_step.js';
 
 /**
  * ConditionalStep class for branching logic based on conditions.

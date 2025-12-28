@@ -1,12 +1,6 @@
 import Step from './step.js';
 import { step_types } from '../../enums/index.js';
 
-const conditional_keys = [
-  'subject',
-  'operator',
-  'value',
-];
-
 /**
  * LogicStep class for conditional logic operations.
  * @class LogicStep

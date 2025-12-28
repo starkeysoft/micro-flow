@@ -2,8 +2,6 @@
 
 Workflow class for managing and executing a sequence of steps.
 
-Extends: [Base](base.md)
-
 ## Constructor
 
 ### `new Workflow(options)`
@@ -378,4 +376,3 @@ Adds a step to the beginning of the workflow.
 
 - [Step](steps/step.md) - Individual workflow steps
 - [FlowControlStep](steps/flow_control_step.md) - Control workflow execution
-- [Base](base.md) - Parent class

@@ -2,8 +2,6 @@
 
 Step class representing an executable unit within a workflow.
 
-Extends: [Base](../base.md)
-
 ## Constructor
 
 ### `new Step(options)`

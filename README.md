@@ -11,7 +11,7 @@ A lightweight, flexible workflow orchestration library for Node.js and browser e
 - 📡 **Event-Driven** - Listen to workflow and step lifecycle events
 - 💾 **State Management** - Built-in global state with nested path access
 - 📢 **Cross-Tab/Worker Communication** - Broadcast messages between browser tabs/windows or between workers in your favorite JS runtime
-- 🌐 **Universal** - Works in Node.js and all modern browsers
+- 🌐 **Universal** - Works in backend runtimes like Node.js and all modern browsers
 - ⚡ **Minimal Dependencies** - Lightweight and simple
 - 🎨 **Framework Friendly** - Integrates seamlessly with React, Vue, your favorite framework and vanilla JS
 
@@ -276,7 +276,7 @@ State.reset();
 
 ### Events
 
-Listen to workflow, step, and state lifecycle events. You can do this using Node's EventEmitter syntax or the browser's CustomEvent syntax:
+Listen to workflow, step, and state lifecycle events. You can do this using Node's EventEmitter syntax or the browser's CustomEvent syntax. Both work in any environment:
 
 ```javascript
 import { State } from 'micro-flow';
@@ -306,7 +306,7 @@ stateEvents.on('deleted', (data) => {
 
 ### Cross-Tab/Worker Communication
 
-Broadcast messages between browser tabs and windows:
+Broadcast messages between browser tabs and windows or across workers in your favorite JS runtime:
 
 ```javascript
 import { Broadcast } from './micro-flow.js';
