@@ -1,6 +1,6 @@
 {
   "name": "@ronaldroe/micro-flow",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A lightweight, flexible workflow orchestration library for Node.js and browser environments. Build complex, sequential processes with ease using an intuitive API that supports conditional logic, flow control, event handling, and state management.",
   "main": "index.js",
   "scripts": {
