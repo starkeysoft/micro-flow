@@ -19,6 +19,7 @@ const step_event_names = {
   STEP_PENDING: 'step_pending',
   STEP_WAITING: 'step_waiting',
   STEP_RETRYING: 'step_retrying',
+  SWITCH_CASE_MATCHED: 'switch_case_matched',
 }
 
 export default step_event_names;
