@@ -1,4 +1,5 @@
 import LogicStep from './logic_step.js';
+import { conditional_step_comparators } from '../../enums/index.js';
 
 /**
  * ConditionalStep class for branching logic based on conditions.
@@ -14,7 +15,7 @@ export default class ConditionalStep extends LogicStep {
    * @param {string} [options.name] - Name of the step.
    * @param {Object} [options.conditional] - Conditional configuration.
    * @param {*} [options.conditional.subject] - Subject to evaluate.
-   * @param {string} [options.conditional.operator] - Comparison operator.
+   * @param {conditional_step_comparators|string} [options.conditional.operator] - Comparison operator.
    * @param {*} [options.conditional.value] - Value to compare against.
    * @param {Function|Step|Workflow} [options.true_callable=async () => {}] - Callable to execute if condition is true.
    * @param {Function|Step|Workflow} [options.false_callable=async () => {}] - Callable to execute if condition is false.
@@ -61,7 +62,7 @@ export default class ConditionalStep extends LogicStep {
       );
 
       // Normally, the callable is automatically set according to its type
-      // here, they are set separately, so we need to account for types
+      // Here, they are set separately, so we need to account for types
       if (typeof true_callable === 'function') {
         result = await true_callable();
       } else {
@@ -75,7 +76,7 @@ export default class ConditionalStep extends LogicStep {
       );
 
       // Normally, the callable is automatically set according to its type
-      // here, they are set separately, so we need to account for types
+      // Here, they are set separately, so we need to account for types
       if (typeof false_callable === 'function') {
         result = await false_callable();
       } else {

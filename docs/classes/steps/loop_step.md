@@ -1,6 +1,6 @@
 # LoopStep
 
-LoopStep class for executing loops within a workflow. Supports both `for_each` and `while` loop types.
+LoopStep class for executing loops within a workflow. Supports `for`, `for_each`, `while`, and `generator` loop types.
 
 Extends: [LogicStep](logic_step.md)
 
@@ -13,14 +13,20 @@ Creates a new LoopStep instance.
 **Parameters:**
 - `options` (Object) - Configuration options
   - `name` (string, optional) - Name of the step
-  - `iterable` (Array|Iterable|Function, required for `for_each`) - Iterable to loop over, or function returning an iterable
-  - `callable` (Function, optional) - Function to execute for each iteration (default: `async () => {}`)
+  - `iterable` (Array|Iterable|Function, required for `for_each`) - Iterable to loop over (or a function returning an iterable)
+  - `callable` (Function, optional) - Callable to execute for each iteration (default: `async () => {}`)
   - `conditional` (Object, required for `while`) - Conditional configuration for while loops
-    - `subject` (any) - Subject to evaluate
-    - `operator` (string) - Comparison operator
-    - `value` (any) - Value to compare against
-  - `loop_type` (string, optional) - Type of loop: `'for_each'` or `'while'` (default: `loop_types.FOR_EACH`)
+    - `subject` (any, optional) - Subject to evaluate
+    - `operator` (conditional_step_comparators|string, optional) - Comparison operator
+    - `value` (any, optional) - Value to compare against
+  - `loop_type` (string, optional) - Type of loop: `'for'`, `'for_each'`, `'generator'`, or `'while'` (default: `loop_types.FOR_EACH`)
+  - `iterations` (number, optional) - Number of iterations to run for `for` loops (default: `0`)
   - `max_iterations` (number, optional) - Maximum iterations to prevent infinite loops (default: `1000`)
+
+**Generator loop notes:**
+- `loop_type` must be `loop_types.GENERATOR`.
+- `callable` must be a generator or async generator function.
+- Each yielded value is appended to `results`.
 
 **Example (Node.js - For Each Loop):**
 ```javascript
@@ -59,6 +65,7 @@ const countToTen = new LoopStep({
     const current = State.get('counter');
     console.log('Count:', current);
     State.set('counter', current + 1);
+    this.subject = State.get('counter');
     return current;
   },
   max_iterations: 100
@@ -99,7 +106,8 @@ await sendEmails.execute();
 ## Properties
 
 - `iterable` (Array|Iterable|Function) - The iterable to loop over (for `for_each` loops)
-- `loop_type` (string) - Type of loop: `'for_each'` or `'while'`
+- `loop_type` (string) - Type of loop: `'for'`, `'for_each'`, `'generator'`, or `'while'`
+- `iterations` (number) - Number of iterations to run (for `for` loops)
 - `max_iterations` (number) - Maximum number of iterations allowed
 - `results` (Array) - Array containing results from each iteration
 - `current_item` (any) - The current item being processed (in `for_each` loops)
@@ -108,6 +116,31 @@ await sendEmails.execute();
 All properties inherited from [LogicStep](logic_step.md)
 
 ## Methods
+
+### `async for_loop()`
+
+Executes the callable a fixed number of times based on `iterations`.
+
+**Returns:** Object - Contains message and array of results
+  - `message` (string) - Completion message with iteration count
+  - `result` (Array) - Array of results from each iteration
+
+**Example (Node.js - Fixed Iterations):**
+```javascript
+import { LoopStep, loop_types } from 'micro-flow';
+
+const repeatFiveTimes = new LoopStep({
+  name: 'repeat-five-times',
+  iterations: 5,
+  loop_type: loop_types.FOR,
+  callable: async function() {
+    return 'tick';
+  }
+});
+
+const result = await repeatFiveTimes.execute();
+console.log(result.result.message);
+```
 
 ### `async for_each_loop()`
 
@@ -203,6 +236,7 @@ const fetchAllPages = new LoopStep({
     State.set('allData', [...State.get('allData'), ...data.items]);
     State.set('hasMore', data.hasNextPage);
     State.set('page', page + 1);
+    this.subject = State.get('hasMore');
     
     return { page, itemCount: data.items.length };
   },
@@ -236,11 +270,14 @@ const retryOperation = new LoopStep({
       const response = await fetch('/api/unstable-endpoint');
       if (response.ok) {
         State.set('success', true);
+        this.subject = State.get('success');
         return { success: true, attempts: attempts + 1 };
       }
+      this.subject = State.get('success');
       return { success: false, attempts: attempts + 1 };
     } catch (error) {
       console.log(`Attempt ${attempts + 1} failed`);
+      this.subject = State.get('success');
       return { success: false, attempts: attempts + 1, error: error.message };
     }
   },
@@ -249,6 +286,34 @@ const retryOperation = new LoopStep({
 
 const result = await retryOperation.execute();
 console.log('Operation result:', result.result);
+```
+
+### `async generator()`
+
+Executes a generator/async generator and appends each yielded value to `results`.
+
+**Returns:** Object - Contains message and array of results
+  - `message` (string) - Completion message with iteration count
+  - `result` (Array) - Array of yielded values
+
+**Throws:** Error - If `callable` is not a generator or async generator function
+
+**Example (Node.js - Generator Loop):**
+```javascript
+import { LoopStep, loop_types } from 'micro-flow';
+
+const streamItems = new LoopStep({
+  name: 'stream-items',
+  loop_type: loop_types.GENERATOR,
+  callable: async function* () {
+    yield { id: 1, status: 'ready' };
+    yield { id: 2, status: 'ready' };
+  }
+});
+
+const result = await streamItems.execute();
+console.log(result.result);
+// [{ id: 1, status: 'ready' }, { id: 2, status: 'ready' }]
 ```
 
 ## Common Patterns
@@ -333,6 +398,7 @@ const pollJobStatus = new LoopStep({
     if (status.state === 'completed') {
       State.set('jobComplete', true);
     }
+    this.subject = State.get('jobComplete');
     
     // Wait 1 second between polls
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -478,6 +544,7 @@ const countdownTimer = new LoopStep({
     }).execute();
     
     State.set('countdown', current - 1);
+    this.subject = State.get('countdown');
     return { remaining: current - 1 };
   },
   max_iterations: 20
@@ -491,9 +558,11 @@ console.log('Countdown complete!');
 
 - The `max_iterations` parameter prevents infinite loops by limiting the number of iterations
 - In `for_each` loops, the current item is available via `this.current_item` in the callable
-- In `while` loops, the condition is re-evaluated before each iteration
+- In `for` loops, `this.current_item` is not set
+- In `while` loops, the condition is re-evaluated before each iteration using the current `subject` value
+- When using dynamic values in `while` loops, update `this.subject` (or call `this.setConditional(...)`) inside the callable
 - The callable is automatically bound to the LoopStep instance, allowing access to instance properties
-- Both loop types return an object with a message and a results array
+- All loop types return an object with a message and a results array
 - When using while loops, ensure the callable modifies the condition to eventually become false
 
 ## Related

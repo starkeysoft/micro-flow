@@ -3,7 +3,6 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import logic_step_types from './logic_step_types.js';
 import step_types from './step_types.js';
-import { sub } from 'date-fns';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -100,31 +99,6 @@ const generate_sub_step_types = (directories = []) => {
   return types;
 }
 
-/**
- * Pre-generated mapping of all built-in Step class names to their step_name identifiers.
- * This is a singleton object exported as the default export.
- * 
- * **Changed in recent version:** Previously exported as a function, now exported as a
- * pre-generated object for improved performance and consistency.
- * 
- * @constant {Object.<string, string|null>}
- * @example
- * import sub_step_types from 'micro-flow';
- * 
- * console.log(sub_step_types);
- * // {
- * //   "Step": null,
- * //   "ConditionalStep": "conditional",
- * //   "DelayStep": "delay",
- * //   "LoopStep": "loop",
- * //   ...
- * // }
- * 
- * // Check if a class name is a registered step type
- * if (sub_step_types['ConditionalStep']) {
- *   console.log('ConditionalStep is a registered step type');
- * }
- */
 const sub_step_types = generate_sub_step_types();
 
 export default sub_step_types;

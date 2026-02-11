@@ -5,8 +5,10 @@
  * @readonly
  */
 const loop_types = {
+  FOR: 'for',
+  FOR_EACH: 'for_each',
+  GENERATOR: 'generator',
   WHILE: 'while',
-  FOR_EACH: 'for_each'
 };
 
 export default loop_types;

@@ -7,6 +7,7 @@ Enumeration of step types used throughout the workflow system. These types categ
 - `ACTION` - `'action'` - General purpose action step (default)
 - `LOGIC` - `'logic'` - Logic-based step with conditional evaluation
 - `DELAY` - `'delay'` - Time-based delay step
+- `LOOP` - `'loop'` - Loop-based step for iterating over data or conditions
 
 ## Usage
 
@@ -57,6 +58,24 @@ const delayStep = new DelayStep({
   delay_type: 'relative',
   delay_duration: 5000  // 5 seconds
 });
+```
+
+### Node.js - Loop Step
+
+```javascript
+import { LoopStep, loop_types, step_types } from 'micro-flow';
+
+const loopStep = new LoopStep({
+  name: 'loop-items',
+  step_type: step_types.LOOP,
+  loop_type: loop_types.FOR_EACH,
+  iterable: ['a', 'b', 'c'],
+  callable: async function() {
+    return this.current_item;
+  }
+});
+
+await loopStep.execute();
 ```
 
 ### React - Filtering Steps by Type

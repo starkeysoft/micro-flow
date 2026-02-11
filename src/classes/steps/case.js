@@ -1,4 +1,5 @@
 import LogicStep from './logic_step.js';
+import { conditional_step_comparators } from '../../enums/index.js';
 
 /**
  * Case class representing a single case in a switch statement.
@@ -16,7 +17,7 @@ export default class Case extends LogicStep {
    * @param {string} [options.name] - Name of the case.
    * @param {Object} [options.conditional] - Conditional configuration.
    * @param {*} [options.conditional.subject=null] - Subject to evaluate (typically set by SwitchStep).
-   * @param {string} [options.conditional.operator=null] - Comparison operator.
+   * @param {conditional_step_comparators|string} [options.conditional.operator=null] - Comparison operator.
    * @param {*} [options.conditional.value=null] - Value to compare against.
    * @param {Function|Step|Workflow} [options.callable=async () => {}] - Function, Step, or Workflow to execute when case matches.
    * @param {boolean} [options.force_subject_override=false] - Force override of subject even if already set.

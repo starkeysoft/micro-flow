@@ -4,10 +4,29 @@ Enumeration of loop types for LoopStep.
 
 ## Values
 
+- `FOR` - `'for'` - For loop - runs the callable a fixed number of times using `iterations`
 - `WHILE` - `'while'` - While loop - continues while condition is true
 - `FOR_EACH` - `'for_each'` - For-each loop - iterates over collection items
+- `GENERATOR` - `'generator'` - Generator loop - iterates yielded values from a generator/async generator callable
 
 ## Usage
+
+### Node.js - For Loop (Fixed Iterations)
+
+```javascript
+import { LoopStep, loop_types } from 'micro-flow';
+
+const heartbeat = new LoopStep({
+  name: 'heartbeat',
+  loop_type: loop_types.FOR,
+  iterations: 3,
+  callable: async () => {
+    console.log('tick');
+  }
+});
+
+await heartbeat.execute();
+```
 
 ### Node.js - For-Each Loop
 
@@ -23,8 +42,9 @@ const users = [
 const forEachLoop = new LoopStep({
   name: 'process-users',
   loop_type: loop_types.FOR_EACH,
-  items: users,
-  callable: async (user) => {
+  iterable: users,
+  callable: async function() {
+    const user = this.current_item;
     console.log(`Processing user: ${user.name}`);
     await saveToDatabase(user);
   }
@@ -43,7 +63,11 @@ State.set('counter', 0);
 const whileLoop = new LoopStep({
   name: 'retry-until-success',
   loop_type: loop_types.WHILE,
-  condition: () => State.get('counter') < 5,
+  conditional: {
+    subject: State.get('counter'),
+    operator: '<',
+    value: 5
+  },
   callable: async () => {
     const counter = State.get('counter');
     console.log(`Attempt ${counter + 1}`);
@@ -54,10 +78,29 @@ const whileLoop = new LoopStep({
     } catch (error) {
       State.set('counter', counter + 1);
     }
+    this.subject = State.get('counter');
   }
 });
 
 await whileLoop.execute();
+```
+
+### Node.js - Generator Loop
+
+```javascript
+import { LoopStep, loop_types } from 'micro-flow';
+
+const generatorLoop = new LoopStep({
+  name: 'stream-events',
+  loop_type: loop_types.GENERATOR,
+  callable: async function* () {
+    yield { event: 'start' };
+    yield { event: 'finish' };
+  }
+});
+
+const result = await generatorLoop.execute();
+console.log(result.result);
 ```
 
 ### Browser - Processing Array
@@ -77,8 +120,9 @@ const imageWorkflow = new Workflow({
     new LoopStep({
       name: 'load-each-image',
       loop_type: loop_types.FOR_EACH,
-      items: imageUrls,
-      callable: async (url) => {
+      iterable: imageUrls,
+      callable: async function() {
+        const url = this.current_item;
         const img = new Image();
         img.src = url;
         
@@ -114,8 +158,9 @@ function BatchProcessor() {
     const loop = new LoopStep({
       name: 'process-batch',
       loop_type: loop_types.FOR_EACH,
-      items: items,
-      callable: async (item) => {
+      iterable: items,
+      callable: async function() {
+        const item = this.current_item;
         // Simulate processing
         await new Promise(resolve => setTimeout(resolve, 500));
         
@@ -174,7 +219,11 @@ const loadAllPages = async () => {
   const whileLoop = new LoopStep({
     name: 'load-pages',
     loop_type: loop_types.WHILE,
-    condition: () => State.get('hasMore'),
+    conditional: {
+      subject: State.get('hasMore'),
+      operator: '===',
+      value: true
+    },
     callable: async () => {
       const page = State.get('page');
       const response = await fetch(`/api/items?page=${page}`);
@@ -187,6 +236,7 @@ const loadAllPages = async () => {
       } else {
         State.set('page', page + 1);
       }
+      this.subject = State.get('hasMore');
     }
   });
 
@@ -215,13 +265,12 @@ const retryWorkflow = new Workflow({
     new LoopStep({
       name: 'retry-loop',
       loop_type: loop_types.WHILE,
-      condition: () => {
-        const attempts = State.get('retry.attempts');
-        const success = State.get('retry.success');
-        const max = State.get('retry.max');
-        
-        return attempts < max && !success;
+      conditional: {
+        subject: State.get('retry.success'),
+        operator: '===',
+        value: false
       },
+      max_iterations: State.get('retry.max'),
       callable: async () => {
         const attempts = State.get('retry.attempts');
         
@@ -245,6 +294,7 @@ const retryWorkflow = new Workflow({
             setTimeout(resolve, Math.pow(2, attempts) * 1000)
           );
         }
+        this.subject = State.get('retry.success');
       }
     }),
     new Step({
@@ -278,20 +328,23 @@ function chunk(array, size) {
 
 const largeDataset = Array.from({ length: 1000 }, (_, i) => i);
 const chunks = chunk(largeDataset, 100);
+let chunkIndex = 0;
 
 const batchLoop = new LoopStep({
   name: 'process-chunks',
   loop_type: loop_types.FOR_EACH,
-  items: chunks,
-  callable: async (chunk, index) => {
-    console.log(`Processing chunk ${index + 1}/${chunks.length}`);
+  iterable: chunks,
+  callable: async function() {
+    const currentIndex = chunkIndex++;
+    const chunk = this.current_item;
+    console.log(`Processing chunk ${currentIndex + 1}/${chunks.length}`);
     
     // Process chunk
     await Promise.all(
       chunk.map(item => processItem(item))
     );
     
-    console.log(`Chunk ${index + 1} complete`);
+    console.log(`Chunk ${currentIndex + 1} complete`);
   }
 });
 

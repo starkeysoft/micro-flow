@@ -1,5 +1,6 @@
 import { loop_types, step_types } from '../../enums/index.js';
 import LogicStep from './logic_step.js';
+import { conditional_step_comparators } from '../../enums/index.js';
 
 /**
  * LoopStep class for executing loops within a workflow.
@@ -13,13 +14,13 @@ export default class LoopStep extends LogicStep {
    * Creates a new LoopStep instance.
    * @param {Object} options - Configuration options.
    * @param {string} [options.name] - Name of the step.
-   * @param {Array|Iterable} options.iterable - Iterable to loop over or function returning an iterable. Required for 'for_each' loops.
+   * @param {Array|Iterable|Function} options.iterable - Iterable to loop over or function returning an iterable. Required for 'for_each' and 'generator' loops.
    * @param {Function} [options.callable=async () => {}] - Function to execute for each iteration.
    * @param {Object} [options.conditional] - Conditional configuration for while loops. Required for 'while' loops.
    * @param {*} [options.conditional.subject] - Subject to evaluate.
-   * @param {string} [options.conditional.operator] - Comparison operator.
+   * @param {conditional_step_comparators|string} [options.conditional.operator] - Comparison operator.
    * @param {*} [options.conditional.value] - Value to compare against.
-   * @param {string} [options.loop_type=loop_types.FOR_EACH] - Type of loop ('for_each' or 'while').
+   * @param {string} [options.loop_type=loop_types.FOR_EACH] - Type of loop ('for', 'for_each', 'while', or 'generator').
    * @param {number} [options.max_iterations=1000] - Maximum number of iterations to prevent infinite loops.
    */
   constructor({
@@ -32,11 +33,13 @@ export default class LoopStep extends LogicStep {
       value: null,
     },
     loop_type = loop_types.FOR_EACH,
+    iterations = 0,
     max_iterations = 1000,
   }) {
     super({ name, conditional });
     this.iterable = iterable;
     this.loop_type = loop_type;
+    this.iterations = iterations > max_iterations ? max_iterations : iterations;
     this.max_iterations = max_iterations;
     this.results = [];
     this.current_item = null;
@@ -53,6 +56,47 @@ export default class LoopStep extends LogicStep {
   }
 
   /**
+   * Executes a generator/async generator and appends yielded values to results.
+   * @throws {Error} If the callable is not a generator or async generator function.
+   * @returns {Object} - An object containing a message and the results of the loop.
+   */
+  async generator() {
+    if (!this._callable.constructor.name.includes('Generator')) {
+      throw new Error('Iterable must be a generator function for generator loops');
+    }
+
+    let iterations = 0;
+    for (const item of await this._callable()) {
+      this.results.push(item);
+
+      if (++iterations >= this.max_iterations) {
+        break;
+      }
+    }
+
+    return {
+      message: `Generator loop ${this.name} completed after ${iterations} iterations`,
+      result: this.results
+    };
+  }
+
+  /**
+   * Executes a for loop calling the callable for a set number of iterations
+   * @returns {Object} - An object containing a message and the results of the loop.
+   */
+  async for_loop() {
+    let i = 0;
+    for (; i < this.iterations; i++) {
+      this.results.push(await this._callable());
+    }
+
+    return {
+      message: `For loop ${this.name} completed after ${i} iterations`,
+      result: this.results
+    };
+  }
+
+  /**
    * Executes the callable for each item in the iterable.
    * @throws {Error} If the iterable is not provided.
    * @returns {Object} - An object containing a message and the results of the loop.
@@ -62,12 +106,12 @@ export default class LoopStep extends LogicStep {
       throw new Error('Iterable is required for for_each loops');
     }
 
+    if (typeof this.iterable === 'function') {
+      this.iterable = this.iterable();
+    }
+
     let iterations = 0;
     for (const item of this.iterable) {
-      if (iterations >= this.max_iterations) {
-        break;
-      }
-
       iterations++;
       this.current_item = item;
       this.results.push(await this._callable());

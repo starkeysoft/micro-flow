@@ -104,6 +104,19 @@ Evaluates the conditional expression using the configured operator.
 - `'<'`, `'less_than'` - Less than
 - `'>='`, `'greater_than_or_equal'` - Greater than or equal
 - `'<='`, `'less_than_or_equal'` - Less than or equal
+- `'string_contains'`, `'string_includes'` - String contains value
+- `'array_contains'`, `'array_includes'` - Array contains value
+- `'empty'` - Subject is empty (`''`, `null`, `undefined`, or length `0`)
+- `'not_empty'` - Subject is not empty
+- `'regex_match'` - Subject matches regex pattern string in `value`
+- `'regex_not_match'` - Subject does not match regex pattern string in `value`
+- `'starts_with'` - Subject starts with string `value`
+- `'ends_with'` - Subject ends with string `value`
+- `'in'` - Subject is included in array `value`
+- `'not_in'` - Subject is not included in array `value`
+- `'nullish'` - Subject is `null` or `undefined`
+- `'not_nullish'` - Subject is not `null` or `undefined`
+- `'custom_function'` - `value` is a function invoked as `value(subject)`
 
 **Example (Node.js - Custom Validation):**
 ```javascript
@@ -153,6 +166,24 @@ function validateForm(formData) {
 
 const isValid = validateForm({ email: 'user@example.com', age: '25' });
 console.log('Form is valid:', isValid);
+```
+
+**Example (Node.js - Custom Function Comparator):**
+```javascript
+import { LogicStep } from 'micro-flow';
+
+const customCheck = new LogicStep({
+  name: 'custom-check',
+  conditional: {
+    subject: { score: 42 },
+    operator: 'custom_function',
+    value: (subject) => subject.score >= 40
+  }
+});
+
+if (customCheck.checkCondition()) {
+  console.log('Custom check passed');
+}
 ```
 
 ### `conditionalIsValid()`

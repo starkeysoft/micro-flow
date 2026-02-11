@@ -1,5 +1,6 @@
 import { LogicStep } from './index.js';
 import flow_control_types from '../../enums/flow_control_types.js';
+import { conditional_step_comparators } from '../../enums/index.js';
 
 /**
  * FlowControlStep class for controlling workflow execution flow (break, continue, skip, pause).
@@ -14,7 +15,7 @@ export default class FlowControlStep extends LogicStep {
    * @param {Object} options - Configuration options.
    * @param {Object} [options.conditional] - Conditional configuration.
    * @param {*} [options.conditional.subject] - Subject to evaluate.
-   * @param {string} [options.conditional.operator] - Comparison operator.
+   * @param {conditional_step_comparators|string} [options.conditional.operator] - Comparison operator.
    * @param {*} [options.conditional.value] - Value to compare against.
    * @param {string} [options.name] - Name of the step.
    * @param {string} [options.flow_control_type=flow_control_types.BREAK] - Type of flow control.
