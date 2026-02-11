@@ -465,6 +465,10 @@ Full documentation is available in the [docs](docs/) directory:
 - [LogicStep API](docs/classes/steps/logic_step.md)
 - [ConditionalStep API](docs/classes/steps/conditional_step.md)
 - [FlowControlStep API](docs/classes/steps/flow_control_step.md)
+- [CaseStep API](docs/classes/steps/case.md)
+- [SwitchStep API](docs/classes/steps/switch_step.md)
+- [LoopStep API](docs/classes/steps/loop_step.md)
+- [DelayStep API](docs/classes/steps/delay_step.md)
 
 **Events:**
 - [Event System](docs/classes/events/event.md)
@@ -474,7 +478,12 @@ Full documentation is available in the [docs](docs/) directory:
 - [Broadcast API](docs/classes/events/broadcast.md)
 
 **Enumerations:**
+- [Base Types](docs/enums/base_types.md)
 - [Step Types](docs/enums/step_types.md)
+- [Sub Step Types](docs/enums/sub_step_types.md)
+- [Logic Step Types](docs/enums/logic_step_types.md)
+- [Conditional Step Comparators](docs/enums/conditional_step_comparators.md)
+- [Flow Control Types](docs/enums/flow_control_types.md)
 - [Step Statuses](docs/enums/step_statuses.md)
 - [Workflow Statuses](docs/enums/workflow_statuses.md)
 - [Step Event Names](docs/enums/step_event_names.md)
@@ -482,6 +491,7 @@ Full documentation is available in the [docs](docs/) directory:
 - [State Event Names](docs/enums/state_event_names.md)
 - [Delay Types](docs/enums/delay_types.md)
 - [Loop Types](docs/enums/loop_types.md)
+- [Errors and Warnings](docs/enums/errors.md)
 
 ## Browser Compatibility
 

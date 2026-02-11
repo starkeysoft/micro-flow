@@ -20,6 +20,10 @@ Complete API documentation for micro-flow, a lightweight workflow orchestration 
 - [LogicStep](classes/steps/logic_step.md) - Conditional logic step
 - [ConditionalStep](classes/steps/conditional_step.md) - Branching conditional step
 - [FlowControlStep](classes/steps/flow_control_step.md) - Flow control step (break, skip)
+- [CaseStep](classes/steps/case.md) - Case-based matching step
+- [SwitchStep](classes/steps/switch_step.md) - Switch-style branching step
+- [LoopStep](classes/steps/loop_step.md) - Looping step
+- [DelayStep](classes/steps/delay_step.md) - Delay execution step
 
 #### Events
 - [Event](classes/events/event.md) - Base event emitter
@@ -35,6 +39,8 @@ Complete API documentation for micro-flow, a lightweight workflow orchestration 
 - [Step Types](enums/step_types.md) - General step categorization
 - [Sub Step Types](enums/sub_step_types.md) - Step class name mappings
 - [Logic Step Types](enums/logic_step_types.md) - Logic step subcategories
+- [Conditional Step Comparators](enums/conditional_step_comparators.md) - Comparison operators
+- [Flow Control Types](enums/flow_control_types.md) - Flow control types
 - [Loop Types](enums/loop_types.md) - Loop iteration types
 - [Delay Types](enums/delay_types.md) - Delay calculation types
 
@@ -47,10 +53,6 @@ Complete API documentation for micro-flow, a lightweight workflow orchestration 
 - [Workflow Event Names](enums/workflow_event_names.md) - Workflow lifecycle events
 - [State Event Names](enums/state_event_names.md) - State operation events
 
-#### Operator Enums
-- [Conditional Step Comparators](enums/conditional_step_comparators.md) - Comparison operators
-- [Flow Control Types](enums/flow_control_types.md) - Flow control types
-
 #### System Enums
 - [Errors and Warnings](enums/errors.md) - Error and warning messages
 
@@ -60,11 +62,13 @@ Complete API documentation for micro-flow, a lightweight workflow orchestration 
 - [Basic Workflow](examples/basic-workflow-node.md) - Simple workflow example
 - [Data Processing Pipeline](examples/data-pipeline-node.md) - ETL pipeline example
 - [API Integration](examples/api-integration-node.md) - External API integration
+- [Step Hopping](examples/step-hopping-node.md) - Jumping between steps in Node
 
 #### Frontend (Browser)
 - [React Form Workflow](examples/form-workflow-react.md) - Multi-step form with React
 - [Vue Data Fetching](examples/data-fetching-vue.md) - Data fetching with Vue
 - [Vanilla JS Animation](examples/animation-browser.md) - Animation sequencing
+- [React Step Hopping](examples/step-hopping-react.md) - Jumping between steps in React
 
 ## Installation
 
