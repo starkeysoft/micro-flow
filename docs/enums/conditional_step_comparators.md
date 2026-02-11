@@ -29,6 +29,42 @@ Enumeration of comparison operators for conditional steps. Provides both named a
 - `LESS_THAN_OR_EQUAL` - `'less_than_or_equal'` - Less than or equal comparison
 - `SIGN_LESS_THAN_OR_EQUAL` - `'<='` - Less than or equal (symbolic)
 
+### String Operators
+
+- `STRING_CONTAINS` - `'string_contains'` - Subject contains the value (string)
+- `STRING_INCLUDES` - `'string_includes'` - Subject includes the value (string)
+- `STRING_STARTS_WITH` - `'string_starts_with'` - Subject starts with the value
+- `STRING_ENDS_WITH` - `'string_ends_with'` - Subject ends with the value
+
+### Array Operators
+
+- `ARRAY_CONTAINS` - `'array_contains'` - Subject contains the value (array)
+- `ARRAY_INCLUDES` - `'array_includes'` - Subject includes the value (array)
+
+### Empty Checks
+
+- `EMPTY` - `'empty'` - Subject is empty (string/array/object)
+- `NOT_EMPTY` - `'not_empty'` - Subject is not empty (string/array/object)
+
+### Regex Operators
+
+- `REGEX_MATCH` - `'regex_match'` - Subject matches the regex value
+- `REGEX_NOT_MATCH` - `'regex_not_match'` - Subject does not match the regex value
+
+### Set Membership Operators
+
+- `IN` - `'in'` - Subject is in the value collection
+- `NOT_IN` - `'not_in'` - Subject is not in the value collection
+
+### Nullish Checks
+
+- `NULLISH` - `'nullish'` - Subject is null or undefined
+- `NOT_NULLISH` - `'not_nullish'` - Subject is not null or undefined
+
+### Custom Operator
+
+- `CUSTOM_FUNCTION` - `'custom_function'` - Delegates evaluation to a custom function. When using custom function, the `value` must be a function that takes one argument. The `subject` is passed to the `value` function.
+
 ## Usage Examples
 
 ### Node.js - Numeric Comparison
@@ -220,6 +256,21 @@ await workflow.execute();
 | `LESS_THAN` | `<` | Less than | `3 < 7` → true |
 | `GREATER_THAN_OR_EQUAL` | `>=` | Greater than or equal | `5 >= 5` → true |
 | `LESS_THAN_OR_EQUAL` | `<=` | Less than or equal | `4 <= 4` → true |
+| `STRING_CONTAINS` | n/a | String contains | `'abc' contains 'b'` → true |
+| `STRING_INCLUDES` | n/a | String includes | `'abc' includes 'b'` → true |
+| `STRING_STARTS_WITH` | n/a | String starts with | `'abc' startsWith 'a'` → true |
+| `STRING_ENDS_WITH` | n/a | String ends with | `'abc' endsWith 'c'` → true |
+| `ARRAY_CONTAINS` | n/a | Array contains | `[1,2] contains 2` → true |
+| `ARRAY_INCLUDES` | n/a | Array includes | `[1,2] includes 2` → true |
+| `EMPTY` | n/a | Empty check | `'' is empty` → true |
+| `NOT_EMPTY` | n/a | Not empty check | `'a' not empty` → true |
+| `REGEX_MATCH` | n/a | Regex match | `'abc' =~ /a/` → true |
+| `REGEX_NOT_MATCH` | n/a | Regex non-match | `'abc' !~ /z/` → true |
+| `IN` | n/a | Membership | `2 in [1,2,3]` → true |
+| `NOT_IN` | n/a | Non-membership | `4 not in [1,2,3]` → true |
+| `NULLISH` | n/a | Null/undefined check | `null is nullish` → true |
+| `NOT_NULLISH` | n/a | Not null/undefined check | `'a' not nullish` → true |
+| `CUSTOM_FUNCTION` | n/a | Custom evaluation | `fn(subject, value)` → result |
 
 ## See Also
 
