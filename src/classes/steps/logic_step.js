@@ -30,7 +30,7 @@ export default class LogicStep extends Step {
   }) {
     super({
       name,
-      base_type: step_types.LOGIC_STEP,
+      base_type: step_types.LOGIC,
       callable
     });
 
@@ -43,9 +43,9 @@ export default class LogicStep extends Step {
    * @throws {Error} Throws if operator is unknown.
    */
   checkCondition() {
-    const subject = this.subject;
-    const operator = this.operator;
-    const value = this.value;
+    const subject = this.conditional.subject;
+    const operator = this.conditional.operator;
+    const value = this.conditional.value;
 
     switch (operator) {
       case this.getState('conditional_step_comparators.STRICT_EQUALS'):
@@ -128,12 +128,12 @@ export default class LogicStep extends Step {
    */
   conditionalIsValid() {
     return (
-      this.subject !== null &&
-      this.subject !== undefined &&
-      this.operator !== null &&
-      this.operator !== undefined &&
-      this.value !== null &&
-      this.value !== undefined
+      this.conditional.subject !== null &&
+      this.conditional.subject !== undefined &&
+      this.conditional.operator !== null &&
+      this.conditional.operator !== undefined &&
+      this.conditional.value !== null &&
+      this.conditional.value !== undefined
     );
   }
 
@@ -143,8 +143,6 @@ export default class LogicStep extends Step {
    * @throws {Error} Throws if conditional is invalid.
    */
   setConditional(conditional) {
-    this.subject = conditional.subject;
-    this.operator = conditional.operator;
-    this.value = conditional.value;
+    this.conditional = { subject: conditional.subject, operator: conditional.operator, value: conditional.value };
   }
 }

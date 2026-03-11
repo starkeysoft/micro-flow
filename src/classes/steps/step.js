@@ -106,7 +106,7 @@ export default class Step extends Base {
       throw new Error(`Parent workflow with ID ${workflowId} not found.`);
     }
 
-    parentWorkflow.setState(path, value);
+    parentWorkflow[path] = value;
   }
 
   /**
