@@ -57,17 +57,18 @@ export default class Workflow extends Base {
         return this;
       }
   
-      if (this.getState('should_break')) {
-        this.log('workflow_break_executed', `Workflow "${this.name}" execution broken at step ${this._steps[i].name} - ${this._steps[i].id}.`);
+      if (this.should_break) {
+        this.should_break = false;
+        this.log(this.getState('event_names.workflow').WORKFLOW_BREAK_EXECUTED, `Workflow "${this.name}" execution broken at step ${this._steps[i].name} - ${this._steps[i].id}.`);
         break;
       }
 
-      if (this.getState('should_skip')) {
+      if (this.should_skip) {
         this.log(
           this.getState('events.workflow.event_names.WORKFLOW_STEP_SKIPPED'),
           `Workflow "${this.name}" skipping step ${this._steps[i].name} - ${this._steps[i].id}.`
         );
-        this.setState('should_skip', false);
+        this.should_skip = false;
         continue;
       }
 
@@ -114,15 +115,11 @@ export default class Workflow extends Base {
   async step() {
     const step = this.steps_by_id[this.current_step];
 
-    let result;
-    try {
-      step.parentWorkflowId = this.id;
-      result = await step.execute();
-      this.results.push(result);
-    } catch (error) {
-      if (this.exit_on_error) {
-        throw error;
-      }
+    step.parentWorkflowId = this.id;
+    const result = await step.execute();
+
+    if (step.status === this.getState('statuses.step.FAILED')) {
+      throw step.errors[step.errors.length - 1] ?? new Error(`Step "${step.name}" failed`);
     }
 
     return result;

@@ -6,6 +6,7 @@
  * @readonly
  */
 const workflow_event_names = {
+  WORKFLOW_BREAK_EXECUTED: 'workflow_break_executed',
   WORKFLOW_CANCELLED: 'workflow_cancelled',
   WORKFLOW_COMPLETE: 'workflow_complete',
   WORKFLOW_CREATED: 'workflow_created',

@@ -96,20 +96,18 @@ class State {
     const collection = State.get(path);
     
     if (Array.isArray(collection)) {
-      collection.forEach(async (item, index) => {
+      for (const [index, item] of collection.entries()) {
         events.state.emit(event_names.state.EACH, { state });
-
         await callback(item, index);
-      });
+      }
     } else if (
       typeof collection === 'object' &&
       Object.prototype.toString.call(collection) === '[object Object]'
     ) {
-      Object.keys(collection).forEach(async key => {
+      for (const key of Object.keys(collection)) {
         events.state.emit(event_names.state.EACH, { state });
-
         await callback(collection[key], key);
-      });
+      }
     } else {
       throw new Error(errors.VALUE_NOT_ITERABLE);
     }

@@ -54,7 +54,7 @@ export default class Base {
     }
 
     const logMessage = message ? `\n[${this.base_type.toUpperCase()} - ${this.name}] ${message}` : `\n[${this.base_type.toUpperCase()} - ${this.name}] Event: ${event_name}`;
-    const logType = event_name.endsWith('_FAILED') ? 'error' : 'log';
+    const logType = event_name.endsWith('_failed') ? 'error' : 'log';
 
     console[logType](logMessage);
   }
