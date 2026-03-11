@@ -1,8 +1,11 @@
 {
   "name": "@ronaldroe/micro-flow",
-  "version": "1.1.0",
+  "version": "0.0.9",
   "description": "A lightweight, flexible workflow orchestration library for Node.js and browser environments. Build complex, sequential processes with ease using an intuitive API that supports conditional logic, flow control, event handling, and state management.",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
   "scripts": {
     "build": "node build.js",
     "test": "vitest run",
@@ -34,7 +37,7 @@
   },
   "homepage": "https://github.com/starkeysoft/micro-flow#readme",
   "files": [
-    "index.js",
+    "dist/",
     "src/",
     "README.md",
     "LICENSE"
