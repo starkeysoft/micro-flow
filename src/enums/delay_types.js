@@ -21,13 +21,6 @@ const delay_types = {
   ABSOLUTE: 'absolute',
   
   /**
-   * Delay using a cron expression for scheduled execution.
-   * Use with cron_expression property.
-   * @type {string}
-   */
-  CRON: 'cron',
-  
-  /**
    * Delay for a relative duration in milliseconds.
    * Use with delay_duration property.
    * @type {string}

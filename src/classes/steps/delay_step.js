@@ -28,7 +28,7 @@ export default class DelayStep extends Step {
   }) {
     super({
       name,
-      type: step_types.DELAY,
+      step_type: step_types.DELAY,
     });
 
     this.delay_type = delay_type;
