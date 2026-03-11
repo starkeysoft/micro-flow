@@ -25,11 +25,14 @@ export default class SwitchStep extends Step {
   }) {
     super({
       name,
-      type: SwitchStep.step_name,
+      step_type: SwitchStep.step_name,
     });
 
     this.cases = cases;
-    this.default_callable = default_callable.bind(this);
+    const defaultCallableType = this.getCallableType(default_callable);
+    this.default_callable = defaultCallableType === 'function'
+      ? default_callable.bind(this)
+      : default_callable.execute.bind(default_callable);
     this.subject = subject;
 
     this.callable = this.switch.bind(this);

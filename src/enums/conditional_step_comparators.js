@@ -26,11 +26,15 @@ const conditional_step_comparators = {
 
   STRING_CONTAINS: 'string_contains',
   STRING_INCLUDES: 'string_includes',
+  STRING_NOT_CONTAINS: 'string_not_contains',
+  STRING_NOT_INCLUDES: 'string_not_includes',
   STRING_STARTS_WITH: 'string_starts_with',
   STRING_ENDS_WITH: 'string_ends_with',
 
   ARRAY_CONTAINS: 'array_contains',
   ARRAY_INCLUDES: 'array_includes',
+  ARRAY_NOT_CONTAINS: 'array_not_contains',
+  ARRAY_NOT_INCLUDES: 'array_not_includes',
 
   EMPTY: 'empty',
   NOT_EMPTY: 'not_empty',
@@ -43,6 +47,9 @@ const conditional_step_comparators = {
 
   NULLISH: 'nullish',
   NOT_NULLISH: 'not_nullish',
+
+  IS_TYPE: 'is_type',
+  IS_NOT_TYPE: 'is_not_type',
 
   CUSTOM_FUNCTION: 'custom_function'
 };
