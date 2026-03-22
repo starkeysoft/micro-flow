@@ -17,7 +17,7 @@ export default class Step extends Base {
    * @param {string} [options.name] - Name of the step.
    * @param {string} [options.step_type=step_types.ACTION] - Type of the step.
    * @param {Function|Step|Workflow} [options.callable=async () => {}] - Function, Step, or Workflow to execute.
-   * @param {string} [options.sub_step_type=null] - Sub-type of the step.
+   * @param {sub_step_types|null} [options.sub_step_type=null] - Sub-type of the step (use values from the sub_step_types enum).
    */
   constructor({
     name,
