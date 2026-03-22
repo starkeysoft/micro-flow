@@ -40,7 +40,7 @@ export default class DelayStep extends Step {
 
   /**
    * Executes an absolute delay until the specified timestamp. If the timestamp is in the past, it continues immediately.
-   * @returns {Promise<Object>} Resolves with a message object when delay completes.
+   * @returns {Promise<DelayStep>} Resolves with the DelayStep instance when delay completes.
    */
   async absolute() {
     const now = new Date();
@@ -85,7 +85,7 @@ export default class DelayStep extends Step {
 
   /**
    * Executes a relative delay for the specified duration. If the delay duration is zero or negative, it continues immediately.
-   * @returns {Promise<Object>} Resolves with a message object when delay completes.
+   * @returns {Promise<DelayStep>} Resolves with the DelayStep instance when delay completes.
    */
   async relative() {
     if (this.relative_delay_ms <= 0) {

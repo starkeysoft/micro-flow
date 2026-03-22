@@ -1,9 +1,9 @@
-import { LogicStep } from './index.js';
+import LogicStep from './logic_step.js';
 import flow_control_types from '../../enums/flow_control_types.js';
 import { conditional_step_comparators } from '../../enums/index.js';
 
 /**
- * FlowControlStep class for controlling workflow execution flow (break, continue, skip, pause).
+ * FlowControlStep class for controlling workflow execution flow (break or skip).
  * @class FlowControlStep
  * @extends LogicStep
  */

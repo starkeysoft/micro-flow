@@ -13,7 +13,7 @@ Creates a new Step instance.
   - `name` (string, optional) - Name of the step
   - `step_type` (string, optional) - Type of the step (default: `step_types.ACTION`)
   - `callable` (Function|Step|Workflow, optional) - Function, Step, or Workflow to execute (default: `async () => {}`)
-  - `sub_step_type` (string|null, optional) - Sub-type of the step (default: `null`)
+  - `sub_step_type` (sub_step_types|null, optional) - Sub-type of the step, use values from the `sub_step_types` enum (default: `null`)
 
 **Example (Node.js):**
 ```javascript
@@ -70,7 +70,7 @@ const parentStep = new Step({
 - `callable` (Function) - The function to execute
 - `callable_type` (string) - Type of callable: 'function', 'step', or 'workflow'
 - `step_type` (string) - Type of the step
-- `sub_step_type` (string|null) - Sub-type of the step
+- `sub_step_type` (sub_step_types|null) - Sub-type of the step (from `sub_step_types` enum)
 - `errors` (Array) - Array of errors encountered during execution
 - `result` (any) - Result of the step execution
 - `retry_results` (Array) - Array of retry attempt results

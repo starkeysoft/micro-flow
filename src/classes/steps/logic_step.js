@@ -140,7 +140,6 @@ export default class LogicStep extends Step {
   /**
    * Sets the conditional properties.
    * @param {Object} conditional - Conditional configuration object.
-   * @throws {Error} Throws if conditional is invalid.
    */
   setConditional(conditional) {
     this.conditional = { subject: conditional.subject, operator: conditional.operator, value: conditional.value };
