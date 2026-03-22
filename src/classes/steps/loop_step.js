@@ -21,6 +21,7 @@ export default class LoopStep extends LogicStep {
    * @param {conditional_step_comparators|string} [options.conditional.operator] - Comparison operator.
    * @param {*} [options.conditional.value] - Value to compare against.
    * @param {string} [options.loop_type=loop_types.FOR_EACH] - Type of loop ('for', 'for_each', 'while', or 'generator').
+   * @param {number} [options.iterations=0] - Number of iterations to execute. Only used for 'for' loops.
    * @param {number} [options.max_iterations=1000] - Maximum number of iterations to prevent infinite loops.
    */
   constructor({

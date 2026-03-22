@@ -241,7 +241,10 @@ class State {
    * @returns {object} The reset state object.
    */
   static reset() {
-    state = { ...defaultState };
+    state = { 
+      ...defaultState,
+      workflows: {},  // Always create fresh to avoid shared reference mutation
+    };
     events.state.emit(event_names.state.RESET, { state });
     return state;
   }

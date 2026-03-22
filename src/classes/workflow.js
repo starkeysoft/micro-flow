@@ -1,4 +1,4 @@
-import { Base } from './index.js';
+import Base from './base.js';
 import { base_types } from '../enums/index.js';
 
 /**
@@ -51,12 +51,6 @@ export default class Workflow extends Base {
     this.markAsRunning();
 
     for (let i = 0; i < this._steps.length; i++) {
-      if (this.should_pause) {
-        this.markAsPaused();
-        this.should_pause = false;
-        return this;
-      }
-  
       if (this.should_break) {
         this.should_break = false;
         this.log(this.getState('event_names.workflow').WORKFLOW_BREAK_EXECUTED, `Workflow "${this.name}" execution broken at step ${this._steps[i].name} - ${this._steps[i].id}.`);
@@ -84,6 +78,12 @@ export default class Workflow extends Base {
         if (this.exit_on_error) {
           return this;
         }
+      }
+
+      if (this.should_pause) {
+        this.markAsPaused();
+        this.should_pause = false;
+        return this;
       }
     }
 
@@ -155,6 +155,11 @@ export default class Workflow extends Base {
    * @param {number} index - The index at which to insert the step.
    */
   addStepAtIndex(step, index) {
+    if (!this.steps_by_id || typeof this.steps_by_id !== 'object') {
+      this.steps_by_id = {};
+    }
+
+    this.steps_by_id[step.id] = step;
     step.parentWorkflowId = this.id;
     this._steps.splice(index, 0, step);
   }
