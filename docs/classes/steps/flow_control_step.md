@@ -1,6 +1,6 @@
 # FlowControlStep
 
-FlowControlStep class for controlling workflow execution flow (break, continue, skip, pause).
+FlowControlStep class for controlling workflow execution flow (break or skip).
 
 Extends: [LogicStep](logic_step.md)
 
@@ -12,10 +12,10 @@ Creates a new FlowControlStep instance.
 
 **Parameters:**
 - `options` (Object) - Configuration options
-  - `conditional` (Object, required) - Conditional configuration
-    - `subject` (any) - Subject to evaluate
-    - `operator` (conditional_step_comparators|string) - Comparison operator
-    - `value` (any) - Value to compare against
+  - `conditional` (Object, optional) - Conditional configuration
+    - `subject` (any, optional) - Subject to evaluate (default: `null`)
+    - `operator` (conditional_step_comparators|string, optional) - Comparison operator (default: `null`)
+    - `value` (any, optional) - Value to compare against (default: `null`)
   - `name` (string, optional) - Name of the step
   - `flow_control_type` (string, optional) - Type of flow control (default: `flow_control_types.BREAK`)
 
