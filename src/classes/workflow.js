@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import Base from './base.js';
 import { base_types } from '../enums/index.js';
 
@@ -29,6 +30,8 @@ export default class Workflow extends Base {
 
     this.exit_on_error = exit_on_error;
     this.throw_on_empty = throw_on_empty;
+    this.sessions = {};
+    this.current_session_id = null;
   }
 
   /**
@@ -38,6 +41,10 @@ export default class Workflow extends Base {
    * @throws {Error} Throws if workflow is empty and throw_on_empty is true.
    */
   async execute() {
+    if (!this.current_session_id) {
+      this.current_session_id = uuidv4();
+    }
+
     if (this.isEmpty()) {
       if (this.throw_on_empty) {
         throw new Error('Cannot execute an empty workflow');
@@ -180,6 +187,23 @@ export default class Workflow extends Base {
   }
 
   /**
+   * Closes the current session and stores a snapshot of the workflow state.
+   */
+  closeCurrentSession() {
+    if (!this.current_session_id) {
+      return;
+    }
+
+    this.sessions[this.current_session_id] = {
+      results: [...this.results],
+      status: this.status,
+      timing: { ...this.timing },
+      closed_at: new Date()
+    };
+    this.current_session_id = null;
+  }
+
+  /**
    * Deletes a step from the workflow by its ID.
    * @param {string} stepId - The ID of the step to delete.
    */
@@ -233,7 +257,15 @@ export default class Workflow extends Base {
   isEmpty() {
     return !this._steps || !this._steps.length
   }
-  
+
+  /**
+   * Marks the workflow as complete and closes the current session.
+   */
+  markAsComplete() {
+    super.markAsComplete();
+    this.closeCurrentSession();
+  }
+
   /**
    * Marks the workflow as created.
    * @returns {string} The CREATED status.
@@ -248,7 +280,15 @@ export default class Workflow extends Base {
 
     return this.getState('statuses.workflow').CREATED;
   }
-  
+
+  /**
+   * Marks the workflow as failed and closes the current session.
+   */
+  markAsFailed() {
+    super.markAsFailed();
+    this.closeCurrentSession();
+  }
+
   /**
    * Marks the workflow as paused.
    */
