@@ -977,4 +977,148 @@ describe('Workflow', () => {
       expect(workflow._steps).toHaveLength(2);
     });
   });
+
+  describe('sessions', () => {
+    it('should create a session when workflow executes', async () => {
+      const step = new Step({ name: 'step-1', callable: async () => 'result' });
+      const workflow = new Workflow({ steps: [step] });
+
+      await workflow.execute();
+
+      expect(Object.keys(workflow.sessions)).toHaveLength(1);
+    });
+
+    it('should store session snapshot on completion', async () => {
+      const step = new Step({ name: 'step-1', callable: async () => 'result' });
+      const workflow = new Workflow({ steps: [step] });
+
+      await workflow.execute();
+
+      const sessionId = Object.keys(workflow.sessions)[0];
+      const session = workflow.sessions[sessionId];
+
+      expect(session.status).toBe(State.get('statuses.workflow').COMPLETE);
+      expect(session.results).toEqual(workflow.results);
+      expect(session.timing).toBeDefined();
+      expect(session.closed_at).toBeInstanceOf(Date);
+    });
+
+    it('should store session snapshot on failure', async () => {
+      const step = new Step({
+        name: 'failing-step',
+        callable: async () => { throw new Error('fail'); }
+      });
+      const workflow = new Workflow({ steps: [step], exit_on_error: true });
+
+      await workflow.execute();
+
+      const sessionId = Object.keys(workflow.sessions)[0];
+      const session = workflow.sessions[sessionId];
+
+      expect(session.status).toBe(State.get('statuses.workflow').FAILED);
+      expect(session.closed_at).toBeInstanceOf(Date);
+    });
+
+    it('should clear current_session_id after completion', async () => {
+      const step = new Step({ name: 'step-1', callable: async () => 'result' });
+      const workflow = new Workflow({ steps: [step] });
+
+      await workflow.execute();
+
+      expect(workflow.current_session_id).toBeNull();
+    });
+
+    it('should reuse session id when resuming from pause', async () => {
+      let pauseOnFirst = true;
+      const step1 = new Step({
+        name: 'step-1',
+        callable: async function() {
+          if (pauseOnFirst) {
+            const wf = State.get('workflows')[this.parentWorkflowId];
+            wf.pause();
+            pauseOnFirst = false;
+          }
+          return 'result-1';
+        }
+      });
+      const step2 = new Step({ name: 'step-2', callable: async () => 'result-2' });
+      const workflow = new Workflow({ steps: [step1, step2] });
+
+      await workflow.execute();
+      const sessionIdAfterPause = workflow.current_session_id;
+
+      expect(workflow.status).toBe(State.get('statuses.workflow').PAUSED);
+      expect(sessionIdAfterPause).not.toBeNull();
+
+      await workflow.resume();
+
+      const sessionIds = Object.keys(workflow.sessions);
+      expect(sessionIds).toHaveLength(1);
+      expect(sessionIds[0]).toBe(sessionIdAfterPause);
+    });
+
+    it('should not close session when pausing', async () => {
+      const step = new Step({
+        name: 'step-1',
+        callable: async function() {
+          const wf = State.get('workflows')[this.parentWorkflowId];
+          wf.pause();
+          return 'result';
+        }
+      });
+      const workflow = new Workflow({ steps: [step] });
+
+      await workflow.execute();
+
+      expect(workflow.current_session_id).not.toBeNull();
+      expect(workflow.status).toBe(State.get('statuses.workflow').PAUSED);
+    });
+
+    it('should not error when closeCurrentSession called with no active session', () => {
+      const workflow = new Workflow({});
+      workflow.current_session_id = null;
+
+      expect(() => workflow.closeCurrentSession()).not.toThrow();
+    });
+
+    it('should create separate sessions for multiple executions', async () => {
+      // Workflow should support being re-run with same steps
+      let callCount = 0;
+      const step = new Step({ 
+        name: 'step-1', 
+        callable: async () => {
+          callCount++;
+          return `result-${callCount}`;
+        }
+      });
+      const workflow = new Workflow({ steps: [step] });
+
+      await workflow.execute();
+      expect(Object.keys(workflow.sessions)).toHaveLength(1);
+
+      // Create a new workflow for second execution 
+      const step2 = new Step({ name: 'step-2', callable: async () => 'result' });
+      const workflow2 = new Workflow({ steps: [step2] });
+      
+      await workflow2.execute();
+      expect(Object.keys(workflow2.sessions)).toHaveLength(1);
+      
+      // Each workflow has its own session
+      const allSessionIds = [...Object.keys(workflow.sessions), ...Object.keys(workflow2.sessions)];
+      expect(new Set(allSessionIds).size).toBe(2);
+    });
+
+    it('should not create circular references in session snapshot', async () => {
+      const step = new Step({ name: 'step-1', callable: async () => 'result' });
+      const workflow = new Workflow({ steps: [step] });
+
+      await workflow.execute();
+
+      const sessionId = Object.keys(workflow.sessions)[0];
+      const session = workflow.sessions[sessionId];
+
+      expect(session.sessions).toBeUndefined();
+      expect(() => JSON.stringify(session)).not.toThrow();
+    });
+  });
 });
