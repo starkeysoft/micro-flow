@@ -1,19 +1,18 @@
 # Micro-Flow
 
-A lightweight, flexible workflow orchestration library for Node.js and browser environments. Build complex, sequential processes with ease using an intuitive API that supports conditional logic, flow control, event handling, and state management.
+Micro-Flow is a simple, lightweight, cross platform (browser and runtime) logic orchestration library. Micro-Flow makes async logic flows first-class objects — named, observable, pauseable, and composable — so a multi-step process is something you can reason about, monitor, and control, not just a wall of awaits.
 
 ## Features
 
-- 🚀 **Simple & Intuitive** - Easy-to-understand API for building workflows
-- 🔄 **Sequential Execution** - Run steps in order with automatic error handling
-- 🌿 **Conditional Logic** - Branch execution based on conditions
-- 🎯 **Flow Control** - Break, skip, or pause workflow execution
-- 📡 **Event-Driven** - Listen to workflow and step lifecycle events
-- 💾 **State Management** - Built-in global state with nested path access
-- 📢 **Cross-Tab/Worker Communication** - Broadcast messages between browser tabs/windows or between workers in your favorite JS runtime
-- 🌐 **Universal** - Works in backend runtimes like Node.js and all modern browsers
-- ⚡ **Minimal Dependencies** - Lightweight and simple
-- 🎨 **Framework Friendly** - Integrates seamlessly with React, Vue, your favorite framework and vanilla JS
+- �️ **Observable** - Every step and logic flow emits lifecycle events (`STEP_FAILED`, `WORKFLOW_COMPLETE`, etc.) so you always know what's running, what finished, and what broke — no log-sprinkling required
+- ⏸️ **Pauseable & Resumeable** - Suspend a running logic flow mid-pipeline (e.g. waiting on user input or an external signal) and resume it without losing state
+- 🌿 **First-Class Branching** - `ConditionalStep` and `SwitchStep` keep branching logic out of your callables and in the logic flow structure where it belongs
+- 🎯 **Fine-Grained Flow Control** - Break out of or skip steps in a logic flow dynamically at runtime
+- 💾 **Shared State Singleton** - Steps communicate through a global `State` object with dot/bracket-notation path access — no threading data through function arguments
+- 📢 **Cross-Tab/Worker Communication** - Events broadcast automatically via `BroadcastChannel`, reaching other tabs and workers with no extra wiring
+- 🌐 **Universal** - Works in Node.js (≥18) and all modern browsers
+- 🎨 **Framework Friendly** - Integrates seamlessly with React, Vue, your favorite framework, and vanilla JS
+- ⚡ **Minimal Dependencies** - Lightweight and focused
 
 ## Installation
 
@@ -238,7 +237,7 @@ const step = new Step({
 
 Most step types accept a `callable` parameter. Callables are the individual actions a step can take.
 
-A callable can be any async function, another step, or even a whole workflow. That flexibility allows for everything from very simple workflows to large, modularized flows broken down into logical units for execution.
+A callable can be any async function, another step, or even a whole workflow. That flexibility allows for everything from very simple logic flows to large, modularized flows broken down into logical units for execution.
 
 ### State Management
 
@@ -306,26 +305,24 @@ stateEvents.on('deleted', (data) => {
 
 ### Cross-Tab/Worker Communication
 
-Broadcast messages between browser tabs and windows or across workers in your favorite JS runtime:
+Events broadcast automatically between browser tabs and windows or across workers when emitted, with no extra wiring needed:
 
 ```javascript
-import { Broadcast } from './micro-flow.js';
+import { State } from './micro-flow.js';
 
-const broadcast = new Broadcast('my-channel');
+// All events broadcast automatically via BroadcastChannel
+const event = State.get('events.workflow');
 
-// Send messages to other tabs
-broadcast.send({ type: 'update', data: { userId: 123 } });
+// Send event to other tabs
+event.emit('my-event', { type: 'update', data: { userId: 123 } });
 
-// Receive messages from other tabs
-broadcast.onReceive((data) => {
+// Receive events from other tabs
+event.on('my-event', (data) => {
   console.log('Message from another tab:', data);
   if (data.type === 'update') {
     updateUI(data.data);
   }
 });
-
-// Clean up when done
-broadcast.destroy();
 ```
 
 ## Use Cases
@@ -475,7 +472,7 @@ Full documentation is available in the [docs](docs/) directory:
 - [WorkflowEvent API](docs/classes/events/workflow_event.md)
 - [StepEvent API](docs/classes/events/step_event.md)
 - [StateEvent API](docs/classes/events/state_event.md)
-- [Broadcast API](docs/classes/events/broadcast.md)
+
 
 **Enumerations:**
 - [Base Types](docs/enums/base_types.md)
@@ -492,36 +489,3 @@ Full documentation is available in the [docs](docs/) directory:
 - [Delay Types](docs/enums/delay_types.md)
 - [Loop Types](docs/enums/loop_types.md)
 - [Errors and Warnings](docs/enums/errors.md)
-
-## Browser Compatibility
-
-Micro-flow works in all modern browsers that support:
-- ES6 Modules
-- Async/await
-- CustomEvent API
-- EventTarget API
-
-Supported browsers:
-- Chrome/Edge 63+
-- Firefox 60+
-- Safari 11.1+
-- Opera 50+
-
-## Node.js Compatibility
-
-Requires Node.js 14+ for full ES6 module support.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Why Micro-Flow?
-
-Micro-flow is designed to be:
-
-- **Lightweight** - Small footprint, minimal dependencies
-- **Simple** - Easy to learn and use
-- **Flexible** - Works in Node.js and browsers
-- **Powerful** - Handles complex workflows with ease
-
-Perfect for projects that need workflow orchestration without the complexity of enterprise solutions.

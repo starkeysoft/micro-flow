@@ -2,7 +2,7 @@
 
 Event class for micro-flow. Provides a simple event emitter implementation for workflow steps and state changes.
 
-This class is used for emitting and listening to events within workflows and steps. For broadcasting events across multiple workflows or listeners, see the [Broadcast](broadcast.md) class.
+This class is used for emitting and listening to events within workflows and steps. Events can be broadcast across multiple workflows or listeners using the native BroadcastChannel API.
 
 Extends: EventTarget
 
@@ -152,7 +152,7 @@ Listen for broadcasts on a given event name (channel).
 - `event_name` (string) - The event name/channel to listen for
 - `listener` (Function) - Callback for broadcasted data
 
-**Returns:** Broadcast - Returns the Broadcast instance for manual control
+**Returns:** BroadcastChannel - Returns the BroadcastChannel instance with compatibility aliases: `send(data)` → `postMessage(data)`, `destroy()` → `close()`
 
 **Example (Node.js - Cross-Process Communication):**
 ```javascript
@@ -175,7 +175,7 @@ Listen for both local and broadcast events.
 - `event_name` (string) - The event name/channel to listen for
 - `listener` (Function) - Callback for event data
 
-**Returns:** Object - Returns `{ event: this, broadcast: Broadcast instance }`
+**Returns:** Object - Returns `{ event: this, broadcast: BroadcastChannel }` where the BroadcastChannel has compatibility aliases: `send(data)` → `postMessage(data)`, `destroy()` → `close()`
 
 **Example (Browser):**
 ```javascript
@@ -446,6 +446,5 @@ function PerformanceMonitor() {
 
 - [WorkflowEvent](workflow_event.md) - Workflow-specific events
 - [StepEvent](step_event.md) - Step-specific events
-- [Broadcast](broadcast.md) - Cross-context event broadcasting
 - [Workflow Event Names](../../enums/workflow_event_names.md) - Available workflow events
 - [Step Event Names](../../enums/step_event_names.md) - Available step events

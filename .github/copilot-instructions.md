@@ -2,7 +2,9 @@
 
 ## Project Overview
 
-Micro-Flow is a workflow orchestration library published as `@ronaldroe/micro-flow`. It runs in Node.js (>=18) and all modern browsers. The package uses ES modules (`"type": "module"` in package.json).
+Micro-Flow is a logic flow orchestration library published as `@ronaldroe/micro-flow`. It runs in Node.js (>=18) and all modern browsers. The package uses ES modules (`"type": "module"` in package.json).
+
+> **Terminology note:** When describing this project, use "logic flow" instead of "workflow". The term "workflow" refers specifically to the `Workflow` class, which is only one component of the library.
 
 ## Commands
 

@@ -30,7 +30,7 @@ Complete API documentation for micro-flow, a lightweight workflow orchestration 
 - [WorkflowEvent](classes/events/workflow_event.md) - Workflow-specific events
 - [StepEvent](classes/events/step_event.md) - Step-specific events
 - [StateEvent](classes/events/state_event.md) - State-specific events
-- [Broadcast](classes/events/broadcast.md) - Cross-tab/window communication
+
 
 ### Enumerations
 
