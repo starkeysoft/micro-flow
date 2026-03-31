@@ -1,12 +1,11 @@
 import { errors, warnings } from '../../enums/index.js';
-import Broadcast from './broadcast.js';
 
 /**
  * Event class for micro-flow
  * Provides a simple event emitter implementation for workflow steps and state changes.
  *
  * This class is used for emitting and listening to events within workflows and steps.
- * For broadcasting events across multiple workflows or listeners, see the Broadcast class.
+ * For broadcasting events across multiple workflows or listeners, it uses BroadcastChannel.
  */
 class Event extends EventTarget {
   /**
@@ -50,9 +49,9 @@ class Event extends EventTarget {
     const result = this.dispatchEvent(custom_event);
 
     try {
-      const channel = new Broadcast(event_name);
-      channel.send(workingData);
-      channel.destroy();
+      const channel = new BroadcastChannel(event_name);
+      channel.postMessage(workingData);
+      channel.close();
     } catch (e) {
       console.warn(warnings.BROADCAST_FAILED, e);
     }
@@ -63,11 +62,19 @@ class Event extends EventTarget {
    * Listen for broadcasts on a given event name (channel).
    * @param {string} event_name - The event name/channel to listen for.
    * @param {Function} listener - Callback for broadcasted data.
-   * @returns {Broadcast} Returns the Broadcast instance for manual control.
+   * @returns {BroadcastChannel} Returns the channel with send() and destroy() aliases.
    */
   onBroadcast(event_name, listener) {
-    const channel = new Broadcast(event_name);
-    channel.onReceive(listener);
+    const channel = new BroadcastChannel(event_name);
+    channel.onmessage = (event) => {
+      listener(event.data);
+    };
+    channel.send = (data) => {
+      channel.postMessage(data);
+    };
+    channel.destroy = () => {
+      channel.close();
+    };
     return channel;
   }
 
@@ -75,7 +82,7 @@ class Event extends EventTarget {
    * Listen for both local and broadcast events.
    * @param {string} event_name - The event name/channel to listen for.
    * @param {Function} listener - Callback for event data.
-   * @returns {Object} Returns { event: this, broadcast: Broadcast instance }
+    * @returns {Object} Returns { event: this, broadcast: BroadcastChannel }
    */
   onAny(event_name, listener) {
     this.on(event_name, listener);
