@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import Base from './base.js';
 import { base_types } from '../enums/index.js';
 
@@ -42,7 +41,7 @@ export default class Workflow extends Base {
    */
   async execute() {
     if (!this.current_session_id) {
-      this.current_session_id = uuidv4();
+      this.current_session_id = crypto.randomUUID();
     }
 
     if (this.isEmpty()) {

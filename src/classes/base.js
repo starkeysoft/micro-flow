@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import { base_types } from '../enums/index.js';
 import State from './state.js';
 
@@ -15,7 +14,7 @@ export default class Base {
    * @param {string} [options.base_type=base_types.STEP] - Type of the base instance.
    */
   constructor({ name, base_type = base_types.STEP }) {
-    this.id = uuidv4();
+    this.id = crypto.randomUUID();
     this.name = name ?? `${base_type}-${this.id}`;
 
     this.base_type = base_type;
