@@ -95,10 +95,9 @@ export default class Step extends Base {
 
     }
 
-    if (
-      this.status !== this.getState('statuses')[this.base_type].FAILED
-      && this.status !== this.getState('statuses')[this.base_type].COMPLETE
-    ) {
+    const { FAILED, COMPLETE } = this.getState('statuses')[this.base_type];
+
+    if (! [FAILED, COMPLETE].includes(this.status)) {
       this.markAsComplete();
     }
 
