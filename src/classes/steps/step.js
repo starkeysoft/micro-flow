@@ -15,14 +15,18 @@ export default class Step extends Base {
    * Creates a new Step instance.
    * @param {Object} options - Configuration options.
    * @param {string} [options.name] - Name of the step.
-   * @param {string} [options.step_type=step_types.ACTION] - Type of the step.
    * @param {Function|Step|Workflow} [options.callable=async () => {}] - Function, Step, or Workflow to execute.
+   * @param {number} [options.max_retries=0] - Maximum number of retries on failure.
+   * @param {number} [options.max_timeout_ms=30000] - Maximum execution time in milliseconds before timing out.
+   * @param {string} [options.step_type=step_types.ACTION] - Type of the step.
    * @param {sub_step_types|null} [options.sub_step_type=null] - Sub-type of the step (use values from the sub_step_types enum).
    */
   constructor({
     name,
-    step_type = step_types.ACTION,
     callable = async () => {},
+    max_retries = 0,
+    max_timeout_ms = 30000,
+    step_type = step_types.ACTION,
     sub_step_type = null,
   }) {
     super({ name, base_type: base_types.STEP });
@@ -33,12 +37,17 @@ export default class Step extends Base {
     // this.callable is set to the execute method of that object, but we may need to access its properties later.
     this.#callable_object = callable;
 
+    this.max_retries = max_retries;
+    this.retry_count = 0;
+    this.max_timeout_ms = max_timeout_ms;
     this.step_type = step_type;
     this.sub_step_type = sub_step_type;
 
     this.errors = [];
     this.result = null;
     this.retry_results = [];
+    this.timeout = null;
+    this.start_time = null;
   }
 
   /**
@@ -47,23 +56,49 @@ export default class Step extends Base {
    * @returns {Promise<Step>} The step instance with execution results.
    */
   async execute() {
+    if (!this.timeout ) {
+      this.timeout = new Promise((_, reject) =>
+        setTimeout(reject, this.max_timeout_ms, new Error(`Step "${this.name}" timed out after ${this.max_timeout_ms}ms`))
+      );
+    }
+
+    if (!this.start_time) {
+      this.start_time = new Date();
+    }
+
     this.markAsRunning();
 
     try {
-      this.result = await this._callable();
+      this.result = await Promise.race([this._callable(), this.timeout]);
     } catch (error) {
-      this.errors.push(error);
-      this.markAsFailed();
+      if (this.max_retries && this.retry_count < this.max_retries) {
+        this.retry_count++;
+        this.retry_results.push({
+          retry_count: this.retry_count,
+          result: await this.execute(),
+        });
 
-      this.timing.end_time = new Date();
-      this.timing.execution_time_ms = this.timing.end_time - this.timing.start_time;
+        this.timing.end_time = new Date();
+        this.timing.execution_time_ms = this.timing.end_time - this.timing.start_time;
+      } else {
+        this.errors.push(error);
 
-      if (this.getState('exit_on_error')) {
-        throw error;
+        this.timing.end_time = new Date();
+        this.timing.execution_time_ms = this.timing.end_time - this.timing.start_time;
+
+        this.markAsFailed();
+
+        if (this.getState('exit_on_error')) {
+          throw error;
+        }
       }
+
     }
 
-    if (this.status !== this.getState('statuses')[this.base_type].FAILED) {
+    if (
+      this.status !== this.getState('statuses')[this.base_type].FAILED
+      && this.status !== this.getState('statuses')[this.base_type].COMPLETE
+    ) {
       this.markAsComplete();
     }
 

@@ -11,8 +11,10 @@ Creates a new Step instance.
 **Parameters:**
 - `options` (Object) - Configuration options
   - `name` (string, optional) - Name of the step
-  - `step_type` (string, optional) - Type of the step (default: `step_types.ACTION`)
   - `callable` (Function|Step|Workflow, optional) - Function, Step, or Workflow to execute (default: `async () => {}`)
+  - `max_retries` (number, optional) - Maximum number of retries on failure (default: `0`)
+  - `max_timeout_ms` (number, optional) - Maximum execution time in milliseconds before timing out (default: `30000`)
+  - `step_type` (string, optional) - Type of the step (default: `step_types.ACTION`)
   - `sub_step_type` (sub_step_types|null, optional) - Sub-type of the step, use values from the `sub_step_types` enum (default: `null`)
 
 **Example (Node.js):**
@@ -69,6 +71,11 @@ const parentStep = new Step({
 
 - `callable` (Function) - The function to execute
 - `callable_type` (string) - Type of callable: 'function', 'step', or 'workflow'
+- `max_retries` (number) - Maximum number of retries on failure
+- `retry_count` (number) - Number of retries attempted so far
+- `max_timeout_ms` (number) - Maximum execution time in milliseconds before timing out
+- `timeout` (Promise|null) - Internal timeout promise, set on first `execute()` call
+- `start_time` (Date|null) - Timestamp when execution first began
 - `step_type` (string) - Type of the step
 - `sub_step_type` (sub_step_types|null) - Sub-type of the step (from `sub_step_types` enum)
 - `errors` (Array) - Array of errors encountered during execution
@@ -81,7 +88,9 @@ const parentStep = new Step({
 
 Executes the step's callable function, Step, or Workflow.
 
-**Returns:** Promise\<Step\> - The step instance with execution results
+The timeout promise is created (once) on the first call and races against the callable via `Promise.race`. If the step fails and `max_retries > 0`, execution is retried up to `max_retries` times, with each attempt's result stored in `retry_results`. If `exit_on_error` is set in State, a failure throws instead of being swallowed.
+
+**Returns:** Promise\<Step\> - The step instance with execution results. If the callable was a `Step` or `Workflow`, returns that object directly instead of the wrapper.
 
 **Example (Node.js - Database Operation):**
 ```javascript
