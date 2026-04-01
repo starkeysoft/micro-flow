@@ -219,7 +219,7 @@ const workflow = new Workflow({
 
 ### Steps
 
-Steps are individual units of work that execute functions, other steps, or even entire workflows:
+Steps are individual units of work that execute functions, other steps, or even entire workflows. Steps have retry and timeout mechanisms.
 
 ```javascript
 import { Step } from 'micro-flow';
