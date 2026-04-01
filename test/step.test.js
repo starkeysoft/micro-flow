@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Step from '../src/classes/steps/step.js';
 import Workflow from '../src/classes/workflow.js';
 import State from '../src/classes/state.js';
@@ -59,6 +59,41 @@ describe('Step', () => {
 
       expect(step.callable_type).toBe('function');
       expect(step._callable).toBeDefined();
+    });
+
+    it('should default max_retries to 0', () => {
+      const step = new Step({});
+      expect(step.max_retries).toBe(0);
+    });
+
+    it('should default max_timeout_ms to 30000', () => {
+      const step = new Step({});
+      expect(step.max_timeout_ms).toBe(30000);
+    });
+
+    it('should set max_retries when provided', () => {
+      const step = new Step({ max_retries: 3 });
+      expect(step.max_retries).toBe(3);
+    });
+
+    it('should set max_timeout_ms when provided', () => {
+      const step = new Step({ max_timeout_ms: 5000 });
+      expect(step.max_timeout_ms).toBe(5000);
+    });
+
+    it('should initialize retry_count to 0', () => {
+      const step = new Step({});
+      expect(step.retry_count).toBe(0);
+    });
+
+    it('should initialize timeout to null', () => {
+      const step = new Step({});
+      expect(step.timeout).toBeNull();
+    });
+
+    it('should initialize start_time to null', () => {
+      const step = new Step({});
+      expect(step.start_time).toBeNull();
     });
 
     it('should have static step_name property', () => {
@@ -283,6 +318,231 @@ describe('Step', () => {
       await step.execute();
 
       expect(step.status).toBe(State.get('statuses.step').FAILED);
+    });
+  });
+
+  describe('timeout', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('should fail with a timeout error when callable exceeds max_timeout_ms', async () => {
+      const step = new Step({
+        name: 'slow-step',
+        max_timeout_ms: 1000,
+        callable: async () => new Promise(() => {}), // never resolves
+      });
+
+      const promise = step.execute();
+      vi.advanceTimersByTime(1000);
+      await promise;
+
+      expect(step.status).toBe(State.get('statuses.step').FAILED);
+      expect(step.errors).toHaveLength(1);
+      expect(step.errors[0].message).toMatch(/timed out after 1000ms/);
+    });
+
+    it('should include the step name in the timeout error message', async () => {
+      const step = new Step({
+        name: 'named-step',
+        max_timeout_ms: 500,
+        callable: async () => new Promise(() => {}),
+      });
+
+      const promise = step.execute();
+      vi.advanceTimersByTime(500);
+      await promise;
+
+      expect(step.errors[0].message).toContain('"named-step"');
+    });
+
+    it('should not time out when callable completes within max_timeout_ms', async () => {
+      const step = new Step({
+        name: 'fast-step',
+        max_timeout_ms: 1000,
+        callable: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          return 'done';
+        },
+      });
+
+      const promise = step.execute();
+      vi.advanceTimersByTime(100);
+      await promise;
+
+      expect(step.status).toBe(State.get('statuses.step').COMPLETE);
+      expect(step.result).toBe('done');
+    });
+
+    it('should create the timeout promise only once across retries', async () => {
+      let callCount = 0;
+      const step = new Step({
+        name: 'retry-timeout-step',
+        max_retries: 2,
+        max_timeout_ms: 1000,
+        callable: async () => {
+          callCount++;
+          throw new Error('fail');
+        },
+      });
+
+      const promise = step.execute();
+      await promise;
+
+      const firstTimeout = step.timeout;
+      expect(firstTimeout).not.toBeNull();
+
+      // timeout is the same promise object set on first execute
+      expect(step.timeout).toBe(firstTimeout);
+    });
+
+    it('should set start_time only on the first execute call', async () => {
+      let callCount = 0;
+      const step = new Step({
+        name: 'retry-start-time',
+        max_retries: 1,
+        max_timeout_ms: 1000,
+        callable: async () => {
+          callCount++;
+          if (callCount === 1) throw new Error('first fail');
+          return 'ok';
+        },
+      });
+
+      await step.execute();
+
+      expect(step.start_time).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('retries', () => {
+    it('should retry up to max_retries times on failure', async () => {
+      let callCount = 0;
+      const step = new Step({
+        name: 'retry-step',
+        max_retries: 3,
+        callable: async () => {
+          callCount++;
+          throw new Error('always fails');
+        },
+      });
+
+      await step.execute();
+
+      expect(callCount).toBe(4); // 1 original + 3 retries
+    });
+
+    it('should succeed if a retry eventually passes', async () => {
+      let callCount = 0;
+      const step = new Step({
+        name: 'eventually-succeeds',
+        max_retries: 3,
+        callable: async () => {
+          callCount++;
+          if (callCount < 3) throw new Error('not yet');
+          return 'success';
+        },
+      });
+
+      await step.execute();
+
+      expect(step.status).toBe(State.get('statuses.step').COMPLETE);
+      expect(callCount).toBe(3);
+    });
+
+    it('should mark step as FAILED after all retries are exhausted', async () => {
+      const step = new Step({
+        name: 'always-fails',
+        max_retries: 2,
+        callable: async () => {
+          throw new Error('permanent failure');
+        },
+      });
+
+      await step.execute();
+
+      expect(step.status).toBe(State.get('statuses.step').FAILED);
+    });
+
+    it('should store the error only when retries are exhausted', async () => {
+      const step = new Step({
+        name: 'exhaust-retries',
+        max_retries: 2,
+        callable: async () => {
+          throw new Error('permanent failure');
+        },
+      });
+
+      await step.execute();
+
+      expect(step.errors).toHaveLength(1);
+      expect(step.errors[0].message).toBe('permanent failure');
+    });
+
+    it('should increment retry_count for each retry attempt', async () => {
+      const step = new Step({
+        name: 'count-retries',
+        max_retries: 3,
+        callable: async () => {
+          throw new Error('fail');
+        },
+      });
+
+      await step.execute();
+
+      expect(step.retry_count).toBe(3);
+    });
+
+    it('should populate retry_results with each retry outcome', async () => {
+      let callCount = 0;
+      const step = new Step({
+        name: 'retry-results-step',
+        max_retries: 1,
+        callable: async () => {
+          callCount++;
+          if (callCount === 1) throw new Error('fail');
+          return 'finally ok';
+        },
+      });
+
+      await step.execute();
+
+      expect(step.retry_results).toHaveLength(1);
+      expect(step.retry_results[0].retry_count).toBe(1);
+    });
+
+    it('should not retry when max_retries is 0', async () => {
+      let callCount = 0;
+      const step = new Step({
+        name: 'no-retry',
+        max_retries: 0,
+        callable: async () => {
+          callCount++;
+          throw new Error('fail');
+        },
+      });
+
+      await step.execute();
+
+      expect(callCount).toBe(1);
+      expect(step.errors).toHaveLength(1);
+    });
+
+    it('should rethrow on final retry when exit_on_error is true', async () => {
+      State.set('exit_on_error', true);
+      const step = new Step({
+        name: 'rethrow-after-retry',
+        max_retries: 1,
+        callable: async () => {
+          throw new Error('fatal');
+        },
+      });
+
+      await expect(step.execute()).rejects.toThrow('fatal');
     });
   });
 
