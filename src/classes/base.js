@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { base_types } from '../enums/index.js';
 import State from './state.js';
 
@@ -21,7 +22,6 @@ export default class Base {
     this.timing = {
       cancel_time: null,
       complete_time: null,
-      end_time: null,
       execution_time_ms: null,
       start_time: null,
     }
@@ -104,7 +104,7 @@ export default class Base {
    * Marks the instance as running and sets the start time.
    */
   markAsRunning() {
-    this.timing.start_time = new Date();
+    this.timing.start_time = this.timing.start_time ?? new Date();
     this.status = State.get('statuses')[this.base_type].RUNNING;
 
     this.log(

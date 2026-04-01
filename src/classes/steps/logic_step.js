@@ -127,6 +127,8 @@ export default class LogicStep extends Step {
    * @returns {boolean} True if conditional is valid.
    */
   conditionalIsValid() {
+    // Check if all conditional properties are set (not null or undefined)
+    // Can't use falsy check here because valid values could be falsy (e.g. empty string, 0, false)
     return (
       this.conditional.subject !== null &&
       this.conditional.subject !== undefined &&

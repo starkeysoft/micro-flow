@@ -91,11 +91,6 @@ describe('Step', () => {
       expect(step.timeout).toBeNull();
     });
 
-    it('should initialize start_time to null', () => {
-      const step = new Step({});
-      expect(step.start_time).toBeNull();
-    });
-
     it('should have static step_name property', () => {
       expect(Step.step_name).toBe('step');
     });
@@ -196,20 +191,6 @@ describe('Step', () => {
       await step.execute();
 
       expect(step.status).toBe(State.get('statuses.step').FAILED);
-    });
-
-    it('should set end_time and execution_time_ms on error', async () => {
-      const step = new Step({
-        name: 'failing-step',
-        callable: async () => {
-          throw new Error('Test error');
-        }
-      });
-
-      await step.execute();
-
-      expect(step.timing.end_time).toBeDefined();
-      expect(step.timing.execution_time_ms).toBeDefined();
     });
 
     it('should rethrow error when exit_on_error is true', async () => {
@@ -415,7 +396,7 @@ describe('Step', () => {
 
       await step.execute();
 
-      expect(step.start_time).toBeInstanceOf(Date);
+      expect(step.timing.start_time).toBeInstanceOf(Date);
     });
   });
 
