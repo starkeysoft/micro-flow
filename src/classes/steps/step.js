@@ -47,7 +47,6 @@ export default class Step extends Base {
     this.result = null;
     this.retry_results = [];
     this.timeout = null;
-    this.start_time = null;
   }
 
   /**
@@ -62,10 +61,6 @@ export default class Step extends Base {
       );
     }
 
-    if (!this.start_time) {
-      this.start_time = new Date();
-    }
-
     this.markAsRunning();
 
     try {
@@ -77,14 +72,8 @@ export default class Step extends Base {
           retry_count: this.retry_count,
           result: await this.execute(),
         });
-
-        this.timing.end_time = new Date();
-        this.timing.execution_time_ms = this.timing.end_time - this.timing.start_time;
       } else {
         this.errors.push(error);
-
-        this.timing.end_time = new Date();
-        this.timing.execution_time_ms = this.timing.end_time - this.timing.start_time;
 
         this.markAsFailed();
 

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import Base from './base.js';
 import { base_types } from '../enums/index.js';
 
@@ -58,7 +59,6 @@ export default class Workflow extends Base {
 
     for (let i = 0; i < this._steps.length; i++) {
       if (this.should_break) {
-        this.should_break = false;
         this.log(this.getState('event_names.workflow').WORKFLOW_BREAK_EXECUTED, `Workflow "${this.name}" execution broken at step ${this._steps[i].name} - ${this._steps[i].id}.`);
         break;
       }
