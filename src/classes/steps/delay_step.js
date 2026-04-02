@@ -40,7 +40,7 @@ export default class DelayStep extends Step {
 
   /**
    * Executes an absolute delay until the specified timestamp. If the timestamp is in the past, it continues immediately.
-   * @returns {Promise<DelayStep>} Resolves with the DelayStep instance when delay completes.
+   * @returns {Promise<Object>} Resolves with delay completion info when delay completes.
    */
   async absolute() {
     const now = new Date();
@@ -50,7 +50,7 @@ export default class DelayStep extends Step {
         this.getState('events.step.event_names.DELAY_STEP_ABSOLUTE_COMPLETE'),
         `No delay for step: ${this.name}. Continuing.`
       );
-      return this;
+      return { delayed: false, delay_type: this.delay_type, timestamp: now.toISOString() };
     }
 
     return this.delay(this.absolute_timestamp);
@@ -58,7 +58,7 @@ export default class DelayStep extends Step {
 
   /** Schedules a delay until the specified date and time.
    * @param {Date} delay_until - The date and time to delay until.
-   * @returns {Promise<DelayStep>} Resolves with the DelayStep instance when delay completes.
+   * @returns {Promise<Object>} Resolves with delay completion info when delay completes.
    */
   async delay(delay_until) {
     return new Promise((resolve) => {
@@ -76,7 +76,7 @@ export default class DelayStep extends Step {
           ),
           `Delay complete for step: ${this.name}. Continuing.`
         );
-        resolve(this);
+        resolve({ delayed: true, delay_type: this.delay_type, timestamp: new Date().toISOString() });
       });
 
       this.scheduled_job = job;
@@ -85,7 +85,7 @@ export default class DelayStep extends Step {
 
   /**
    * Executes a relative delay for the specified duration. If the delay duration is zero or negative, it continues immediately.
-   * @returns {Promise<DelayStep>} Resolves with the DelayStep instance when delay completes.
+   * @returns {Promise<Object>} Resolves with delay completion info when delay completes.
    */
   async relative() {
     if (this.relative_delay_ms <= 0) {
@@ -93,7 +93,7 @@ export default class DelayStep extends Step {
         this.getState('events.step.event_names.DELAY_STEP_RELATIVE_COMPLETE'),
         `No delay for step: ${this.name}. Continuing.`
       );
-      return this;
+      return { delayed: false, delay_type: this.delay_type, timestamp: new Date().toISOString() };
     }
 
     const delay_until = addMilliseconds(new Date(), this.relative_delay_ms);

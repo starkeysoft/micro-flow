@@ -15,7 +15,7 @@ export default class SwitchStep extends Step {
    * @param {string} [options.name] - Name of the step.
    * @param {Array<Case|LogicStep>} [options.cases=[]] - Array of Case or LogicStep instances to evaluate. LogicStep instances MUST have conditional.subject set.
    * @param {Function|Step|Workflow} [options.default_callable=async () => {}] - Function, Step, or Workflow to execute if no cases match.
-   * @param {*} [options.subject=null] - Subject value to evaluate against each case.
+   * @param {*|Function} [options.subject=null] - Subject value to evaluate against each case. Can be a function that returns the value.
    */
   constructor({
     name,
@@ -29,8 +29,9 @@ export default class SwitchStep extends Step {
     });
 
     this.cases = cases;
-    const defaultCallableType = this.getCallableType(default_callable);
-    this.default_callable = defaultCallableType === 'function'
+    this._default_callable_type = this.getCallableType(default_callable);
+    this._default_callable_raw = default_callable;
+    this.default_callable = this._default_callable_type === 'function'
       ? default_callable.bind(this)
       : default_callable.execute.bind(default_callable);
     this.subject = subject;
@@ -44,8 +45,11 @@ export default class SwitchStep extends Step {
    * @returns {Promise<*>} The result of the matched case or default callable.
    */
   async switch() {
+    // Resolve subject once - call it if it's a function
+    const resolvedSubject = typeof this.subject === 'function' ? this.subject() : this.subject;
+    
     for (const switch_case of this.cases) {
-      switch_case.switch_subject = this.subject;
+      switch_case.switch_subject = resolvedSubject;
 
       const is_matched = await switch_case.checkCondition();
 
@@ -55,10 +59,19 @@ export default class SwitchStep extends Step {
           `Case matched for step: ${this.name}, executing case callable`
         );
 
-        return switch_case.execute();
+        // Return the case's result value directly, not the Case object.
+        // This keeps result structure consistent: switchStep.result contains the
+        // callable's return value, matching how Step.result works.
+        const caseResult = await switch_case.execute();
+        return caseResult.result;
       }
     }
 
-    return this.default_callable();
+    // Unwrap Step/Workflow results for consistency with case results
+    const defaultResult = await this.default_callable();
+    if (this._default_callable_type !== 'function') {
+      return defaultResult.result;
+    }
+    return defaultResult;
   }
 }

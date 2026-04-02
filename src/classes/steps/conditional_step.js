@@ -14,9 +14,9 @@ export default class ConditionalStep extends LogicStep {
    * @param {Object} options - Configuration options.
    * @param {string} [options.name] - Name of the step.
    * @param {Object} [options.conditional] - Conditional configuration.
-   * @param {*} [options.conditional.subject] - Subject to evaluate.
+   * @param {*|Function} [options.conditional.subject] - Subject to evaluate. Can be a function that returns the value.
    * @param {conditional_step_comparators|string} [options.conditional.operator] - Comparison operator.
-   * @param {*} [options.conditional.value] - Value to compare against.
+   * @param {*|Function} [options.conditional.value] - Value to compare against. Can be a function that returns the value.
    * @param {Function|Step|Workflow} [options.true_callable=async () => {}] - Callable to execute if condition is true.
    * @param {Function|Step|Workflow} [options.false_callable=async () => {}] - Callable to execute if condition is false.
    */
@@ -35,8 +35,18 @@ export default class ConditionalStep extends LogicStep {
       conditional
     });
 
-    this.true_callable = true_callable;
-    this.false_callable = false_callable;
+    // Bind function callables to this step instance for state access
+    if (typeof true_callable === 'function') {
+      this.true_callable = true_callable.bind(this);
+    } else {
+      this.true_callable = true_callable;
+    }
+
+    if (typeof false_callable === 'function') {
+      this.false_callable = false_callable.bind(this);
+    } else {
+      this.false_callable = false_callable;
+    }
 
     this.callable = this.conditional.bind(this);
   }
@@ -48,10 +58,7 @@ export default class ConditionalStep extends LogicStep {
    */
   async conditional() {
     const true_callable = this.true_callable;
-    true_callable.parentWorkflowId = this.parentWorkflowId;
-
     const false_callable = this.false_callable;
-    false_callable.parentWorkflowId = this.parentWorkflowId;
 
     let result = null;
 
@@ -61,8 +68,6 @@ export default class ConditionalStep extends LogicStep {
         `Condition met for step: ${this.name}, executing true branch`
       );
 
-      // Normally, the callable is automatically set according to its type
-      // Here, they are set separately, so we need to account for types
       if (typeof true_callable === 'function') {
         result = await true_callable();
       } else {
@@ -75,8 +80,6 @@ export default class ConditionalStep extends LogicStep {
         `Condition not met for step: ${this.name}, executing false branch`
       );
 
-      // Normally, the callable is automatically set according to its type
-      // Here, they are set separately, so we need to account for types
       if (typeof false_callable === 'function') {
         result = await false_callable();
       } else {
