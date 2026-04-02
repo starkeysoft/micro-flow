@@ -14,9 +14,9 @@ export default class FlowControlStep extends LogicStep {
    * Creates a new FlowControlStep instance.
    * @param {Object} options - Configuration options.
    * @param {Object} [options.conditional] - Conditional configuration.
-   * @param {*} [options.conditional.subject] - Subject to evaluate.
+   * @param {*|Function} [options.conditional.subject] - Subject to evaluate. Can be a function that returns the value.
    * @param {conditional_step_comparators|string} [options.conditional.operator] - Comparison operator.
-   * @param {*} [options.conditional.value] - Value to compare against.
+   * @param {*|Function} [options.conditional.value] - Value to compare against. Can be a function that returns the value.
    * @param {string} [options.name] - Name of the step.
    * @param {string} [options.flow_control_type=flow_control_types.BREAK] - Type of flow control.
    * @throws {Error} Throws if flow_control_type is invalid.

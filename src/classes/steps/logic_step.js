@@ -14,9 +14,9 @@ export default class LogicStep extends Step {
    * @param {Object} options - Configuration options.
    * @param {string} [options.name] - Name of the step.
    * @param {Object} [options.conditional] - Conditional configuration.
-   * @param {*} [options.conditional.subject] - Subject to evaluate.
+   * @param {*|Function} [options.conditional.subject] - Subject to evaluate. Can be a function that returns the value.
    * @param {conditional_step_comparators|string} [options.conditional.operator] - Comparison operator.
-   * @param {*} [options.conditional.value] - Value to compare against.
+   * @param {*|Function} [options.conditional.value] - Value to compare against. Can be a function that returns the value.
    * @param {Function} [options.callable=async () => {}] - Function to execute.
    */
   constructor({
@@ -30,7 +30,7 @@ export default class LogicStep extends Step {
   }) {
     super({
       name,
-      base_type: step_types.LOGIC,
+      step_type: step_types.LOGIC,
       callable
     });
 
@@ -39,13 +39,21 @@ export default class LogicStep extends Step {
 
   /**
    * Evaluates the conditional expression.
+   * Supports function subjects and values - they are called to get the actual value.
    * @returns {boolean} True if the condition is met.
    * @throws {Error} Throws if operator is unknown.
    */
   checkCondition() {
-    const subject = this.conditional.subject;
-    const operator = this.conditional.operator;
-    const value = this.conditional.value;
+    const rawSubject = this.conditional_config.subject;
+    const rawValue = this.conditional_config.value;
+    const operator = this.conditional_config.operator;
+    
+    // Resolve subject - call it if it's a function
+    const subject = typeof rawSubject === 'function' ? rawSubject() : rawSubject;
+    
+    // Don't resolve value for CUSTOM_FUNCTION - the value IS the function to call
+    const isCustomFunction = operator === this.getState('conditional_step_comparators.CUSTOM_FUNCTION');
+    const value = (!isCustomFunction && typeof rawValue === 'function') ? rawValue() : rawValue;
 
     switch (operator) {
       case this.getState('conditional_step_comparators.STRICT_EQUALS'):
@@ -76,14 +84,16 @@ export default class LogicStep extends Step {
       case this.getState('conditional_step_comparators.STRING_INCLUDES'):
       case this.getState('conditional_step_comparators.ARRAY_CONTAINS'):
       case this.getState('conditional_step_comparators.ARRAY_INCLUDES'):
-      case this.getState('conditional_step_comparators.IN'):
         return (Array.isArray(subject) || typeof subject === 'string') && subject.includes(value);
+      case this.getState('conditional_step_comparators.IN'):
+        return (Array.isArray(value) || typeof value === 'string') && value.includes(subject);
       case this.getState('conditional_step_comparators.STRING_NOT_CONTAINS'):
       case this.getState('conditional_step_comparators.STRING_NOT_INCLUDES'):
       case this.getState('conditional_step_comparators.ARRAY_NOT_CONTAINS'):
       case this.getState('conditional_step_comparators.ARRAY_NOT_INCLUDES'):
-      case this.getState('conditional_step_comparators.NOT_IN'):
         return (Array.isArray(subject) || typeof subject === 'string') && !subject.includes(value);
+      case this.getState('conditional_step_comparators.NOT_IN'):
+        return (Array.isArray(value) || typeof value === 'string') && !value.includes(subject);
       case this.getState('conditional_step_comparators.EMPTY'):
         return subject === '' || subject === null || subject === undefined || subject.length === 0;
       case this.getState('conditional_step_comparators.NOT_EMPTY'):
@@ -124,18 +134,21 @@ export default class LogicStep extends Step {
 
   /**
    * Checks if the conditional configuration is valid.
+   * A valid conditional has subject, operator, and value all set (not null/undefined).
+   * Functions are valid as subject or value - they will be called during checkCondition().
    * @returns {boolean} True if conditional is valid.
    */
   conditionalIsValid() {
     // Check if all conditional properties are set (not null or undefined)
     // Can't use falsy check here because valid values could be falsy (e.g. empty string, 0, false)
+    // Functions are valid - they'll be called to get the actual value
     return (
-      this.conditional.subject !== null &&
-      this.conditional.subject !== undefined &&
-      this.conditional.operator !== null &&
-      this.conditional.operator !== undefined &&
-      this.conditional.value !== null &&
-      this.conditional.value !== undefined
+      this.conditional_config.subject !== null &&
+      this.conditional_config.subject !== undefined &&
+      this.conditional_config.operator !== null &&
+      this.conditional_config.operator !== undefined &&
+      this.conditional_config.value !== null &&
+      this.conditional_config.value !== undefined
     );
   }
 
@@ -144,6 +157,6 @@ export default class LogicStep extends Step {
    * @param {Object} conditional - Conditional configuration object.
    */
   setConditional(conditional) {
-    this.conditional = { subject: conditional.subject, operator: conditional.operator, value: conditional.value };
+    this.conditional_config = { subject: conditional.subject, operator: conditional.operator, value: conditional.value };
   }
 }

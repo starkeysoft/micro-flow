@@ -16,9 +16,9 @@ export default class Case extends LogicStep {
    * @param {Object} options - Configuration options.
    * @param {string} [options.name] - Name of the case.
    * @param {Object} [options.conditional] - Conditional configuration.
-   * @param {*} [options.conditional.subject=null] - Subject to evaluate (typically set by SwitchStep).
+   * @param {*|Function} [options.conditional.subject=null] - Subject to evaluate (typically set by SwitchStep). Can be a function.
    * @param {conditional_step_comparators|string} [options.conditional.operator=null] - Comparison operator.
-   * @param {*} [options.conditional.value=null] - Value to compare against.
+   * @param {*|Function} [options.conditional.value=null] - Value to compare against. Can be a function that returns the value.
    * @param {Function|Step|Workflow} [options.callable=async () => {}] - Function, Step, or Workflow to execute when case matches.
    * @param {boolean} [options.force_subject_override=false] - Force override of subject even if already set.
    */
@@ -38,7 +38,7 @@ export default class Case extends LogicStep {
       callable,
     });
 
-    this.conditional = conditional;
+    this.conditional_config = conditional;
     this.force_subject_override = force_subject_override;
 
     this.is_matched = false;
@@ -53,14 +53,14 @@ export default class Case extends LogicStep {
    */
   set switch_subject(subject) {
     const subjectProvided = subject !== null && subject !== undefined;
-    const hasExistingSubject = this.conditional.subject !== null && this.conditional.subject !== undefined;
+    const hasExistingSubject = this.conditional_config.subject !== null && this.conditional_config.subject !== undefined;
 
     if (!subjectProvided && !hasExistingSubject) {
       throw new Error(`No subject set for case step: ${this.name}, using default equality check`);
     }
 
     if (subjectProvided && (!hasExistingSubject || this.force_subject_override)) {
-      this.conditional.subject = subject;
+      this.conditional_config.subject = subject;
     }
 
     if (!this.conditionalIsValid()) {

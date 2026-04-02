@@ -17,9 +17,9 @@ export default class LoopStep extends LogicStep {
    * @param {Array|Iterable|Function} options.iterable - Iterable to loop over or function returning an iterable. Required for 'for_each' and 'generator' loops.
    * @param {Function} [options.callable=async () => {}] - Function to execute for each iteration.
    * @param {Object} [options.conditional] - Conditional configuration for while loops. Required for 'while' loops.
-   * @param {*} [options.conditional.subject] - Subject to evaluate.
+   * @param {*|Function} [options.conditional.subject] - Subject to evaluate. Can be a function that returns the value.
    * @param {conditional_step_comparators|string} [options.conditional.operator] - Comparison operator.
-   * @param {*} [options.conditional.value] - Value to compare against.
+   * @param {*|Function} [options.conditional.value] - Value to compare against. Can be a function that returns the value.
    * @param {string} [options.loop_type=loop_types.FOR_EACH] - Type of loop ('for', 'for_each', 'while', or 'generator').
    * @param {number} [options.iterations=0] - Number of iterations to execute. Only used for 'for' loops.
    * @param {number} [options.max_iterations=1000] - Maximum number of iterations to prevent infinite loops.
@@ -45,15 +45,14 @@ export default class LoopStep extends LogicStep {
     this.results = [];
     this.current_item = null;
 
-    this.callable = this[`${loop_type}_loop`].bind(this);
-
-    // When this.callable is set, it binds the callable function to this instance
-    // so that it can access instance properties like current_item.
-    // Because we're using a local method instead, we bind it here.
-    this.callable_type = this.getCallableType(callable);
-    this._callable = this.callable_type === 'function'
+    // Store the user's callable separately so loop methods can invoke it.
+    // this._callable will be set to the loop method by the setter below.
+    const userCallableType = this.getCallableType(callable);
+    this._loop_callable = userCallableType === 'function'
       ? callable.bind(this)
       : callable.execute.bind(callable);
+
+    this.callable = this[`${loop_type}_loop`].bind(this);
   }
 
   /**
@@ -61,13 +60,14 @@ export default class LoopStep extends LogicStep {
    * @throws {Error} If the callable is not a generator or async generator function.
    * @returns {Object} - An object containing a message and the results of the loop.
    */
-  async generator() {
-    if (!this._callable.constructor.name.includes('Generator')) {
+  async generator_loop() {
+    if (!this._loop_callable.constructor.name.includes('Generator')) {
       throw new Error('Iterable must be a generator function for generator loops');
     }
 
     let iterations = 0;
-    for (const item of await this._callable()) {
+    // Use for await...of to handle both sync and async generators
+    for await (const item of this._loop_callable()) {
       this.results.push(item);
 
       if (++iterations >= this.max_iterations) {
@@ -88,7 +88,7 @@ export default class LoopStep extends LogicStep {
   async for_loop() {
     let i = 0;
     for (; i < this.iterations; i++) {
-      this.results.push(await this._callable());
+      this.results.push(await this._loop_callable());
     }
 
     return {
@@ -115,7 +115,7 @@ export default class LoopStep extends LogicStep {
     for (const item of this.iterable) {
       iterations++;
       this.current_item = item;
-      this.results.push(await this._callable());
+      this.results.push(await this._loop_callable());
     }
 
     return {
@@ -137,7 +137,7 @@ export default class LoopStep extends LogicStep {
     let iterations = 0;
     while (this.checkCondition() && iterations < this.max_iterations) {
       iterations++;
-      this.results.push(await this._callable());
+      this.results.push(await this._loop_callable());
     }
 
     return {
