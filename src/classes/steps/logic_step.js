@@ -134,7 +134,7 @@ export default class LogicStep extends Step {
 
   /**
    * Checks if the conditional configuration is valid.
-   * A valid conditional has subject, operator, and value all set (not null/undefined).
+   * A valid conditional has subject and operator set (not null/undefined).
    * Functions are valid as subject or value - they will be called during checkCondition().
    * @returns {boolean} True if conditional is valid.
    */
@@ -146,9 +146,7 @@ export default class LogicStep extends Step {
       this.conditional_config.subject !== null &&
       this.conditional_config.subject !== undefined &&
       this.conditional_config.operator !== null &&
-      this.conditional_config.operator !== undefined &&
-      this.conditional_config.value !== null &&
-      this.conditional_config.value !== undefined
+      this.conditional_config.operator !== undefined
     );
   }
 
