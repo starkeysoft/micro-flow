@@ -15,7 +15,7 @@ Creates a new SwitchStep instance.
   - `name` (string, optional) - Name of the step
   - `cases` (Array\<Case|LogicStep\>, optional) - Array of Case or LogicStep instances to evaluate. **Note:** LogicStep instances MUST have `conditional.subject` set. (default: `[]`)
   - `default_callable` (Function|Step|Workflow, optional) - Function, Step, or Workflow to execute if no cases match (default: `async () => {}`)
-  - `subject` (any, optional) - Subject value to evaluate against each case (default: `null`)
+  - `subject` (any|Function) - Subject value to evaluate against each case. Can be a function that returns the value (evaluated when `switch()` runs).
 
 **Example (Node.js - HTTP Status Codes):**
 ```javascript
@@ -195,7 +195,7 @@ await handleStatus.execute();
 
 - `cases` (Array\<Case|LogicStep\>) - Array of Case or LogicStep instances to evaluate
 - `default_callable` (Function|Step|Workflow) - Function, Step, or Workflow to execute when no cases match
-- `subject` (any) - Subject value to compare against each case
+- `subject` (any|Function) - Subject value to compare against each case (or function returning the value)
 
 All properties inherited from [Step](step.md)
 

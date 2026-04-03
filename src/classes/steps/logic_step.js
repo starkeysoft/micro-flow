@@ -16,7 +16,7 @@ export default class LogicStep extends Step {
    * @param {Object} [options.conditional] - Conditional configuration.
    * @param {*|Function} [options.conditional.subject] - Subject to evaluate. Can be a function that returns the value.
    * @param {conditional_step_comparators|string} [options.conditional.operator] - Comparison operator.
-   * @param {*|Function} [options.conditional.value] - Value to compare against. Can be a function that returns the value.
+   * @param {*|Function, optional} [options.conditional.value] - Value to compare against. Can be a function that returns the value.
    * @param {Function} [options.callable=async () => {}] - Function to execute.
    */
   constructor({

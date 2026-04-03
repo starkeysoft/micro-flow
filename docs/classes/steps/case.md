@@ -16,9 +16,9 @@ Creates a new Case instance.
 - `options` (Object) - Configuration options
   - `name` (string, optional) - Name of the case
   - `conditional` (Object, optional) - Conditional configuration
-    - `subject` (any, optional) - Subject to evaluate (typically set by SwitchStep) (default: `null`)
+    - `subject` (any|Function, optional) - Subject to evaluate (typically set by SwitchStep). Can be a function. (default: `null`)
     - `operator` (conditional_step_comparators|string, optional) - Comparison operator (default: `null`)
-    - `value` (any, optional) - Value to compare against (default: `null`)
+    - `value` (any|Function, optional) - Value to compare against. Can be a function that returns the value. (default: `null`)
   - `callable` (Function|Step|Workflow, optional) - Function, Step, or Workflow to execute when case matches (default: `async () => {}`)
   - `force_subject_override` (boolean, optional) - Force override of subject even if already set (default: `false`)
 

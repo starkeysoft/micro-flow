@@ -91,7 +91,10 @@ All properties inherited from [Step](step.md)
 
 Executes an absolute delay until the specified timestamp. If the timestamp is in the past, it continues immediately.
 
-**Returns:** Promise\<DelayStep\> - The DelayStep instance
+**Returns:** Promise\<Object\> - Object with `{ delayed: boolean, delay_type: string, timestamp: string }`
+- `delayed` - Whether the step actually waited (false if timestamp was in the past)
+- `delay_type` - The type of delay ('absolute')
+- `timestamp` - ISO timestamp when the delay completed
 
 **Example (Node.js - Scheduled Task):**
 ```javascript
@@ -106,8 +109,8 @@ const scheduleStep = new DelayStep({
 });
 
 console.log('Task scheduled for:', futureTime.toISOString());
-await scheduleStep.execute();
-console.log('Task executed!');
+const result = await scheduleStep.execute();
+console.log('Delayed:', result.result.delayed); // true
 ```
 
 ### `async delay(delay_until)`
@@ -117,27 +120,18 @@ Schedules a delay until the specified date and time using node-schedule.
 **Parameters:**
 - `delay_until` (Date) - The date and time to delay until
 
-**Returns:** Promise\<DelayStep\> - Resolves with the DelayStep instance when delay completes
+**Returns:** Promise\<void\> - Resolves when delay completes
 
-**Example (Node.js - Custom Delay):**
-```javascript
-import { DelayStep } from 'micro-flow';
-
-const customDelay = new DelayStep({
-  name: 'custom-delay',
-  delay_type: 'relative',
-  relative_delay_ms: 3000
-});
-
-// Internal method called by execute()
-// Not typically called directly by users
-```
+**Note:** This is an internal method called by `absolute()` and `relative()`. Not typically called directly.
 
 ### `async relative()`
 
 Executes a relative delay for the specified duration. If the delay duration is zero or negative, it continues immediately.
 
-**Returns:** Promise\<DelayStep\> - The DelayStep instance
+**Returns:** Promise\<Object\> - Object with `{ delayed: boolean, delay_type: string, timestamp: string }`
+- `delayed` - Whether the step actually waited (false if delay was 0 or negative)
+- `delay_type` - The type of delay ('relative')
+- `timestamp` - ISO timestamp when the delay completed
 
 **Example (Node.js - Retry with Backoff):**
 ```javascript
