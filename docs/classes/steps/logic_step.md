@@ -15,9 +15,9 @@ Creates a new LogicStep instance.
   - `name` (string, optional) - Name of the step
   - `callable` (Function, optional) - Function to execute (default: `async () => {}`)
   - `conditional` (Object, optional) - Conditional configuration
-    - `subject` (any) - Subject to evaluate
+    - `subject` (any|Function) - Subject to evaluate. Can be a function that returns the value (evaluated at check time).
     - `operator` (string) - Comparison operator
-    - `value` (any) - Value to compare against
+    - `value` (any|Function) - Value to compare against. Can be a function that returns the value (evaluated at check time). Exception: for `custom_function` operator, value IS the comparison function.
 
 **Example (Node.js - Basic Logic):**
 ```javascript
@@ -79,9 +79,10 @@ const envCheck = new LogicStep({
 
 ## Properties
 
-- `subject` (any) - The subject value to evaluate
-- `operator` (string) - The comparison operator to use
-- `value` (any) - The value to compare the subject against
+- `conditional_config` (Object) - The conditional configuration containing subject, operator, and value
+- `conditional_config.subject` (any|Function) - The subject value to evaluate (or function returning it)
+- `conditional_config.operator` (string) - The comparison operator to use
+- `conditional_config.value` (any|Function, optional) - The value to compare against (or function returning it). Optional for operators that don't need a value (e.g., `empty`, `nullish`).
 
 All properties inherited from [Step](step.md)
 
@@ -94,6 +95,8 @@ Evaluates the conditional expression using the configured operator.
 **Returns:** boolean - True if the condition is met
 
 **Throws:** Error - If the operator is unknown
+
+**Note:** If `subject` or `value` are functions, they are called to get the actual value before comparison. Exception: for `custom_function` operator, the value function is passed the subject directly.
 
 **Supported Operators:**
 - `'==='`, `'strict_equals'` - Strict equality
@@ -184,6 +187,27 @@ const customCheck = new LogicStep({
 if (customCheck.checkCondition()) {
   console.log('Custom check passed');
 }
+```
+
+**Example (Node.js - Dynamic Subject with Function):**
+```javascript
+import { LogicStep, State } from 'micro-flow';
+
+// Subject is a function - evaluated each time checkCondition() is called
+const dynamicCheck = new LogicStep({
+  name: 'dynamic-counter-check',
+  conditional: {
+    subject: () => State.get('counter'),  // Evaluated dynamically
+    operator: '<',
+    value: 10
+  }
+});
+
+State.set('counter', 5);
+console.log(dynamicCheck.checkCondition()); // true
+
+State.set('counter', 15);
+console.log(dynamicCheck.checkCondition()); // false
 ```
 
 ### `conditionalIsValid()`

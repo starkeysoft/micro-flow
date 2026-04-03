@@ -13,9 +13,9 @@ Creates a new FlowControlStep instance.
 **Parameters:**
 - `options` (Object) - Configuration options
   - `conditional` (Object, optional) - Conditional configuration
-    - `subject` (any, optional) - Subject to evaluate (default: `null`)
+    - `subject` (any|Function) - Subject to evaluate. Can be a function that returns the value.
     - `operator` (conditional_step_comparators|string, optional) - Comparison operator (default: `null`)
-    - `value` (any, optional) - Value to compare against (default: `null`)
+    - `value` (any|Function, optional) - Value to compare against. Can be a function that returns the value. (default: `null`)
   - `name` (string, optional) - Name of the step
   - `flow_control_type` (string, optional) - Type of flow control (default: `flow_control_types.BREAK`)
 

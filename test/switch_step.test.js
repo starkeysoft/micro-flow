@@ -126,8 +126,8 @@ describe('Case', () => {
     it('should throw error when conditional is invalid after setting subject', () => {
       const caseStep = new Case({
         conditional: {
-          operator: '===',
-          value: null  // null value makes it invalid
+          operator: null,  // null operator makes it invalid
+          value: 'test'
         }
       });
 

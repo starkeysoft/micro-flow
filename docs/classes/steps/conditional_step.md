@@ -14,9 +14,9 @@ Creates a new ConditionalStep instance.
 - `options` (Object) - Configuration options
   - `name` (string, optional) - Name of the step
   - `conditional` (Object, optional) - Conditional configuration
-    - `subject` (any, optional) - Subject to evaluate (default: `null`)
+    - `subject` (any|Function) - Subject to evaluate. Can be a function that returns the value (evaluated at check time).
     - `operator` (conditional_step_comparators|string, optional) - Comparison operator (default: `null`)
-    - `value` (any, optional) - Value to compare against (default: `null`)
+    - `value` (any|Function, optional) - Value to compare against. Can be a function that returns the value. (default: `null`)
   - `true_callable` (Function|Step|Workflow, optional) - Callable to execute if condition is true (default: `async () => {}`)
   - `false_callable` (Function|Step|Workflow, optional) - Callable to execute if condition is false (default: `async () => {}`)
 

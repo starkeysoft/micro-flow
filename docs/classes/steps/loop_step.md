@@ -16,9 +16,9 @@ Creates a new LoopStep instance.
   - `iterable` (Array|Iterable|Function, required for `for_each`) - Iterable to loop over (or a function returning an iterable)
   - `callable` (Function, optional) - Callable to execute for each iteration (default: `async () => {}`)
   - `conditional` (Object, required for `while`) - Conditional configuration for while loops
-    - `subject` (any, optional) - Subject to evaluate
+    - `subject` (any|Function) - Subject to evaluate. Can be a function that returns the value (evaluated each iteration).
     - `operator` (conditional_step_comparators|string, optional) - Comparison operator
-    - `value` (any, optional) - Value to compare against
+    - `value` (any|Function, optional) - Value to compare against. Can be a function that returns the value.
   - `loop_type` (string, optional) - Type of loop: `'for'`, `'for_each'`, `'generator'`, or `'while'` (default: `loop_types.FOR_EACH`)
   - `iterations` (number, optional) - Number of iterations to run for `for` loops (default: `0`)
   - `max_iterations` (number, optional) - Maximum iterations to prevent infinite loops (default: `1000`)

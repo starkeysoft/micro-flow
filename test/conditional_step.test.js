@@ -104,7 +104,7 @@ describe('LogicStep', () => {
       expect(step.conditionalIsValid()).toBe(false);
     });
 
-    it('should return false when value is null', () => {
+    it('should return true when value is null (value is optional)', () => {
       const step = new LogicStep({
         conditional: {
           subject: 10,
@@ -113,7 +113,8 @@ describe('LogicStep', () => {
         }
       });
 
-      expect(step.conditionalIsValid()).toBe(false);
+      // Value can be null/unset for operators that don't need it (e.g., empty, nullish)
+      expect(step.conditionalIsValid()).toBe(true);
     });
 
     it('should return true when subject is falsy but not null/undefined', () => {
