@@ -4,7 +4,7 @@ Micro-Flow is a simple, lightweight, cross platform (browser and runtime) logic 
 
 ## Features
 
-- �️ **Observable** - Every step and logic flow emits lifecycle events (`STEP_FAILED`, `WORKFLOW_COMPLETE`, etc.) so you always know what's running, what finished, and what broke — no log-sprinkling required
+- 👀 **Observable** - Every step and logic flow emits lifecycle events (`STEP_FAILED`, `WORKFLOW_COMPLETE`, etc.) so you always know what's running, what finished, and what broke — no log-sprinkling required
 - ⏸️ **Pauseable & Resumeable** - Suspend a running logic flow mid-pipeline (e.g. waiting on user input or an external signal) and resume it without losing state
 - 🌿 **First-Class Branching** - `ConditionalStep` and `SwitchStep` keep branching logic out of your callables and in the logic flow structure where it belongs
 - 🎯 **Fine-Grained Flow Control** - Break out of or skip steps in a logic flow dynamically at runtime
