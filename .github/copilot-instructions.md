@@ -78,3 +78,6 @@ Event names follow the pattern `BASE_TYPE_ACTION` (e.g., `WORKFLOW_COMPLETE`, `S
 
 ### Module Exports
 Public surface: `index.js` → `src/index.js` → `src/classes/index.js` + `src/enums/index.js`. Everything exported from those barrel files is part of the public API.
+
+### Git Commits
+**Never add `Co-authored-by` trailers to commit messages.** 
