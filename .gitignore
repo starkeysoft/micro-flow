@@ -19,3 +19,6 @@ dist
 *.tgz
 *.zip
 *.gz
+
+/*.md
+!README.md
