@@ -41,7 +41,7 @@ async function getSourceFiles() {
 const entryPoints = await getSourceFiles();
 
 await esbuild.build({
-  entryPoints: ['./index.js', ...entryPoints],
+  entryPoints: ['./index.js', './src/index.js', ...entryPoints],
   bundle: false,
   minify: true,
   platform: 'node',
