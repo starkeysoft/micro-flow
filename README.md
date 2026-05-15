@@ -1,4 +1,4 @@
-# Micro-Flow: Stop fighting "Wall-of-Await" spaghetti.
+# Micro-Flow
 
 Micro-Flow is a simple, lightweight, cross-platform logic orchestration library. It turns messy, imperative async chains into observable, resilient "logic flows" that run anywhere—from your React frontend to your Node.js backend.
 
