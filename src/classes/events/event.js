@@ -39,7 +39,14 @@ class Event extends EventTarget {
    * @returns {boolean} True if the event was not cancelled, false if it was cancelled.
    */
   emit(event_name, data, bubbles = false, cancelable = true) {
-    const workingData = JSON.parse(JSON.stringify(data));
+    const seen = new WeakSet();
+    const workingData = JSON.parse(JSON.stringify(data, (key, value) => {
+      if (typeof value === 'object' && value !== null) {
+        if (seen.has(value)) return undefined;
+        seen.add(value);
+      }
+      return value;
+    }));
 
     const custom_event = new CustomEvent(event_name, {
       detail: workingData,
