@@ -10,6 +10,11 @@ import { base_types, step_types } from '../../enums/index.js';
 export default class Step extends Base {
   static step_name = 'step';
   #callable_object = null;
+  static callable_types = {
+    FUNCTION: 'function',
+    STEP: 'step',
+    WORKFLOW: 'workflow',
+  }
 
   /**
    * Creates a new Step instance.
@@ -24,6 +29,7 @@ export default class Step extends Base {
   constructor({
     name,
     callable = async () => {},
+    callable_registry_key = null,
     max_retries = 0,
     max_timeout_ms = 30000,
     step_type = step_types.ACTION,
@@ -32,6 +38,9 @@ export default class Step extends Base {
     super({ name, base_type: base_types.STEP });
 
     this.callable = callable;
+
+    // Optional key to reference the callable to be rehydrated after serialization.
+    this.callable_registry_key = callable_registry_key;
 
     // Store off the original callable object, because if it's a Step or Workflow,
     // this.callable is set to the execute method of that object, but we may need to access its properties later.
@@ -57,7 +66,11 @@ export default class Step extends Base {
   async execute() {
     if (!this.timeout ) {
       this.timeout = new Promise((_, reject) =>
-        setTimeout(reject, this.max_timeout_ms, new Error(`Step "${this.name}" timed out after ${this.max_timeout_ms}ms`))
+        setTimeout(
+          reject,
+          this.max_timeout_ms,
+          new Error(`Step "${this.name}" timed out after ${this.max_timeout_ms}ms`)
+        )
       );
     }
 
@@ -66,8 +79,7 @@ export default class Step extends Base {
     try {
       this.result = await Promise.race([this._callable(), this.timeout]);
     } catch (error) {
-      if (this.max_retries && this.retry_count < this.max_retries) {
-        this.retry_count++;
+      if (this.max_retries && ++this.retry_count < this.max_retries) {
         this.retry_results.push({
           retry_count: this.retry_count,
           result: await this.execute(),
@@ -81,7 +93,6 @@ export default class Step extends Base {
           throw error;
         }
       }
-
     }
 
     const { FAILED, COMPLETE } = this.getState('statuses')[this.base_type];
@@ -94,7 +105,7 @@ export default class Step extends Base {
       return this.#callable_object;
     }
 
-    return this;
+    return this.prepareForSerialization();
   }
 
   /**
@@ -105,14 +116,61 @@ export default class Step extends Base {
    */
   getCallableType(callable) {
     if (callable && callable.base_type === base_types.WORKFLOW) {
-      return 'workflow';
+      return Step.callable_types.WORKFLOW;
     } else if (callable && callable.base_type === base_types.STEP) {
-      return 'step';
+      return Step.callable_types.STEP;
     } else if (typeof callable === 'function') {
-      return 'function';
+      return Step.callable_types.FUNCTION;
     } 
 
     throw new Error('Invalid callable type. Must be one of function, Step, or Workflow.');
+  }
+
+  /**
+   * Deserializes a JSON string into a Step instance and hydrates it.
+   * @param {string} serializedStep - The JSON string representation of the step.
+   * @returns {Step} The hydrated Step instance.
+   * @throws {Error} Throws if the serialized step is not a string.
+   */
+  static hydrateSerialized(serializedStep) {
+    if (typeof serializedStep !== 'string') {
+      throw new Error('Invalid serialized step. Must be a string.');
+    }
+
+    const parsed = JSON.parse(serializedStep);
+
+    return Step.hydrate(parsed);
+  }
+
+  /**
+   * Hydrates a parsed step object into a Step instance, resolving callables from the registry if necessary.
+   * @param {Object} parsedStep - The parsed step object.
+   * @param {Object} registry - An optional registry mapping keys to callables for hydration.
+   * @returns {Step} The hydrated Step instance.
+   * @throws {Error} Throws if a callable registry key is specified but not found in the registry.
+   */
+  static hydrate(parsedStep) {
+    if (typeof parsedStep.callable === 'string') {
+      const registryKey = parsedStep.callable.split(':')[1];
+
+      if (registryKey && this.registry && this.registry.has(registryKey)) {
+        parsedStep.callable = this.registry.get(registryKey);
+        parsedStep.callable_registry_key = registryKey;
+      } else {
+        throw new Error(`Callable registry key "${registryKey}" not found in registry or registry not initialized.`);
+      }
+
+      return new Step(parsedStep);
+    }
+
+    // If the callable is a Step or Workflow, hydrate it as well
+    try {
+      parsedStep.callable = parsedStep.callable.hydrate()
+      return new Step(parsedStep);
+    } catch (error) {
+      console.error(`Error hydrating callable for step "${parsedStep.name}": `, error);
+      // TODO: Throw with custom message
+    }
   }
 
   /**
@@ -148,5 +206,60 @@ export default class Step extends Base {
     } else {
       this._callable = callable.bind(this);
     }
+  }
+
+  /**
+   * Inserts safely serializable properties of the step into a new object for serialization.
+   * @returns {Object} An object containing the step's properties ready for serialization.
+   */
+  prepareForSerialization() {
+    const serializedStep = {
+      id: this.id,
+      name: this.name,
+      callable_type: this.callable_type,
+      step_type: this.step_type,
+      sub_step_type: this.sub_step_type,
+      max_retries: this.max_retries,
+      max_timeout_ms: this.max_timeout_ms,
+      retry_count: this.retry_count,
+      retry_results: this.retry_results,
+      errors: this.errors,
+      result: this.result,
+      timing: this.timing,
+    };
+
+    if (this.callable_type === Step.callable_types.Function) {
+      if (this.callable_registry_key) {
+        serializedStep.callable = `registry:${this.callable_registry_key}`;
+      } else {
+        serializedStep.callable = this._callable.name;
+      }
+    }
+
+    if (['step', 'workflow'].includes(this.callable_type)) {
+      if (this.callable_registry_key) {
+        serializedStep.callable = `registry:${this.callable_registry_key}`;
+      } else {
+        serializedStep.callable = this.#callable_object.serialize();
+      }
+    }
+
+    return serializedStep;
+  }
+
+  /**
+   * Serializes the step into a JSON string.
+   * @returns {string} The JSON string representation of the step.
+   */
+  serialize() {
+    return JSON.stringify(this.prepareForSerialization());
+  }
+
+  /**
+   * Custom JSON serializer
+   * @returns {Object} The JSON representation of the workflow.
+   */
+  toJSON() {
+    return this.prepareForSerialization();
   }
 }

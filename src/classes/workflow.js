@@ -19,6 +19,7 @@ export default class Workflow extends Base {
   constructor({
     name,
     exit_on_error = false,
+    persistence_mode = false,
     steps = [],
     throw_on_empty = false
   }) {
@@ -32,6 +33,7 @@ export default class Workflow extends Base {
     this.throw_on_empty = throw_on_empty;
     this.sessions = {};
     this.current_session_id = null;
+    this.persistence_mode = persistence_mode;
   }
 
   /**
@@ -94,7 +96,7 @@ export default class Workflow extends Base {
     }
 
     this.markAsComplete();
-    return this;
+    return this.prepareForSerialization();
   }
 
   /**
@@ -137,8 +139,10 @@ export default class Workflow extends Base {
    * @throws {Error} Throws if step is not a valid Step instance.
    */
   addStep(step) {
+    // This check only ensures that the getCallableType method exists,
+    // which is a characteristic of Step instances
     if (typeof step.getCallableType !== 'function') {
-      throw new Error('Invalid step type. Must be an instance of Step.');
+      throw new Error('Invalid input. Must be an instance of Step.');
     }
 
     if (!Array.isArray(this._steps)) {
@@ -183,6 +187,7 @@ export default class Workflow extends Base {
    */
   clearSteps() {
     this._steps = [];
+    this.steps_by_id = {};
   }
 
   /**
@@ -216,6 +221,55 @@ export default class Workflow extends Base {
    */
   deleteStepByIndex(index) {
     this._steps.splice(index, 1);
+  }
+
+  /**
+   * Deserializes a JSON string into a Workflow instance and hydrates it.
+   * @param {string} serializedWorkflow - The JSON string representation of the workflow.
+   * @returns {Workflow} The hydrated Workflow instance.
+   * @throws {Error} Throws if the serialized workflow is not a string.
+   */
+  static hydrateSerialized(serializedWorkflow) {
+    // TODO: Validate structure of serialized workflow
+    // TODO: Use event system to handle errors?
+    if (typeof serializedWorkflow !== 'string') {
+      throw new Error('Invalid serialized workflow. Must be a string.');
+    }
+
+    const parsed = JSON.parse(serializedWorkflow);
+
+    return Workflow.hydrate(parsed);
+  }
+
+  /**
+   * Hydrates a parsed workflow object into a Workflow instance.
+   * @param {Object} parsedWorkflow - The parsed workflow object.
+   * @returns {Workflow} The hydrated Workflow instance.
+   * @throws {Error} Throws if the parsed workflow is not a valid object.
+   */
+  static hydrate(parsedWorkflow) {
+    // TODO: Validate structure of serialized workflow
+    // TODO: Use event system to handle errors?
+    if (typeof parsedWorkflow !== 'object' || parsedWorkflow === null) {
+      throw new Error('Invalid parsed workflow. Must be a valid object.');
+    }
+
+    const hydratedWorkflow = new Workflow({
+      name: parsedWorkflow.name,
+      exit_on_error: parsedWorkflow.exit_on_error,
+      throw_on_empty: parsedWorkflow.throw_on_empty,
+    });
+
+    hydratedWorkflow.id = parsedWorkflow.id;
+    hydratedWorkflow.current_session_id = parsedWorkflow.current_session_id;
+    hydratedWorkflow.status = parsedWorkflow.status;
+    hydratedWorkflow.timing = parsedWorkflow.timing;
+    hydratedWorkflow.results = parsedWorkflow.results;
+
+    const steps = parsedWorkflow.steps.map(step => Step.hydrate(step));
+    hydratedWorkflow.steps = steps;
+
+    return hydratedWorkflow;
   }
 
   /**
@@ -351,6 +405,26 @@ export default class Workflow extends Base {
   }
 
   /**
+   * Inserts safely serializable properties of the workflow into a new object for serialization.
+   * @returns {Object} An object containing the workflow's properties ready for serialization.
+  */
+  prepareForSerialization() {
+    const serializedWorkflow = {
+      id: this.id,
+      current_session_id: this.current_session_id,
+      exit_on_error: this.exit_on_error,
+      name: this.name,
+      throw_on_empty: this.throw_on_empty,
+      status: this.status,
+      steps: this._steps.map(step => step.prepareForSerialization()),
+      timing: this.timing,
+      results: this.results,
+    };
+
+    return serializedWorkflow;
+  }
+
+  /**
    * Prepares a result object and adds it to the results array.
    * @param {string} message - Result message.
    * @param {*} data - Result data.
@@ -373,6 +447,14 @@ export default class Workflow extends Base {
    */
   pushSteps(steps) {
     steps.forEach(step => this.addStep(step));
+  }
+
+  /**
+   * Serializes the workflow into a JSON string.
+   * @returns {string} The JSON string representation of the workflow.
+   */
+  serialize() {
+    return JSON.stringify(this.prepareForSerialization());
   }
 
   /**
@@ -416,12 +498,14 @@ export default class Workflow extends Base {
    * @param {Step[]} steps - Array of steps to add.
    */
   set steps(steps) {
-    steps.forEach((step, index) => {
-      if (typeof step.getCallableType !== 'function') {
-        throw new Error(`Invalid step type. Step at index ${index} is not an instance of Step.`);
-      }
-    });
-
     this.addSteps(steps);
+  }
+
+  /**
+   * Custom JSON serializer
+   * @returns {Object} The JSON representation of the workflow.
+   */
+  toJSON() {
+    return this.prepareForSerialization();
   }
 }
