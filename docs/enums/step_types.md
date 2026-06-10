@@ -1,191 +1,72 @@
-# Step Types
+# step_types
 
-Enumeration of step types used throughout the workflow system. These types categorize steps by their primary function.
+High-level semantic category for `Step` instances. Set via `options.step_type` in the `Step` constructor. Used internally for classification and can be used in application logic to filter or route steps.
+
+## Table of Contents
+- [Values](#values)
+- [Usage](#usage)
+- [Related](#related)
 
 ## Values
 
-- `ACTION` - `'action'` - General purpose action step (default)
-- `LOGIC` - `'logic'` - Logic-based step with conditional evaluation
-- `DELAY` - `'delay'` - Time-based delay step
-- `LOOP` - `'loop'` - Loop-based step for iterating over data or conditions
+| Key | Value | Description |
+|-----|-------|-------------|
+| `ACTION` | `'action'` | A standard executable step. Default for all plain `Step` instances. |
+| `DELAY` | `'delay'` | A step that introduces a timed pause. Used by `DelayStep`. |
+| `LOGIC` | `'logic'` | A step containing conditional logic. Used by `LogicStep` and its subclasses. |
+| `LOOP` | `'loop'` | A step that iterates over a collection or condition. Used by `LoopStep`. |
 
 ## Usage
 
-Step types categorize the behavior and purpose of steps within workflows.
-
-### Node.js - Action Step
-
 ```javascript
-import { Step, step_types } from 'micro-flow';
+import { Step, step_types } from '@ronaldroe/micro-flow';
 
 const actionStep = new Step({
-  name: 'process-data',
-  step_type: step_types.ACTION,  // Default type
-  callable: async () => {
-    // Perform some action
-    return { processed: true };
-  }
-});
-```
-
-### Node.js - Logic Step
-
-```javascript
-import { LogicStep, step_types } from 'micro-flow';
-
-const logicStep = new LogicStep({
-  name: 'check-condition',
-  step_type: step_types.LOGIC,
-  conditional: {
-    subject: value,
-    operator: '>',
-    value: 10
-  },
-  callable: async () => {
-    console.log('Condition met');
-  }
-});
-```
-
-### Browser - Delay Step
-
-```javascript
-import { DelayStep, step_types } from './micro-flow.js';
-
-const delayStep = new DelayStep({
-  name: 'wait-period',
-  step_type: step_types.DELAY,
-  delay_type: 'relative',
-  delay_duration: 5000  // 5 seconds
-});
-```
-
-### Node.js - Loop Step
-
-```javascript
-import { LoopStep, loop_types, step_types } from 'micro-flow';
-
-const loopStep = new LoopStep({
-  name: 'loop-items',
-  step_type: step_types.LOOP,
-  loop_type: loop_types.FOR_EACH,
-  iterable: ['a', 'b', 'c'],
-  callable: async function() {
-    return this.current_item;
-  }
+  name: 'fetch-data',
+  step_type: step_types.ACTION,
+  callable: async () => ({ data: [] }),
 });
 
-await loopStep.execute();
+console.log(actionStep.step_type); // 'action'
+
+// Inspecting step types in a workflow
+import { Workflow } from '@ronaldroe/micro-flow';
+
+const wf = new Workflow({
+  name: 'mixed-pipeline',
+  steps: [
+    new Step({ name: 'a', step_type: step_types.ACTION, callable: async () => {} }),
+  ],
+});
+
+const actionSteps = wf.steps.filter(s => s.step_type === step_types.ACTION);
+console.log(`${actionSteps.length} action step(s)`);
 ```
 
-### React - Filtering Steps by Type
+The `step_type` is set automatically by subclasses:
 
 ```javascript
-import { Workflow, Step, step_types } from './micro-flow.js';
-import { useState, useEffect } from 'react';
+import { DelayStep, LoopStep, ConditionalStep, step_types, loop_types } from '@ronaldroe/micro-flow';
 
-function WorkflowAnalyzer({ workflow }) {
-  const [stepSummary, setStepSummary] = useState({});
+const delay = new DelayStep({ name: 'd', relative_delay_ms: 100 });
+console.log(delay.step_type); // 'delay'
 
-  useEffect(() => {
-    const summary = workflow.steps.reduce((acc, step) => {
-      acc[step.step_type] = (acc[step.step_type] || 0) + 1;
-      return acc;
-    }, {});
-    
-    setStepSummary(summary);
-  }, [workflow]);
+const loop = new LoopStep({ name: 'l', loop_type: loop_types.FOR, iterations: 3, callable: async () => {} });
+console.log(loop.step_type); // 'loop'
 
-  return (
-    <div>
-      <h3>Step Summary</h3>
-      <p>Action steps: {stepSummary[step_types.ACTION] || 0}</p>
-      <p>Logic steps: {stepSummary[step_types.LOGIC] || 0}</p>
-      <p>Delay steps: {stepSummary[step_types.DELAY] || 0}</p>
-    </div>
-  );
-}
+const cond = new ConditionalStep({
+  name: 'c',
+  conditional: { subject: true, operator: '===', value: true },
+  true_callable: async () => {},
+  false_callable: async () => {},
+});
+console.log(cond.step_type); // 'logic'
 ```
 
-### Vue - Dynamic Step Creation
+## Related
 
-```vue
-<template>
-  <div>
-    <select v-model="selectedType">
-      <option :value="step_types.ACTION">Action</option>
-      <option :value="step_types.LOGIC">Logic</option>
-      <option :value="step_types.DELAY">Delay</option>
-    </select>
-    <button @click="createStep">Create Step</button>
-  </div>
-</template>
-
-<script setup>
-import { ref } from 'vue';
-import { Step, LogicStep, DelayStep, step_types } from './micro-flow.js';
-
-const selectedType = ref(step_types.ACTION);
-
-const createStep = () => {
-  let step;
-  
-  switch (selectedType.value) {
-    case step_types.ACTION:
-      step = new Step({ name: 'action', callable: async () => {} });
-      break;
-    case step_types.LOGIC:
-      step = new LogicStep({ 
-        name: 'logic',
-        conditional: { subject: true, operator: '===', value: true }
-      });
-      break;
-    case step_types.DELAY:
-      step = new DelayStep({ 
-        name: 'delay',
-        delay_type: 'relative',
-        delay_duration: 1000
-      });
-      break;
-  }
-  
-  console.log('Created step:', step);
-};
-</script>
-```
-
-### Node.js - Step Type Validation
-
-```javascript
-import { Workflow, Step, step_types } from 'micro-flow';
-
-function createValidatedWorkflow(stepConfigs) {
-  const steps = stepConfigs.map(config => {
-    if (!Object.values(step_types).includes(config.type)) {
-      throw new Error(`Invalid step type: ${config.type}`);
-    }
-    
-    return new Step({
-      name: config.name,
-      step_type: config.type,
-      callable: config.callable
-    });
-  });
-
-  return new Workflow({
-    name: 'validated-workflow',
-    steps
-  });
-}
-
-const workflow = createValidatedWorkflow([
-  { name: 'step1', type: step_types.ACTION, callable: async () => {} },
-  { name: 'step2', type: step_types.LOGIC, callable: async () => {} }
-]);
-```
-
-## See Also
-
-- [Step](../classes/steps/step.md) - Uses step types
-- [LogicStep](../classes/steps/logic_step.md) - Logic type step
-- [Sub Step Types](sub_step_types.md) - More specific step categorization
+- [Step](../classes/steps/step.md) — Accepts `step_type` in its constructor.
+- [sub_step_types](sub_step_types.md) — More granular classification of step subclasses.
+- [DelayStep](../classes/steps/delay_step.md) — Uses `DELAY` type.
+- [LogicStep](../classes/steps/logic_step.md) — Uses `LOGIC` type.
+- [LoopStep](../classes/steps/loop_step.md) — Uses `LOOP` type.

@@ -1,172 +1,68 @@
-# Step Statuses
+# step_statuses
 
-Enumeration of possible step execution statuses. Steps transition through these statuses during their lifecycle.
+Lifecycle status values for `Step` instances. The `status` property on every step is updated to one of these values as execution progresses.
+
+## Table of Contents
+- [Values](#values)
+- [Usage](#usage)
+- [Related](#related)
 
 ## Values
 
-- `COMPLETE` - `'complete'` - Step has finished executing successfully
-- `FAILED` - `'failed'` - Step execution failed
-- `PENDING` - `'pending'` - Step is pending execution
-- `QUEUED` - `'queued'` - Step is queued for execution
-- `RUNNING` - `'running'` - Step is currently executing
-- `WAITING` - `'waiting'` - Step is waiting for external condition
+| Key | Value | Description |
+|-----|-------|-------------|
+| `PENDING` | `'pending'` | Step has been created but not yet executed. |
+| `QUEUED` | `'queued'` | Step is queued for execution (inside a workflow). |
+| `RUNNING` | `'running'` | Step is currently executing. |
+| `WAITING` | `'waiting'` | Step is in a waiting state (e.g., a `DelayStep` awaiting its timer). |
+| `COMPLETE` | `'complete'` | Step completed successfully. |
+| `FAILED` | `'failed'` | Step failed (all retry attempts exhausted). |
 
-## Status Lifecycle
-
-```
-PENDING → QUEUED → RUNNING → COMPLETE
-                           ↘ FAILED
-                  ↘ WAITING
-```
-
-## Usage Examples
-
-### Node.js - Status Monitoring
+## Usage
 
 ```javascript
-import { Step, State, step_statuses } from 'micro-flow';
+import { Step, step_statuses, State } from '@ronaldroe/micro-flow';
 
 const step = new Step({
-  name: 'monitored-step',
-  callable: async () => {
-    console.log('Processing...');
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    return 'done';
-  }
+  name: 'compute',
+  callable: async () => 42,
 });
 
-console.log('Initial status:', step.status);
+console.log(step.status); // 'pending' (before execute)
 
 await step.execute();
 
-if (step.status === step_statuses.COMPLETE) {
-  console.log('Step completed successfully');
-} else if (step.status === step_statuses.FAILED) {
-  console.error('Step failed');
-}
+console.log(step.status === step_statuses.COMPLETE); // true
+console.log(step.status); // 'complete'
 ```
 
-### Browser with React - Status Display
+Checking status on all steps in a workflow:
 
 ```javascript
-import { Step, step_statuses } from './micro-flow.js';
-import { useState } from 'react';
+import { Workflow, Step, step_statuses } from '@ronaldroe/micro-flow';
 
-function StepExecutor() {
-  const [status, setStatus] = useState('');
-  const [statusColor, setStatusColor] = useState('gray');
-
-  const executeStep = async () => {
-    const step = new Step({
-      name: 'async-task',
-      callable: async () => {
-        setStatus(step_statuses.RUNNING);
-        setStatusColor('blue');
-        
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        return 'complete';
-      }
-    });
-
-    await step.execute();
-
-    if (step.status === step_statuses.COMPLETE) {
-      setStatus(step_statuses.COMPLETE);
-      setStatusColor('green');
-    } else if (step.status === step_statuses.FAILED) {
-      setStatus(step_statuses.FAILED);
-      setStatusColor('red');
-    }
-  };
-
-  return (
-    <div>
-      <button onClick={executeStep}>Execute Step</button>
-      <p style={{ color: statusColor }}>
-        Status: {status || 'Not started'}
-      </p>
-    </div>
-  );
-}
-```
-
-### Vue - Status Badge
-
-```vue
-<template>
-  <div>
-    <button @click="runStep">Run Step</button>
-    <span :class="statusClass">{{ status }}</span>
-  </div>
-</template>
-
-<script setup>
-import { ref, computed } from 'vue';
-import { Step, step_statuses } from './micro-flow.js';
-
-const status = ref('');
-
-const statusClass = computed(() => {
-  switch (status.value) {
-    case step_statuses.RUNNING: return 'badge-running';
-    case step_statuses.COMPLETE: return 'badge-complete';
-    case step_statuses.FAILED: return 'badge-failed';
-    default: return 'badge-pending';
-  }
-});
-
-const runStep = async () => {
-  const step = new Step({
-    name: 'test-step',
-    callable: async () => {
-      status.value = step_statuses.RUNNING;
-      await new Promise(r => setTimeout(r, 1000));
-    }
-  });
-
-  await step.execute();
-  status.value = step.status;
-};
-</script>
-
-<style scoped>
-.badge-running { color: blue; }
-.badge-complete { color: green; }
-.badge-failed { color: red; }
-.badge-pending { color: gray; }
-</style>
-```
-
-### Node.js - Batch Status Check
-
-```javascript
-import { Workflow, Step, step_statuses } from 'micro-flow';
-
-const workflow = new Workflow({
-  name: 'batch-processor',
+const wf = new Workflow({
+  name: 'batch',
+  exit_on_error: false,
   steps: [
-    new Step({ name: 'step-1', callable: async () => 'done' }),
-    new Step({ name: 'step-2', callable: async () => 'done' }),
-    new Step({ name: 'step-3', callable: async () => {
-      throw new Error('Failed');
-    }})
+    new Step({ name: 'a', callable: async () => 'ok' }),
+    new Step({ name: 'b', callable: async () => { throw new Error('fail'); } }),
+    new Step({ name: 'c', callable: async () => 'ok' }),
   ],
-  exit_on_error: false
 });
 
-await workflow.execute();
+await wf.execute();
 
-const statusSummary = workflow.steps.reduce((acc, step) => {
-  acc[step.status] = (acc[step.status] || 0) + 1;
-  return acc;
-}, {});
-
-console.log('Status summary:', statusSummary);
-// { complete: 2, failed: 1 }
+for (const step of wf.steps) {
+  if (step.status === step_statuses.FAILED) {
+    console.warn(`Step "${step.name}" failed:`, step.errors[0]?.message);
+  } else if (step.status === step_statuses.COMPLETE) {
+    console.log(`Step "${step.name}" completed`);
+  }
+}
 ```
 
-## See Also
+## Related
 
-- [Workflow Statuses](workflow_statuses.md) - Workflow status enum
-- [Step](../classes/steps/step.md) - Uses step statuses
-- [Step Event Names](step_event_names.md) - Events for status changes
+- [Step](../classes/steps/step.md) — Has a `status` property updated during execution.
+- [step_event_names](step_event_names.md) — `STEP_RUNNING`, `STEP_COMPLETE`, `STEP_FAILED`, etc. correspond to these statuses.

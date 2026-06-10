@@ -1,361 +1,76 @@
-# Sub Step Types
+# sub_step_types
 
-Static mapping of Step class names to their `step_name` identifiers.
+Granular type identifiers for each step subclass. Maps the class name to its `step_name` string, which is also the value stored in each instance's `sub_step_type` property.
 
-## Overview
+## Table of Contents
+- [Values](#values)
+- [Usage](#usage)
+- [Related](#related)
 
-Sub step types provide a mapping from class names to their step type identifiers. This is useful for:
+## Values
 
-- Type checking and validation
-- Dynamic step creation
-- Debugging and logging
-- Step class discovery
-
-## Mapping
-
-The library provides mappings for all built-in step classes:
-
-```javascript
-{
-  Step: 'step',
-  LogicStep: 'logic',
-  ConditionalStep: 'conditional',
-  FlowControlStep: 'flow_control',
-  LoopStep: 'loop',
-  SwitchStep: 'switch',
-  Case: 'case',
-  DelayStep: 'delay',
-}
-```
+| Key (class name) | Value (`step_name`) | Description |
+|-----------------|---------------------|-------------|
+| `Step` | `'step'` | Base `Step` class. |
+| `LogicStep` | `'logic'` | Base conditional logic class. |
+| `ConditionalStep` | `'conditional'` | Two-branch conditional step. |
+| `FlowControlStep` | `'flow_control'` | Break/skip flow control step. |
+| `LoopStep` | `'loop'` | Iteration step. |
+| `SwitchStep` | `'switch'` | Multi-case switch step. |
+| `Case` | `'case'` | Single case for a `SwitchStep`. |
+| `DelayStep` | `'delay'` | Timed delay step. |
 
 ## Usage
 
-### Node.js - Check Step Type
-
 ```javascript
-import { sub_step_types } from 'micro-flow';
+import { sub_step_types } from '@ronaldroe/micro-flow';
 
-console.log(sub_step_types);
-// {
-//   Step: 'step',
-//   LogicStep: 'logic',
-//   ConditionalStep: 'conditional',
-//   FlowControlStep: 'flow_control',
-//   LoopStep: 'loop',
-//   SwitchStep: 'switch',
-//   Case: 'case',
-//   DelayStep: 'delay',
-// }
-
-// Check if a class is a registered step type
-if (sub_step_types.ConditionalStep) {
-  console.log('ConditionalStep identifier:', sub_step_types.ConditionalStep);
-  // Output: "ConditionalStep identifier: conditional"
-}
+console.log(sub_step_types.ConditionalStep); // 'conditional'
+console.log(sub_step_types.LoopStep);        // 'loop'
+console.log(sub_step_types.DelayStep);       // 'delay'
+console.log(sub_step_types.FlowControlStep); // 'flow_control'
 ```
 
-### Node.js - Dynamic Step Factory
+Each step class exposes a static `step_name` property that matches the corresponding enum value:
 
 ```javascript
-import { 
-  sub_step_types, 
-  Step,
-  ConditionalStep,
-  LoopStep,
-  DelayStep
-} from 'micro-flow';
+import { Step, ConditionalStep, LoopStep, sub_step_types } from '@ronaldroe/micro-flow';
 
-const stepClasses = {
-  Step,
-  ConditionalStep,
-  LoopStep,
-  DelayStep
-};
-
-function createStepByClassName(className, config) {
-  if (!sub_step_types[className]) {
-    throw new Error(`Unknown step class: ${className}`);
-  }
-  
-  const StepClass = stepClasses[className];
-  return new StepClass(config);
-}
-
-// Create steps dynamically
-const step1 = createStepByClassName('ConditionalStep', {
-  name: 'check-value',
-  conditional: { subject: 5, operator: '>', value: 3 }
-});
-
-const step2 = createStepByClassName('DelayStep', {
-  name: 'wait',
-  delay_type: 'relative',
-  delay_duration: 1000
-});
+console.log(Step.step_name);            // 'step'
+console.log(ConditionalStep.step_name); // 'conditional'
+console.log(LoopStep.step_name);        // 'loop'
 ```
 
-### Node.js - Validation
+Inspecting a step's sub-type at runtime:
 
 ```javascript
-import { sub_step_types } from 'micro-flow';
-
-function isValidStepClass(className) {
-  return className in sub_step_types;
-}
-
-function getStepTypeFromClass(className) {
-  if (!isValidStepClass(className)) {
-    throw new Error(`Invalid step class: ${className}`);
-  }
-  
-  return sub_step_types[className];
-}
-
-console.log(getStepTypeFromClass('ConditionalStep')); // "conditional"
-console.log(getStepTypeFromClass('Step')); // "step"
-```
-
-### Browser - Step Registry
-
-```javascript
-import { sub_step_types } from './micro-flow.js';
-
-class StepRegistry {
-  constructor() {
-    this.registry = new Map();
-    
-    // Register all known step types
-    Object.entries(sub_step_types).forEach(([className, stepType]) => {
-      if (stepType) {
-        this.registry.set(stepType, className);
-      }
-    });
-  }
-  
-  getClassName(stepType) {
-    return this.registry.get(stepType);
-  }
-  
-  getStepType(className) {
-    return sub_step_types[className];
-  }
-  
-  getAllTypes() {
-    return Array.from(this.registry.keys());
-  }
-}
-
-const registry = new StepRegistry();
-console.log(registry.getClassName('conditional')); // "ConditionalStep"
-console.log(registry.getAllTypes()); // ["step", "logic", "conditional", "flow_control", "loop", "switch", "case", "delay"]
-```
-
-### React - Step Type Selector
-
-```javascript
-import { sub_step_types } from './micro-flow.js';
-import { useState } from 'react';
-
-function StepTypeSelector({ onSelect }) {
-  const [selectedClass, setSelectedClass] = useState('');
-
-  const stepClasses = Object.keys(sub_step_types);
-
-  const handleSelect = (e) => {
-    const className = e.target.value;
-    setSelectedClass(className);
-    onSelect({
-      className,
-      stepType: sub_step_types[className]
-    });
-  };
-
-  return (
-    <div>
-      <label>Select Step Type:</label>
-      <select value={selectedClass} onChange={handleSelect}>
-        <option value="">Choose...</option>
-        {stepClasses.map(className => (
-          <option key={className} value={className}>
-            {className} ({sub_step_types[className]})
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-```
-
-### Vue - Step Type Inspector
-
-```vue
-<template>
-  <div>
-    <h3>Available Step Types</h3>
-    <table>
-      <thead>
-        <tr>
-          <th>Class Name</th>
-          <th>Step Type</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="[className, stepType] in stepTypes" :key="className">
-          <td><code>{{ className }}</code></td>
-          <td>{{ stepType }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</template>
-
-<script setup>
-import { ref, onMounted } from 'vue';
-import { sub_step_types } from './micro-flow.js';
-
-const stepTypes = ref([]);
-
-onMounted(() => {
-  stepTypes.value = Object.entries(sub_step_types);
-});
-</script>
-```
-
-### Node.js - Debugging Helper
-
-```javascript
-import { sub_step_types } from 'micro-flow';
-
-function debugStepInstance(step) {
-  const className = step.constructor.name;
-  const expectedType = sub_step_types[className];
-  const actualType = step.sub_step_type || step.step_type;
-  
-  console.log('Step Debug Info:');
-  console.log('  Class:', className);
-  console.log('  Expected Type:', expectedType);
-  console.log('  Actual Type:', actualType);
-  console.log('  Match:', expectedType === actualType);
-  
-  if (expectedType !== actualType) {
-    console.warn('⚠️ Type mismatch detected!');
-  }
-}
-
-// Usage
-import { ConditionalStep } from 'micro-flow';
+import { ConditionalStep, sub_step_types } from '@ronaldroe/micro-flow';
 
 const step = new ConditionalStep({
-  name: 'test',
-  conditional: { subject: 1, operator: '===', value: 1 }
+  name: 'my-branch',
+  conditional: { subject: true, operator: '===', value: true },
+  true_callable: async () => 'yes',
+  false_callable: async () => 'no',
 });
 
-debugStepInstance(step);
-// Output:
-// Step Debug Info:
-//   Class: ConditionalStep
-//   Expected Type: conditional
-//   Actual Type: conditional
-//   Match: true
+console.log(step.sub_step_type);  // 'conditional'
+console.log(step.sub_step_type === sub_step_types.ConditionalStep); // true
+
+// Filter steps in a workflow by sub-type
+import { Workflow, Step } from '@ronaldroe/micro-flow';
+const wf = new Workflow({ name: 'mixed' });
+// ...add steps...
+const conditionals = wf.steps.filter(s => s.sub_step_type === sub_step_types.ConditionalStep);
 ```
 
-### Node.js - Type-Safe Step Builder
+## Related
 
-```javascript
-import { 
-  sub_step_types,
-  Step,
-  ConditionalStep,
-  LoopStep,
-  DelayStep
-} from 'micro-flow';
-
-class TypeSafeStepBuilder {
-  constructor() {
-    this.classMap = {
-      Step,
-      ConditionalStep,
-      LoopStep,
-      DelayStep
-    };
-  }
-  
-  build(className, config) {
-    // Validate class name
-    if (!sub_step_types[className]) {
-      throw new Error(
-        `Unknown step class: ${className}. ` +
-        `Available: ${Object.keys(sub_step_types).join(', ')}`
-      );
-    }
-    
-    // Get the class
-    const StepClass = this.classMap[className];
-    if (!StepClass) {
-      throw new Error(`Step class ${className} not imported`);
-    }
-    
-    // Create instance
-    const instance = new StepClass(config);
-    
-    // Verify type matches
-    const expectedType = sub_step_types[className];
-    const actualType = instance.sub_step_type || instance.step_type;
-    
-    if (expectedType && expectedType !== actualType) {
-      console.warn(
-        `Type mismatch for ${className}: ` +
-        `expected ${expectedType}, got ${actualType}`
-      );
-    }
-    
-    return instance;
-  }
-  
-  listAvailableTypes() {
-    return Object.entries(sub_step_types)
-      .map(([className, type]) => ({ className, type }));
-  }
-}
-
-const builder = new TypeSafeStepBuilder();
-
-// List available types
-console.log(builder.listAvailableTypes());
-
-// Build steps safely
-const step = builder.build('ConditionalStep', {
-  name: 'check',
-  conditional: { subject: true, operator: '===', value: true }
-});
-```
-
-## Custom Step Types
-
-If you create custom step classes, you can add them to the `sub_step_types` enum:
-
-```javascript
-import { sub_step_types } from 'micro-flow';
-
-// Add your custom step class
-sub_step_types.CustomStep = 'custom';
-```
-
-## API Reference
-
-### Properties
-
-All properties are class name strings mapped to their step type identifiers.
-
-```javascript
-{
-  [className: string]: string
-}
-```
-
-## See Also
-
-- [Step Types](step_types.md) - General step categorization
-- [Logic Step Types](logic_step_types.md) - Logic step subcategories  
-- [Step](../classes/steps/step.md) - Base step class
-- [LogicStep](../classes/steps/logic_step.md) - Logic step class
+- [step_types](step_types.md) — Higher-level category (`action`, `delay`, `logic`, `loop`).
+- [logic_step_types](logic_step_types.md) — Sub-types specific to logic steps.
+- [Step](../classes/steps/step.md) — Base class; `step_name = 'step'`.
+- [ConditionalStep](../classes/steps/conditional_step.md) — `step_name = 'conditional'`.
+- [FlowControlStep](../classes/steps/flow_control_step.md) — `step_name = 'flow_control'`.
+- [LoopStep](../classes/steps/loop_step.md) — `step_name = 'loop'`.
+- [SwitchStep](../classes/steps/switch_step.md) — `step_name = 'switch'`.
+- [Case](../classes/steps/case.md) — `step_name = 'case'`.
+- [DelayStep](../classes/steps/delay_step.md) — `step_name = 'delay'`.

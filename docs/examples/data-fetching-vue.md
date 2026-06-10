@@ -1,439 +1,353 @@
-# Data Fetching with Vue
+# Data Fetching — Vue 3
 
-A Vue 3 Composition API example demonstrating advanced data fetching with workflows.
+Demonstrates using `Workflow`, `Step`, `LoopStep`, and `State` in a Vue 3 Composition API component to manage asynchronous data fetching, transformation, and reactive UI updates. Events from the library drive Vue's reactive state.
 
 ## Overview
 
-This example shows how to build a data-fetching component with loading states, error handling, caching, and automatic retry logic using Vue 3 and micro-flow.
+You will learn:
+- Integrating `Workflow` in a Vue 3 `<script setup>` component
+- Driving Vue `ref` and `reactive` values from workflow step events
+- Using `LoopStep` to process a paginated API collection
+- Storing fetched data in `State` and reading it in the component
+- Handling loading, error, and success UI states
+- Cleaning up event listeners with `onUnmounted`
 
-## Code
+## Complete Example
 
 ```vue
+<!-- UserDirectory.vue -->
 <template>
-  <div class="data-fetcher">
-    <div class="controls">
-      <button @click="fetchData" :disabled="isLoading">
-        {{ isLoading ? 'Loading...' : 'Fetch Data' }}
+  <div class="user-directory">
+    <header>
+      <h1>User Directory</h1>
+      <button :disabled="loading" @click="loadUsers">
+        {{ loading ? 'Loading…' : 'Refresh' }}
       </button>
-      <button @click="refreshData" :disabled="isLoading">
-        Refresh
-      </button>
-      <button @click="clearCache">
-        Clear Cache
-      </button>
+    </header>
+
+    <!-- Progress bar -->
+    <div v-if="loading" class="progress">
+      <div class="progress-bar" :style="{ width: progress + '%' }"></div>
+      <span>{{ statusMessage }}</span>
     </div>
 
-    <div v-if="error" class="error">
-      <h3>Error</h3>
-      <p>{{ error }}</p>
-      <button @click="fetchData">Retry</button>
+    <!-- Error state -->
+    <div v-if="error" class="error-banner">
+      <strong>Error:</strong> {{ error }}
+      <button @click="clearError">Dismiss</button>
     </div>
 
-    <div v-if="isLoading" class="loading">
-      <div class="spinner"></div>
-      <p>{{ loadingMessage }}</p>
-    </div>
-
-    <div v-if="data && !isLoading" class="data">
-      <h2>Users ({{ data.length }})</h2>
-      <div class="user-list">
-        <div v-for="user in data" :key="user.id" class="user-card">
-          <h3>{{ user.name }}</h3>
-          <p>{{ user.email }}</p>
-          <p class="company">{{ user.company.name }}</p>
-          <button @click="fetchUserDetails(user.id)">
-            View Details
-          </button>
-        </div>
+    <!-- Stats -->
+    <div v-if="!loading && stats.total > 0" class="stats">
+      <div class="stat">
+        <span class="stat-value">{{ stats.total }}</span>
+        <span class="stat-label">Users</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">{{ stats.active }}</span>
+        <span class="stat-label">Active</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">{{ Object.keys(stats.byDepartment).length }}</span>
+        <span class="stat-label">Departments</span>
       </div>
     </div>
 
-    <div v-if="selectedUser" class="modal" @click="selectedUser = null">
-      <div class="modal-content" @click.stop>
-        <h2>{{ selectedUser.name }}</h2>
-        <p><strong>Email:</strong> {{ selectedUser.email }}</p>
-        <p><strong>Phone:</strong> {{ selectedUser.phone }}</p>
-        <p><strong>Website:</strong> {{ selectedUser.website }}</p>
-        <p><strong>Company:</strong> {{ selectedUser.company.name }}</p>
-        
-        <h3>Posts ({{ selectedUser.posts?.length || 0 }})</h3>
-        <div v-if="selectedUser.posts" class="posts">
-          <div v-for="post in selectedUser.posts" :key="post.id" class="post">
-            <h4>{{ post.title }}</h4>
-            <p>{{ post.body }}</p>
-          </div>
+    <!-- User grid -->
+    <div v-if="users.length > 0" class="user-grid">
+      <div
+        v-for="user in filteredUsers"
+        :key="user.id"
+        class="user-card"
+        :class="{ inactive: !user.isActive }"
+      >
+        <div class="avatar">{{ user.initials }}</div>
+        <div class="user-info">
+          <strong>{{ user.displayName }}</strong>
+          <span>{{ user.email }}</span>
+          <span class="department">{{ user.department }}</span>
         </div>
-
-        <button @click="selectedUser = null">Close</button>
+        <span class="badge" :class="user.isActive ? 'active' : 'inactive'">
+          {{ user.isActive ? 'Active' : 'Inactive' }}
+        </span>
       </div>
     </div>
 
-    <div v-if="metadata" class="metadata">
-      <p><strong>Last fetched:</strong> {{ new Date(metadata.timestamp).toLocaleString() }}</p>
-      <p><strong>Cache hits:</strong> {{ metadata.cacheHits }}</p>
-      <p><strong>Fetch time:</strong> {{ metadata.fetchTime }}ms</p>
+    <!-- Empty state -->
+    <div v-else-if="!loading && !error" class="empty-state">
+      <p>No users loaded. Click Refresh to fetch data.</p>
+    </div>
+
+    <!-- Filter -->
+    <div v-if="users.length > 0" class="filters">
+      <label>
+        <input v-model="showInactive" type="checkbox" />
+        Show inactive users
+      </label>
+      <input v-model="search" type="text" placeholder="Search by name or email…" />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import { Workflow, Step, ConditionalStep, State } from './micro-flow.js';
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
+import {
+  Workflow,
+  Step,
+  LoopStep,
+  State,
+  loop_types,
+  workflow_event_names,
+  step_event_names,
+} from '@ronaldroe/micro-flow';
 
-// Reactive state
-const data = ref(null);
-const isLoading = ref(false);
-const error = ref(null);
-const loadingMessage = ref('');
-const selectedUser = ref(null);
-const metadata = ref(null);
+// ─── Reactive state ──────────────────────────────────────────────────────────
 
-// Initialize cache
-State.set('cache.users', null);
-State.set('cache.timestamp', null);
-State.set('cache.hits', 0);
+const users         = ref([]);
+const loading       = ref(false);
+const error         = ref(null);
+const statusMessage = ref('');
+const progress      = ref(0);
+const showInactive  = ref(false);
+const search        = ref('');
 
-// Create data fetching workflow
-const createFetchWorkflow = (forceRefresh = false) => {
-  return new Workflow({
-    name: 'fetch-users',
-    steps: [
-      new ConditionalStep({
-        name: 'check-cache',
-        conditional: {
-          subject: State.get('cache.users') !== null && !forceRefresh,
-          operator: '===',
-          value: true
-        },
-        true_callable: async () => {
-          loadingMessage.value = 'Loading from cache...';
-          console.log('Cache hit');
-          
-          const hits = State.get('cache.hits') + 1;
-          State.set('cache.hits', hits);
-          
-          return {
-            data: State.get('cache.users'),
-            cached: true
-          };
-        },
-        false_callable: async () => {
-          loadingMessage.value = 'Fetching from API...';
-          console.log('Cache miss - fetching from API');
-          return null;
-        }
-      }),
-
-      new ConditionalStep({
-        name: 'fetch-from-api',
-        conditional: {
-          subject: State.get('cache.users') === null || forceRefresh,
-          operator: '===',
-          value: true
-        },
-        true_callable: async () => {
-          const startTime = Date.now();
-          
-          const response = await fetch('https://jsonplaceholder.typicode.com/users');
-          
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
-
-          const users = await response.json();
-          
-          // Update cache
-          State.set('cache.users', users);
-          State.set('cache.timestamp', Date.now());
-          
-          const fetchTime = Date.now() - startTime;
-          
-          return {
-            data: users,
-            cached: false,
-            fetchTime
-          };
-        },
-        false_callable: async () => {
-          return {
-            data: State.get('cache.users'),
-            cached: true
-          };
-        }
-      }),
-
-      new Step({
-        name: 'process-results',
-        callable: async () => {
-          const result = State.get('fetch.result');
-          
-          metadata.value = {
-            timestamp: State.get('cache.timestamp'),
-            cacheHits: State.get('cache.hits'),
-            fetchTime: result?.fetchTime || 0
-          };
-
-          return result;
-        }
-      })
-    ]
-  });
-};
-
-// Fetch data
-const fetchData = async () => {
-  isLoading.value = true;
-  error.value = null;
-
-  try {
-    const workflow = createFetchWorkflow();
-    const result = await workflow.execute();
-    
-    const finalResult = result.results[result.results.length - 1].data;
-    data.value = finalResult.data;
-    
-    State.set('fetch.result', finalResult);
-  } catch (err) {
-    error.value = err.message;
-    console.error('Fetch error:', err);
-  } finally {
-    isLoading.value = false;
-    loadingMessage.value = '';
-  }
-};
-
-// Refresh data (bypass cache)
-const refreshData = async () => {
-  isLoading.value = true;
-  error.value = null;
-
-  try {
-    const workflow = createFetchWorkflow(true);
-    const result = await workflow.execute();
-    
-    const finalResult = result.results[result.results.length - 1].data;
-    data.value = finalResult.data;
-    
-    State.set('fetch.result', finalResult);
-  } catch (err) {
-    error.value = err.message;
-  } finally {
-    isLoading.value = false;
-  }
-};
-
-// Clear cache
-const clearCache = () => {
-  State.delete('cache.users');
-  State.delete('cache.timestamp');
-  State.set('cache.hits', 0);
-  metadata.value = null;
-  console.log('Cache cleared');
-};
-
-// Fetch user details
-const fetchUserDetails = async (userId) => {
-  const detailsWorkflow = new Workflow({
-    name: 'fetch-user-details',
-    steps: [
-      new Step({
-        name: 'get-user',
-        callable: async () => {
-          const user = data.value.find(u => u.id === userId);
-          State.set('selected.user', user);
-          return user;
-        }
-      }),
-      new Step({
-        name: 'fetch-posts',
-        callable: async () => {
-          loadingMessage.value = 'Loading user posts...';
-          const response = await fetch(`https://jsonplaceholder.typicode.com/posts?userId=${userId}`);
-          const posts = await response.json();
-          return posts;
-        }
-      }),
-      new Step({
-        name: 'combine-data',
-        callable: async () => {
-          const user = State.get('selected.user');
-          const posts = State.get('user.posts');
-          
-          return {
-            ...user,
-            posts
-          };
-        }
-      })
-    ]
-  });
-
-  isLoading.value = true;
-
-  try {
-    const result = await detailsWorkflow.execute();
-    State.set('user.posts', result.results[1].data);
-    
-    const userWithPosts = {
-      ...State.get('selected.user'),
-      posts: State.get('user.posts')
-    };
-    
-    selectedUser.value = userWithPosts;
-  } catch (err) {
-    error.value = err.message;
-  } finally {
-    isLoading.value = false;
-    loadingMessage.value = '';
-  }
-};
-
-// Auto-fetch on mount
-onMounted(() => {
-  fetchData();
+const stats = reactive({
+  total: 0,
+  active: 0,
+  byDepartment: {},
 });
+
+// ─── Computed ─────────────────────────────────────────────────────────────────
+
+const filteredUsers = computed(() => {
+  let result = users.value;
+
+  if (!showInactive.value) {
+    result = result.filter((u) => u.isActive);
+  }
+
+  if (search.value.trim()) {
+    const q = search.value.toLowerCase();
+    result = result.filter(
+      (u) =>
+        u.displayName.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q)
+    );
+  }
+
+  return result;
+});
+
+// ─── Event listeners ─────────────────────────────────────────────────────────
+
+const wfEvents   = State.get('events.workflow');
+const stepEvents = State.get('events.step');
+
+function onWorkflowRunning() {
+  loading.value       = true;
+  error.value         = null;
+  progress.value      = 0;
+  statusMessage.value = 'Starting…';
+}
+
+function onWorkflowComplete() {
+  loading.value       = false;
+  progress.value      = 100;
+  statusMessage.value = 'Done';
+
+  // Read final data from State
+  const fetched = State.get('users.processed') ?? [];
+  users.value   = fetched;
+
+  stats.total        = fetched.length;
+  stats.active       = fetched.filter((u) => u.isActive).length;
+  stats.byDepartment = fetched.reduce((acc, u) => {
+    acc[u.department] = (acc[u.department] ?? 0) + 1;
+    return acc;
+  }, {});
+}
+
+function onWorkflowFailed(data) {
+  loading.value = false;
+  error.value   = data?.errors?.[0]?.message ?? 'An unexpected error occurred';
+}
+
+function onStepComplete(data) {
+  const stepOrder = ['fetch-users', 'validate', 'process-users', 'compute-stats'];
+  const idx       = stepOrder.indexOf(data.name);
+  if (idx >= 0) {
+    progress.value      = Math.round(((idx + 1) / stepOrder.length) * 90);
+    statusMessage.value = data.name.replace(/-/g, ' ');
+  }
+}
+
+function onLoopIteration(data) {
+  if (data.name === 'process-users') {
+    const total = State.get('users.raw')?.length ?? 1;
+    const done  = State.get('users.processedCount') ?? 0;
+    progress.value = Math.round(20 + (done / total) * 50);
+  }
+}
+
+// Register event listeners
+wfEvents.on(workflow_event_names.WORKFLOW_RUNNING,  onWorkflowRunning);
+wfEvents.on(workflow_event_names.WORKFLOW_COMPLETE, onWorkflowComplete);
+wfEvents.on(workflow_event_names.WORKFLOW_FAILED,   onWorkflowFailed);
+stepEvents.on(step_event_names.STEP_COMPLETE,           onStepComplete);
+stepEvents.on(step_event_names.LOOP_ITERATION_COMPLETE, onLoopIteration);
+
+// Clean up on component unmount
+onUnmounted(() => {
+  wfEvents.off(workflow_event_names.WORKFLOW_RUNNING,  onWorkflowRunning);
+  wfEvents.off(workflow_event_names.WORKFLOW_COMPLETE, onWorkflowComplete);
+  wfEvents.off(workflow_event_names.WORKFLOW_FAILED,   onWorkflowFailed);
+  stepEvents.off(step_event_names.STEP_COMPLETE,           onStepComplete);
+  stepEvents.off(step_event_names.LOOP_ITERATION_COMPLETE, onLoopIteration);
+});
+
+// ─── Workflow ─────────────────────────────────────────────────────────────────
+
+async function loadUsers() {
+  const wf = new Workflow({
+    name: 'load-users',
+    exit_on_error: true,
+    steps: [
+      // Step 1: Fetch raw user list from API
+      new Step({
+        name: 'fetch-users',
+        max_retries: 3,
+        max_timeout_ms: 10000,
+        callable: async function () {
+          statusMessage.value = 'Fetching users…';
+          const res = await fetch('https://jsonplaceholder.typicode.com/users');
+          if (!res.ok) throw new Error(`API error: ${res.status}`);
+          const raw = await res.json();
+          this.setState('users.raw', raw);
+          return { count: raw.length };
+        },
+      }),
+
+      // Step 2: Validate response
+      new Step({
+        name: 'validate',
+        callable: async function () {
+          const raw = this.getState('users.raw');
+          if (!Array.isArray(raw) || raw.length === 0) {
+            throw new Error('API returned no users');
+          }
+          return { valid: true, count: raw.length };
+        },
+      }),
+
+      // Step 3: Process each user with LoopStep
+      new LoopStep({
+        name: 'process-users',
+        loop_type: loop_types.FOR_EACH,
+        iterable: () => State.get('users.raw') ?? [],
+        callable: async function () {
+          const u = this.current_item;
+
+          const processed = {
+            id:          u.id,
+            displayName: u.name,
+            email:       u.email.toLowerCase(),
+            initials:    u.name.split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 2),
+            department:  u.company?.name ?? 'Unknown',
+            isActive:    u.id % 3 !== 0, // simulate some inactive users
+            location:    u.address?.city ?? 'Unknown',
+          };
+
+          const list = this.getState('users.processed') ?? [];
+          this.setState('users.processed', [...list, processed]);
+
+          const done = (this.getState('users.processedCount') ?? 0) + 1;
+          this.setState('users.processedCount', done);
+
+          return processed;
+        },
+      }),
+
+      // Step 4: Compute statistics
+      new Step({
+        name: 'compute-stats',
+        callable: async function () {
+          const processed = this.getState('users.processed') ?? [];
+
+          const byDept = processed.reduce((acc, u) => {
+            acc[u.department] = (acc[u.department] ?? 0) + 1;
+            return acc;
+          }, {});
+
+          const statsData = {
+            total:        processed.length,
+            active:       processed.filter((u) => u.isActive).length,
+            byDepartment: byDept,
+          };
+
+          this.setState('users.stats', statsData);
+          return statsData;
+        },
+      }),
+    ],
+  });
+
+  await wf.execute();
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function clearError() {
+  error.value = null;
+}
+
+// Load on mount
+onMounted(() => loadUsers());
 </script>
 
 <style scoped>
-.data-fetcher {
-  max-width: 1200px;
-  margin: 20px auto;
-  padding: 20px;
-}
-
-.controls {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-button {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 4px;
-  background: #42b983;
-  color: white;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-button:hover {
-  background: #359268;
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.error {
-  padding: 20px;
-  background: #ffebee;
-  color: #c62828;
-  border-radius: 4px;
-  margin-bottom: 20px;
-}
-
-.loading {
-  text-align: center;
-  padding: 40px;
-}
-
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #42b983;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 20px;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.user-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 20px;
-}
-
-.user-card {
-  padding: 20px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  background: white;
-}
-
-.user-card h3 {
-  margin-top: 0;
-  color: #2c3e50;
-}
-
-.company {
-  color: #666;
-  font-size: 14px;
-}
-
-.modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: white;
-  padding: 30px;
-  border-radius: 8px;
-  max-width: 600px;
-  max-height: 80vh;
-  overflow-y: auto;
-}
-
-.posts {
-  margin-top: 20px;
-}
-
-.post {
-  padding: 15px;
-  background: #f5f5f5;
-  border-radius: 4px;
-  margin-bottom: 10px;
-}
-
-.post h4 {
-  margin-top: 0;
-}
-
-.metadata {
-  margin-top: 20px;
-  padding: 15px;
-  background: #f5f5f5;
-  border-radius: 4px;
-  font-size: 14px;
-}
+.user-directory { max-width: 900px; margin: 0 auto; padding: 24px; font-family: system-ui; }
+header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.progress { background: #f0f0f0; border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
+.progress-bar { height: 4px; background: #6366f1; transition: width 0.3s; }
+.error-banner { background: #fee2e2; color: #b91c1c; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; display: flex; justify-content: space-between; }
+.stats { display: flex; gap: 24px; margin-bottom: 24px; }
+.stat { text-align: center; }
+.stat-value { font-size: 32px; font-weight: bold; display: block; }
+.stat-label { font-size: 12px; color: #666; text-transform: uppercase; }
+.user-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.user-card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; display: flex; align-items: center; gap: 12px; }
+.user-card.inactive { opacity: 0.6; }
+.avatar { width: 40px; height: 40px; border-radius: 50%; background: #6366f1; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
+.user-info { flex: 1; display: flex; flex-direction: column; font-size: 13px; }
+.department { color: #6b7280; font-size: 12px; }
+.badge { padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+.badge.active { background: #d1fae5; color: #065f46; }
+.badge.inactive { background: #f3f4f6; color: #6b7280; }
+.filters { margin-top: 24px; display: flex; gap: 16px; align-items: center; }
+.empty-state { text-align: center; padding: 48px; color: #9ca3af; }
 </style>
 ```
 
-## Key Features
+## Key Concepts
 
-- **Intelligent caching** with automatic cache management
-- **Loading states** with progress messages
-- **Error handling** with retry capability
-- **Nested workflows** for fetching related data
-- **Cache statistics** tracking
-- **Force refresh** option
-- **Modal details view** with additional data fetching
+### Event-Driven Reactivity
+
+Vue's reactive refs are updated inside event handlers registered on `State.get('events.workflow')` and `State.get('events.step')`. This separates the async logic (in the workflow) from the UI updates (in Vue).
+
+### Cleanup with onUnmounted
+
+Each listener registered with `wfEvents.on()` / `stepEvents.on()` is removed with `off()` in `onUnmounted`. This prevents memory leaks and stale callbacks when the component is destroyed.
+
+### LoopStep for Per-Record Processing
+
+The `process-users` `LoopStep` iterates over every user and appends the transformed record to `users.processed` in `State`. The loop step also increments a counter (`users.processedCount`) so the `LOOP_ITERATION_COMPLETE` handler can calculate progress.
+
+### State as Data Bus
+
+Data flows from the API through `State.set('users.raw', ...)` → `State.get('users.raw')` in the loop iterable → `State.set('users.processed', ...)` → `State.get('users.processed')` in the final reactive update. No prop-drilling or Vuex/Pinia required.
 
 ## Related Examples
 
-- [React Form Workflow](form-workflow-react.md)
-- [API Integration (Node.js)](api-integration-node.md)
+- [Form Workflow — React](form-workflow-react.md) — Similar pattern in React
+- [Basic Workflow — Node.js](basic-workflow-node.md) — Core patterns
+- [Data Pipeline — Node.js](data-pipeline-node.md) — Multi-step ETL

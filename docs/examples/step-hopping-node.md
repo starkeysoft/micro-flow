@@ -1,489 +1,337 @@
-# Step Hopping - Node.js
+# Step Hopping — Node.js
 
-Dynamic workflow navigation using step indices and step IDs in a Node.js application.
+Demonstrates dynamic workflow manipulation: inserting steps at runtime, deleting steps by ID, reordering steps with `moveStep`, and using `pause()` / `resume()` to suspend and continue execution mid-flow.
 
 ## Overview
 
-This example demonstrates "step hopping" - the ability to programmatically navigate to specific steps in a workflow using either their array index or unique step ID. This is particularly useful for implementing complex business logic, error recovery, conditional branching, and workflow orchestration in backend systems.
+You will learn:
+- Adding steps dynamically with `addStep()`, `addStepAtIndex()`, `pushStep()`, `unshiftStep()`
+- Removing steps with `deleteStep()`, `deleteStepByIndex()`, `popStep()`, `shiftStep()`
+- Reordering steps with `moveStep(fromIndex, toIndex)`
+- Pausing a workflow mid-execution with `pause()`
+- Resuming a paused workflow with `resume()`
+- Listening to `WORKFLOW_STEP_ADDED`, `WORKFLOW_STEP_REMOVED`, `WORKFLOW_STEP_MOVED` events
 
-## Code
+## Complete Example
 
 ```javascript
-import { Workflow, Step, ConditionalStep } from 'micro-flow';
+import {
+  Workflow,
+  Step,
+  ConditionalStep,
+  State,
+  workflow_event_names,
+} from '@ronaldroe/micro-flow';
 
-/**
- * Example 1: Step hopping by array index
- * Useful for sequential workflows where position matters
- */
-async function exampleHopByIndex() {
-  console.log('\n=== Example 1: Hopping by Array Index ===\n');
+// ─── Logging ──────────────────────────────────────────────────────────────────
 
-  // Create workflow with multiple steps
-  const validateData = new Step({
-    name: 'validate-data',
-    callable: async () => {
-      console.log('Step 0: Validating input data...');
-      return { valid: true };
-    }
-  });
+const wfEvents = State.get('events.workflow');
 
-  const processPayment = new Step({
-    name: 'process-payment',
-    callable: async () => {
-      console.log('Step 1: Processing payment...');
-      return { paymentId: 'PAY-12345' };
-    }
-  });
+wfEvents.on(workflow_event_names.WORKFLOW_STEP_ADDED, (data) => {
+  console.log(`  [event] Step added — now ${data.steps?.length} step(s)`);
+});
 
-  const sendConfirmation = new Step({
-    name: 'send-confirmation',
-    callable: async () => {
-      console.log('Step 2: Sending confirmation email...');
-      return { emailSent: true };
-    }
-  });
+wfEvents.on(workflow_event_names.WORKFLOW_STEP_REMOVED, (data) => {
+  console.log(`  [event] Step removed — now ${data.steps?.length} step(s)`);
+});
 
-  const updateInventory = new Step({
-    name: 'update-inventory',
-    callable: async () => {
-      console.log('Step 3: Updating inventory...');
-      return { inventoryUpdated: true };
-    }
-  });
+wfEvents.on(workflow_event_names.WORKFLOW_STEP_MOVED, (data) => {
+  console.log(`  [event] Step moved`);
+});
 
-  const workflow = new Workflow({
-    name: 'order-processing',
-    steps: [validateData, processPayment, sendConfirmation, updateInventory]
-  });
+wfEvents.on(workflow_event_names.WORKFLOW_PAUSED, (data) => {
+  console.log(`  [event] Workflow "${data.name}" paused after step: ${data.current_step}`);
+});
 
-  // Method 1: Access step by index and execute directly
-  console.log('→ Jumping directly to index 2 (send-confirmation)');
-  const stepAtIndex2 = workflow._steps[2];
-  workflow.current_step = stepAtIndex2.id;
-  const result = await stepAtIndex2.execute();
-  console.log('Result:', result);
+wfEvents.on(workflow_event_names.WORKFLOW_RESUMED, (data) => {
+  console.log(`  [event] Workflow "${data.name}" resumed`);
+});
 
-  console.log('\n→ Jumping to index 3 (update-inventory)');
-  const stepAtIndex3 = workflow._steps[3];
-  workflow.current_step = stepAtIndex3.id;
-  await stepAtIndex3.execute();
+// ─── Part 1: Build a workflow and manipulate steps before executing ────────────
 
-  // You can also iterate and skip to a specific index
-  console.log('\n→ Executing workflow from index 1');
-  for (let i = 1; i < workflow._steps.length; i++) {
-    const step = workflow._steps[i];
-    workflow.current_step = step.id;
-    console.log(`Executing step at index ${i}: ${step.name}`);
-    await step.execute();
-  }
+console.log('\n=== Part 1: Build-time step manipulation ===\n');
+
+const wf = new Workflow({ name: 'dynamic-deploy', exit_on_error: false });
+
+// Define reusable steps
+const buildStep = new Step({
+  name: 'build',
+  callable: async function () {
+    this.setState('deploy.artifacts', ['app.js', 'styles.css', 'index.html']);
+    console.log('  Built artifacts');
+    return { artifacts: State.get('deploy.artifacts') };
+  },
+});
+
+const testStep = new Step({
+  name: 'test',
+  callable: async function () {
+    const artifacts = this.getState('deploy.artifacts') ?? [];
+    console.log(`  Testing ${artifacts.length} artifact(s)`);
+    return { tests: 'passed', count: artifacts.length };
+  },
+});
+
+const deployStep = new Step({
+  name: 'deploy',
+  callable: async function () {
+    console.log('  Deploying to production');
+    return { deployed: true, env: 'production' };
+  },
+});
+
+const notifyStep = new Step({
+  name: 'notify',
+  callable: async () => {
+    console.log('  Sending deployment notification');
+    return { notified: true };
+  },
+});
+
+// Start with build and deploy
+wf.addStep(buildStep);
+wf.addStep(deployStep);
+console.log('Initial steps:', wf.steps.map((s) => s.name).join(' → '));
+// 'build → deploy'
+
+// Insert test before deploy
+wf.addStepAtIndex(testStep, 1);
+console.log('After insert:  ', wf.steps.map((s) => s.name).join(' → '));
+// 'build → test → deploy'
+
+// Append notify at the end
+wf.pushStep(notifyStep);
+console.log('After push:    ', wf.steps.map((s) => s.name).join(' → '));
+// 'build → test → deploy → notify'
+
+// Add a smoke-test step at the very beginning
+wf.unshiftStep(new Step({
+  name: 'smoke-test',
+  callable: async function () {
+    this.setState('deploy.startTime', Date.now());
+    console.log('  Running pre-deploy smoke tests');
+    return { smokeTestPassed: true };
+  },
+}));
+console.log('After unshift: ', wf.steps.map((s) => s.name).join(' → '));
+// 'smoke-test → build → test → deploy → notify'
+
+// Move notify to position 0 (run it first)
+wf.moveStep(wf.steps.findIndex((s) => s.name === 'notify'), 0);
+console.log('After move:    ', wf.steps.map((s) => s.name).join(' → '));
+// 'notify → smoke-test → build → test → deploy'
+
+// Actually we don't want notify first — move it back to end
+wf.moveStep(0, wf.steps.length - 1);
+console.log('After move back:', wf.steps.map((s) => s.name).join(' → '));
+// 'smoke-test → build → test → deploy → notify'
+
+// Remove test by ID if not in CI environment
+const CI = process.env.CI === 'true';
+if (!CI) {
+  wf.deleteStep(testStep.id);
+  console.log('After delete (no CI):', wf.steps.map((s) => s.name).join(' → '));
+  // 'smoke-test → build → deploy → notify'
+
+  // Re-add it since we still want it for this demo
+  wf.addStepAtIndex(testStep, 2);
 }
 
-/**
- * Example 2: Step hopping by step ID
- * Useful when you need stable references that don't change
- */
-async function exampleHopById() {
-  console.log('\n=== Example 2: Hopping by Step ID ===\n');
+console.log('\nFinal step order:', wf.steps.map((s) => s.name).join(' → '));
+console.log('');
 
-  // Create workflow
-  const step1 = new Step({
-    name: 'fetch-user-data',
+const firstRun = await wf.execute();
+console.log('\nFirst run status:', firstRun.status);
+console.log('Steps executed:', firstRun.results.length);
+
+// ─── Part 2: Pause and resume ─────────────────────────────────────────────────
+
+console.log('\n=== Part 2: Pause and resume ===\n');
+
+let pauseCount = 0;
+
+const multiPhaseFlow = new Workflow({ name: 'multi-phase-deploy', exit_on_error: false });
+
+multiPhaseFlow.addSteps([
+  new Step({
+    name: 'phase-1-init',
+    callable: async function () {
+      console.log('  Phase 1: Initializing resources');
+      this.setState('phase.current', 1);
+      return { phase: 1, status: 'initialized' };
+    },
+  }),
+  new Step({
+    name: 'phase-1-provision',
+    callable: async function () {
+      console.log('  Phase 1: Provisioning infrastructure');
+      await new Promise((r) => setTimeout(r, 30));
+      return { provisioned: true };
+    },
+  }),
+  new Step({
+    name: 'approval-gate',
     callable: async () => {
-      console.log('Fetching user data from database...');
-      return { userId: 123, name: 'John Doe' };
-    }
-  });
-
-  const step2 = new Step({
-    name: 'check-permissions',
-    callable: async () => {
-      console.log('Checking user permissions...');
-      return { hasAccess: true };
-    }
-  });
-
-  const step3 = new Step({
-    name: 'generate-report',
-    callable: async () => {
-      console.log('Generating report...');
-      return { reportId: 'RPT-789' };
-    }
-  });
-
-  const step4 = new Step({
-    name: 'send-notification',
-    callable: async () => {
-      console.log('Sending notification...');
-      return { notificationSent: true };
-    }
-  });
-
-  const workflow = new Workflow({
-    name: 'report-generation',
-    steps: [step1, step2, step3, step4]
-  });
-
-  // Store step IDs for later reference
-  const stepIds = {
-    fetchUser: step1.id,
-    checkPerms: step2.id,
-    generateReport: step3.id,
-    sendNotif: step4.id
-  };
-
-  console.log('Available step IDs:');
-  Object.entries(stepIds).forEach(([key, id]) => {
-    console.log(`  ${key}: ${id}`);
-  });
-
-  // Method 2: Access step by ID using steps_by_id object
-  console.log('\n→ Jumping directly to "generate-report" step using ID');
-  const reportStep = workflow.steps_by_id[stepIds.generateReport];
-  workflow.current_step = reportStep.id;
-  const reportResult = await reportStep.execute();
-  console.log('Result:', reportResult);
-
-  console.log('\n→ Jumping to "send-notification" step using ID');
-  const notifStep = workflow.steps_by_id[stepIds.sendNotif];
-  workflow.current_step = notifStep.id;
-  await notifStep.execute();
-}
-
-/**
- * Example 3: Advanced use case - Conditional hopping
- * Demonstrates hopping based on business logic
- */
-async function exampleConditionalHopping() {
-  console.log('\n=== Example 3: Conditional Step Hopping ===\n');
-
-  let userData = { isPremium: false, needsVerification: true };
-
-  const checkUserStatus = new Step({
-    name: 'check-status',
-    callable: async () => {
-      console.log('Checking user status...');
-      return userData;
-    }
-  });
-
-  const basicProcessing = new Step({
-    name: 'basic-processing',
-    callable: async () => {
-      console.log('Running basic processing...');
-      return { processed: true, tier: 'basic' };
-    }
-  });
-
-  const premiumProcessing = new Step({
-    name: 'premium-processing',
-    callable: async () => {
-      console.log('Running premium processing...');
-      return { processed: true, tier: 'premium' };
-    }
-  });
-
-  const verification = new Step({
-    name: 'verification',
-    callable: async () => {
-      console.log('Running verification...');
+      // Pause here to wait for human approval
+      console.log('  Pausing for manual approval before phase 2...');
+      multiPhaseFlow.pause();
+      return { gate: 'approval-required' };
+    },
+  }),
+  new Step({
+    name: 'phase-2-deploy',
+    callable: async function () {
+      console.log('  Phase 2: Deploying application');
+      this.setState('phase.current', 2);
+      return { phase: 2, deployed: true };
+    },
+  }),
+  new Step({
+    name: 'phase-2-verify',
+    callable: async function () {
+      console.log('  Phase 2: Verifying deployment');
+      await new Promise((r) => setTimeout(r, 30));
       return { verified: true };
-    }
-  });
-
-  const finalize = new Step({
+    },
+  }),
+  new Step({
     name: 'finalize',
     callable: async () => {
-      console.log('Finalizing...');
-      return { complete: true };
-    }
-  });
+      console.log('  Finalizing deployment');
+      return { finalized: true };
+    },
+  }),
+]);
 
-  const workflow = new Workflow({
-    name: 'conditional-workflow',
-    steps: [checkUserStatus, basicProcessing, premiumProcessing, verification, finalize]
-  });
+await multiPhaseFlow.execute();
+console.log('\nStatus after phase 1:', multiPhaseFlow.status);
+// 'paused'
 
-  // Execute first step to get user data
-  console.log('→ Executing initial check...');
-  workflow.current_step = workflow._steps[0].id;
-  const statusResult = await workflow._steps[0].execute();
-  console.log('User status:', statusResult);
+// Simulate receiving external approval signal
+console.log('\n--- Approval received, resuming workflow ---\n');
 
-  // Conditional hopping by index
-  if (statusResult.data.isPremium) {
-    console.log('\n→ User is premium, jumping to index 2 (premium-processing)');
-    workflow.current_step = workflow._steps[2].id;
-    await workflow._steps[2].execute();
-  } else {
-    console.log('\n→ User is basic, jumping to index 1 (basic-processing)');
-    workflow.current_step = workflow._steps[1].id;
-    await workflow._steps[1].execute();
-  }
+// Add a step dynamically before resuming (inject an audit log step)
+multiPhaseFlow.addStepAtIndex(
+  new Step({
+    name: 'audit-approval',
+    callable: async () => {
+      console.log('  Audit: Recording approval decision');
+      return { approved: true, approvedAt: new Date().toISOString(), approvedBy: 'ops-team' };
+    },
+  }),
+  multiPhaseFlow.steps.findIndex((s) => s.name === 'phase-2-deploy')
+);
 
-  // Conditional hopping by ID
-  if (statusResult.data.needsVerification) {
-    console.log('\n→ Verification needed, jumping by ID');
-    const verificationStep = workflow.steps_by_id[verification.id];
-    workflow.current_step = verification.id;
-    await verificationStep.execute();
-  }
+await multiPhaseFlow.resume();
+console.log('Status after phase 2:', multiPhaseFlow.status);
+// 'complete'
 
-  // Always finalize
-  console.log('\n→ Jumping to final step');
-  const finalStep = workflow._steps[workflow._steps.length - 1];
-  workflow.current_step = finalStep.id;
-  await finalStep.execute();
+// ─── Part 3: Dynamic workflow based on runtime data ───────────────────────────
+
+console.log('\n=== Part 3: Runtime-driven step construction ===\n');
+
+const featureFlags = {
+  enableCDN: true,
+  enableDatabase: true,
+  enableCache: false,
+  enableEmailNotifications: true,
+};
+
+const provisioningFlow = new Workflow({ name: 'conditional-provisioning' });
+
+// Always run core setup
+provisioningFlow.addStep(new Step({
+  name: 'core-setup',
+  callable: async function () {
+    this.setState('provisioning.services', []);
+    console.log('  Core infrastructure setup complete');
+    return { core: true };
+  },
+}));
+
+// Dynamically add steps based on feature flags
+if (featureFlags.enableDatabase) {
+  provisioningFlow.addStep(new Step({
+    name: 'provision-database',
+    callable: async function () {
+      const services = this.getState('provisioning.services');
+      this.setState('provisioning.services', [...services, 'database']);
+      console.log('  Database provisioned');
+      return { database: true };
+    },
+  }));
 }
 
-/**
- * Example 4: Error recovery using step hopping
- */
-async function exampleErrorRecovery() {
-  console.log('\n=== Example 4: Error Recovery with Step Hopping ===\n');
-
-  let attemptCount = 0;
-  const maxAttempts = 3;
-
-  const riskyOperation = new Step({
-    name: 'risky-operation',
-    callable: async () => {
-      attemptCount++;
-      console.log(`Attempt ${attemptCount}: Executing risky operation...`);
-      
-      if (attemptCount < 2) {
-        throw new Error('Operation failed - simulated error');
-      }
-      
-      return { success: true, attempts: attemptCount };
-    }
-  });
-
-  const errorHandler = new Step({
-    name: 'error-handler',
-    callable: async () => {
-      console.log('Handling error...');
-      return { errorHandled: true };
-    }
-  });
-
-  const retry = new Step({
-    name: 'retry-logic',
-    callable: async () => {
-      console.log('Preparing retry...');
-      return { retryReady: true };
-    }
-  });
-
-  const success = new Step({
-    name: 'success-handler',
-    callable: async () => {
-      console.log('Operation succeeded!');
-      return { completed: true };
-    }
-  });
-
-  const workflow = new Workflow({
-    name: 'error-recovery',
-    steps: [riskyOperation, errorHandler, retry, success]
-  });
-
-  // Store step IDs for easy reference
-  const stepIndices = {
-    riskyOp: 0,
-    errorHandler: 1,
-    retry: 2,
-    success: 3
-  };
-
-  // Attempt the risky operation with retry logic
-  while (attemptCount < maxAttempts) {
-    try {
-      console.log(`\n→ Executing risky operation (index ${stepIndices.riskyOp})`);
-      workflow.current_step = workflow._steps[stepIndices.riskyOp].id;
-      const result = await workflow._steps[stepIndices.riskyOp].execute();
-      
-      console.log('→ Success! Jumping to success handler');
-      workflow.current_step = workflow._steps[stepIndices.success].id;
-      await workflow._steps[stepIndices.success].execute();
-      break;
-      
-    } catch (error) {
-      console.log(`✗ Error: ${error.message}`);
-      
-      if (attemptCount < maxAttempts) {
-        console.log('→ Jumping to error handler');
-        workflow.current_step = workflow._steps[stepIndices.errorHandler].id;
-        await workflow._steps[stepIndices.errorHandler].execute();
-        
-        console.log('→ Jumping to retry logic');
-        workflow.current_step = workflow._steps[stepIndices.retry].id;
-        await workflow._steps[stepIndices.retry].execute();
-      } else {
-        console.log('✗ Max attempts reached, giving up');
-      }
-    }
-  }
+if (featureFlags.enableCDN) {
+  provisioningFlow.addStep(new Step({
+    name: 'provision-cdn',
+    callable: async function () {
+      const services = this.getState('provisioning.services');
+      this.setState('provisioning.services', [...services, 'cdn']);
+      console.log('  CDN provisioned');
+      return { cdn: true };
+    },
+  }));
 }
 
-// Run all examples
-async function runAllExamples() {
-  await exampleHopByIndex();
-  await exampleHopById();
-  await exampleConditionalHopping();
-  await exampleErrorRecovery();
-  
-  console.log('\n=== All Examples Completed ===\n');
+if (featureFlags.enableCache) {
+  provisioningFlow.addStep(new Step({
+    name: 'provision-cache',
+    callable: async function () {
+      const services = this.getState('provisioning.services');
+      this.setState('provisioning.services', [...services, 'cache']);
+      console.log('  Cache provisioned');
+      return { cache: true };
+    },
+  }));
 }
 
-runAllExamples().catch(console.error);
+if (featureFlags.enableEmailNotifications) {
+  provisioningFlow.addStep(new Step({
+    name: 'provision-email',
+    callable: async function () {
+      const services = this.getState('provisioning.services');
+      this.setState('provisioning.services', [...services, 'email']);
+      console.log('  Email service provisioned');
+      return { email: true };
+    },
+  }));
+}
+
+provisioningFlow.addStep(new Step({
+  name: 'finalize-provisioning',
+  callable: async function () {
+    const services = this.getState('provisioning.services');
+    console.log(`  Provisioning complete. Services: ${services.join(', ')}`);
+    return { services, count: services.length };
+  },
+}));
+
+const provResult = await provisioningFlow.execute();
+console.log('\nProvisioning status:', provResult.status);
+console.log('Services ready:', State.get('provisioning.services'));
 ```
 
-## Output
+## Key Concepts
 
-```
-=== Example 1: Hopping by Array Index ===
+### addStepAtIndex vs unshiftStep
 
-→ Jumping directly to index 2 (send-confirmation)
-Step 2: Sending confirmation email...
-Result: { message: 'Success', data: { emailSent: true } }
+`addStepAtIndex(step, 0)` and `unshiftStep(step)` both prepend a step. `addStepAtIndex` is more flexible as it inserts at any position, not just the front.
 
-→ Jumping to index 3 (update-inventory)
-Step 3: Updating inventory...
+### Deleting by ID vs Index
 
-→ Executing workflow from index 1
-Executing step at index 1: process-payment
-Step 1: Processing payment...
-Executing step at index 2: send-confirmation
-Step 2: Sending confirmation email...
-Executing step at index 3: update-inventory
-Step 3: Updating inventory...
+`deleteStep(id)` is safer for dynamic workflows since step IDs are stable UUIDs. `deleteStepByIndex(index)` is convenient but requires knowing the current order.
 
-=== Example 2: Hopping by Step ID ===
+### Pause / Resume Pattern
 
-Available step IDs:
-  fetchUser: 9a7b8c6d-1e2f-3a4b-5c6d-7e8f9a0b1c2d
-  checkPerms: 8b6c7d5e-2f3a-4b5c-6d7e-8f9a0b1c2d3e
-  generateReport: 7c5d6e4f-3a4b-5c6d-7e8f-9a0b1c2d3e4f
-  sendNotif: 6d4e5f3a-4b5c-6d7e-8f9a-0b1c2d3e4f5a
+Call `workflow.pause()` inside any step callable to set `should_pause = true`. Execution suspends after that step completes. Call `await workflow.resume()` later — from an event handler, a timer, or after an external signal. You can even insert new steps between pause and resume.
 
-→ Jumping directly to "generate-report" step using ID
-Generating report...
-Result: { message: 'Success', data: { reportId: 'RPT-789' } }
+### Runtime Step Construction
 
-→ Jumping to "send-notification" step using ID
-Sending notification...
-
-=== Example 3: Conditional Step Hopping ===
-
-→ Executing initial check...
-Checking user status...
-User status: { message: 'Success', data: { isPremium: false, needsVerification: true } }
-
-→ User is basic, jumping to index 1 (basic-processing)
-Running basic processing...
-
-→ Verification needed, jumping by ID
-Running verification...
-
-→ Jumping to final step
-Finalizing...
-
-=== Example 4: Error Recovery with Step Hopping ===
-
-→ Executing risky operation (index 0)
-Attempt 1: Executing risky operation...
-✗ Error: Operation failed - simulated error
-→ Jumping to error handler
-Handling error...
-→ Jumping to retry logic
-Preparing retry...
-
-→ Executing risky operation (index 0)
-Attempt 2: Executing risky operation...
-→ Success! Jumping to success handler
-Operation succeeded!
-
-=== All Examples Completed ===
-```
-
-## Key Points
-
-### Method 1: Array Index (`workflow._steps[index]`)
-```javascript
-const step = workflow._steps[2];  // Get step at index 2
-workflow.current_step = step.id;   // Set as current
-await step.execute();              // Execute
-```
-
-**Best for:**
-- Sequential workflows
-- Numeric position-based logic
-- Simple iteration patterns
-
-### Method 2: Step ID (`workflow.steps_by_id[stepId]`)
-```javascript
-const step = workflow.steps_by_id[savedStepId];  // Get step by ID
-workflow.current_step = step.id;                 // Set as current
-await step.execute();                            // Execute
-```
-
-**Best for:**
-- Persistent references
-- Dynamic workflows (steps added/removed)
-- Save/resume functionality
-- Distributed systems
-
-## Use Cases
-
-### Backend Applications
-- **Order Processing:** Skip payment for free orders
-- **Data Pipelines:** Resume from last successful step
-- **API Orchestration:** Retry specific failed operations
-- **Batch Jobs:** Checkpoint and resume processing
-- **State Machines:** Navigate to states based on events
-- **Error Recovery:** Jump to error handling steps
-- **A/B Testing:** Route to different processing logic
-
-### Advantages
-- **Flexibility:** Navigate non-linearly through workflows
-- **Resilience:** Implement retry and error recovery logic
-- **Efficiency:** Skip unnecessary steps based on conditions
-- **Maintainability:** Clear, explicit navigation logic
-
-## Best Practices
-
-1. **Always validate** before hopping:
-   ```javascript
-   if (index >= 0 && index < workflow._steps.length) {
-     // Safe to hop
-   }
-   ```
-
-2. **Store step IDs** for important steps:
-   ```javascript
-   const criticalSteps = {
-     validation: step1.id,
-     payment: step2.id
-   };
-   ```
-
-3. **Update current_step** to maintain workflow state:
-   ```javascript
-   workflow.current_step = targetStep.id;
-   ```
-
-4. **Handle errors** when hopping to risky steps:
-   ```javascript
-   try {
-     await workflow.steps_by_id[stepId].execute();
-   } catch (error) {
-     // Handle error
-   }
-   ```
+Building the steps array dynamically based on feature flags, environment variables, or runtime data is a first-class pattern. The workflow doesn't care when steps are added, as long as it is before `execute()` (or before `resume()` for inserted steps).
 
 ## Related Examples
 
-- [Basic Workflow](basic-workflow-node.md)
-- [Data Pipeline](data-pipeline-node.md)
-- [API Integration](api-integration-node.md)
-- [Step Hopping React](step-hopping-react.md)
+- [Basic Workflow — Node.js](basic-workflow-node.md) — Foundational patterns
+- [Step Hopping — React](step-hopping-react.md) — Same patterns in a React component
+- [API Integration — Node.js](api-integration-node.md) — HTTP calls with retries

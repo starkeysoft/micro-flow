@@ -1,8 +1,15 @@
 # FlowControlStep
 
-FlowControlStep class for controlling workflow execution flow (break or skip).
+Conditionally stops or skips execution in the parent workflow. When the condition is met, `FlowControlStep` sets either `should_break` (halt after current step) or `should_skip` (skip the next step) on the workflow instance.
 
-Extends: [LogicStep](logic_step.md)
+**Extends:** [LogicStep](logic_step.md)
+
+## Table of Contents
+- [Constructor](#constructor)
+- [Properties](#properties)
+- [Methods](#methods)
+- [Examples](#examples)
+- [Related](#related)
 
 ## Constructor
 
@@ -10,419 +17,188 @@ Extends: [LogicStep](logic_step.md)
 
 Creates a new FlowControlStep instance.
 
-**Parameters:**
-- `options` (Object) - Configuration options
-  - `conditional` (Object, optional) - Conditional configuration
-    - `subject` (any|Function) - Subject to evaluate. Can be a function that returns the value.
-    - `operator` (conditional_step_comparators|string, optional) - Comparison operator (default: `null`)
-    - `value` (any|Function, optional) - Value to compare against. Can be a function that returns the value. (default: `null`)
-  - `name` (string, optional) - Name of the step
-  - `flow_control_type` (string, optional) - Type of flow control (default: `flow_control_types.BREAK`)
+#### Parameters
 
-**Flow Control Types:**
-- `BREAK` - Stops workflow execution
-- `SKIP` - Skips the next step in the workflow
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `options.name` | `string` | `'step-<uuid>'` | Human-readable identifier. |
+| `options.conditional` | `Object` | — | Conditional configuration (see [LogicStep](logic_step.md)). |
+| `options.conditional.subject` | `any\|Function` | `null` | Value or function to evaluate. |
+| `options.conditional.operator` | `string` | `null` | Comparison operator string. |
+| `options.conditional.value` | `any\|Function` | `null` | Value or function to compare against. |
+| `options.flow_control_type` | `string` | `flow_control_types.BREAK` | Either `'break'` or `'skip'`. See [`flow_control_types`](../../../enums/flow_control_types.md). |
 
-**Throws:** Error if flow_control_type is invalid
-
-**Example (Node.js - Break on Error):**
-```javascript
-import { FlowControlStep, Workflow, Step, flow_control_types } from 'micro-flow';
-
-const workflow = new Workflow({
-  name: 'data-processing',
-  steps: [
-    new Step({
-      name: 'validate-data',
-      callable: async () => {
-        const data = await fetchData();
-        State.set('validation.errors', data.errors || []);
-        return data;
-      }
-    }),
-    new FlowControlStep({
-      name: 'break-on-errors',
-      conditional: {
-        subject: State.get('validation.errors').length,
-        operator: '>',
-        value: 0
-      },
-      flow_control_type: flow_control_types.BREAK
-    }),
-    new Step({
-      name: 'process-data',
-      callable: async () => {
-        console.log('This will not run if there are errors');
-        return processData();
-      }
-    })
-  ]
-});
-
-await workflow.execute();
-```
-
-**Example (Browser - Skip Optional Step):**
-```javascript
-import { FlowControlStep, Workflow, flow_control_types } from './micro-flow.js';
-
-const analyticsWorkflow = new Workflow({
-  name: 'track-user',
-  steps: [
-    new Step({
-      name: 'track-pageview',
-      callable: async () => {
-        await analytics.track('pageview');
-      }
-    }),
-    new FlowControlStep({
-      name: 'skip-if-opted-out',
-      conditional: {
-        subject: localStorage.getItem('analytics-opt-out'),
-        operator: '===',
-        value: 'true'
-      },
-      flow_control_type: flow_control_types.SKIP
-    }),
-    new Step({
-      name: 'track-detailed-metrics',
-      callable: async () => {
-        // This step is skipped if user opted out
-        await analytics.trackDetailed();
-      }
-    })
-  ]
-});
-```
+**Throws:** `Error` if `flow_control_type` is not a valid value from `flow_control_types`.
 
 ## Properties
 
-- `flow_control_type` (string) - Type of flow control to apply
+| Property | Type | Description |
+|----------|------|-------------|
+| `flow_control_type` | `string` | The type of flow control: `'break'` or `'skip'`. |
 
-All properties inherited from [LogicStep](logic_step.md)
+All properties from [LogicStep](logic_step.md) are inherited.
 
 ## Methods
 
-### `async shouldFlowControl()`
+### `async shouldFlowControl()` → `Promise<boolean>`
 
-Evaluates the condition and sets the appropriate flow control flag.
+Evaluates the condition. If it returns `true`, calls `setParentWorkflowValue(parentWorkflowId, 'should_break'|'should_skip', true)` on the parent workflow. If the condition is false, sets the flag back to `false`.
 
-**Returns:** Promise\<boolean\> - True if the flow control should be activated
+**Returns:** `true` if flow control was activated, `false` otherwise.
 
-**Example (Node.js - Retry Limit):**
+**Example:**
 ```javascript
-import { FlowControlStep, State } from 'micro-flow';
+import { FlowControlStep, flow_control_types, State } from '@ronaldroe/micro-flow';
 
-State.set('retry.count', 0);
-State.set('retry.max', 3);
+State.set('retries', 5);
 
-const retryBreak = new FlowControlStep({
-  name: 'break-on-max-retries',
+const breakStep = new FlowControlStep({
+  name: 'max-retries-guard',
   conditional: {
-    subject: State.get('retry.count'),
+    subject: () => State.get('retries'),
     operator: '>=',
-    value: State.get('retry.max')
+    value: 5,
   },
-  flow_control_type: 'break'
+  flow_control_type: flow_control_types.BREAK,
 });
 
-const shouldBreak = await retryBreak.shouldFlowControl();
-if (shouldBreak) {
-  console.log('Maximum retries reached');
-}
+// In a workflow context, parentWorkflowId is set automatically.
+// shouldFlowControl() is called internally by execute().
 ```
 
-## Common Patterns
+## Examples
 
-### Circuit Breaker (Node.js)
+### Break on validation failure
 
 ```javascript
-import { FlowControlStep, Workflow, Step, State } from 'micro-flow';
+import { Workflow, Step, FlowControlStep, State, flow_control_types } from '@ronaldroe/micro-flow';
 
-State.set('circuit.failures', 0);
-State.set('circuit.threshold', 5);
-
-const apiWorkflow = new Workflow({
-  name: 'api-calls-with-circuit-breaker',
+const wf = new Workflow({
+  name: 'validation-pipeline',
   steps: [
-    new FlowControlStep({
-      name: 'circuit-breaker',
-      conditional: {
-        subject: State.get('circuit.failures'),
-        operator: '>=',
-        value: State.get('circuit.threshold')
+    new Step({
+      name: 'validate-input',
+      callable: async function () {
+        const input = this.getState('pipeline.input');
+        const isValid = input != null && input.length > 0;
+        this.setState('pipeline.valid', isValid);
+        return { valid: isValid };
       },
-      flow_control_type: 'break'
+    }),
+    new FlowControlStep({
+      name: 'halt-if-invalid',
+      conditional: {
+        subject: () => State.get('pipeline.valid'),
+        operator: '===',
+        value: false,
+      },
+      flow_control_type: flow_control_types.BREAK,
     }),
     new Step({
-      name: 'call-api-1',
-      callable: async () => {
-        try {
-          return await fetch('https://api.example.com/endpoint1');
-        } catch (error) {
-          State.set('circuit.failures', State.get('circuit.failures') + 1);
-          throw error;
-        }
-      }
+      name: 'process-data',
+      callable: async function () {
+        // Only reached if input was valid
+        const data = this.getState('pipeline.input');
+        return { processed: data.toUpperCase() };
+      },
     }),
     new Step({
-      name: 'call-api-2',
-      callable: async () => {
-        try {
-          return await fetch('https://api.example.com/endpoint2');
-        } catch (error) {
-          State.set('circuit.failures', State.get('circuit.failures') + 1);
-          throw error;
-        }
-      }
+      name: 'save-result',
+      callable: async () => ({ saved: true }),
     }),
-    new Step({
-      name: 'reset-circuit',
-      callable: async () => {
-        State.set('circuit.failures', 0);
-      }
-    })
-  ]
-});
-```
-
-### Feature Toggle (Browser with React)
-
-```javascript
-import { FlowControlStep, Workflow, Step } from './micro-flow.js';
-import { useEffect, useState } from 'react';
-
-function FeatureWorkflow() {
-  const [features, setFeatures] = useState([]);
-
-  useEffect(() => {
-    const loadFeatures = new Workflow({
-      name: 'load-features',
-      steps: [
-        new Step({
-          name: 'load-core',
-          callable: async () => {
-            const core = await import('./features/core.js');
-            return core;
-          }
-        }),
-        new FlowControlStep({
-          name: 'skip-beta-if-disabled',
-          conditional: {
-            subject: localStorage.getItem('beta-features'),
-            operator: '!==',
-            value: 'enabled'
-          },
-          flow_control_type: 'skip'
-        }),
-        new Step({
-          name: 'load-beta',
-          callable: async () => {
-            const beta = await import('./features/beta.js');
-            return beta;
-          }
-        }),
-        new Step({
-          name: 'load-stable',
-          callable: async () => {
-            const stable = await import('./features/stable.js');
-            return stable;
-          }
-        })
-      ]
-    });
-
-    loadFeatures.execute().then(result => {
-      setFeatures(result.results);
-    });
-  }, []);
-
-  return <div>Features loaded: {features.length}</div>;
-}
-```
-
-### Conditional Pipeline (Node.js)
-
-```javascript
-import { FlowControlStep, Workflow, Step, State } from 'micro-flow';
-
-function createDataPipeline(options) {
-  return new Workflow({
-    name: 'data-pipeline',
-    steps: [
-      new Step({
-        name: 'fetch-data',
-        callable: async () => {
-          const data = await fetchRawData();
-          State.set('pipeline.data', data);
-          State.set('pipeline.size', data.length);
-          return data;
-        }
-      }),
-      new FlowControlStep({
-        name: 'skip-if-empty',
-        conditional: {
-          subject: State.get('pipeline.size'),
-          operator: '===',
-          value: 0
-        },
-        flow_control_type: 'break'
-      }),
-      new FlowControlStep({
-        name: 'skip-transform-if-small',
-        conditional: {
-          subject: State.get('pipeline.size'),
-          operator: '<',
-          value: 100
-        },
-        flow_control_type: 'skip'
-      }),
-      new Step({
-        name: 'heavy-transform',
-        callable: async () => {
-          // Only runs for datasets >= 100 items
-          return await expensiveTransformation(State.get('pipeline.data'));
-        }
-      }),
-      new Step({
-        name: 'save-results',
-        callable: async () => {
-          return await saveToDatabase(State.get('pipeline.data'));
-        }
-      })
-    ]
-  });
-}
-```
-
-### Rate Limiting (Browser with Vue)
-
-```vue
-<template>
-  <div>
-    <button @click="makeRequest" :disabled="rateLimited">
-      Make Request
-    </button>
-    <p v-if="rateLimited">Rate limit exceeded. Please wait.</p>
-  </div>
-</template>
-
-<script setup>
-import { ref } from 'vue';
-import { FlowControlStep, Workflow, Step, State } from './micro-flow.js';
-
-const rateLimited = ref(false);
-
-State.set('requests.count', 0);
-State.set('requests.limit', 10);
-
-const makeRequest = async () => {
-  const requestWorkflow = new Workflow({
-    name: 'rate-limited-request',
-    steps: [
-      new Step({
-        name: 'increment-counter',
-        callable: async () => {
-          const current = State.get('requests.count');
-          State.set('requests.count', current + 1);
-        }
-      }),
-      new FlowControlStep({
-        name: 'check-rate-limit',
-        conditional: {
-          subject: State.get('requests.count'),
-          operator: '>',
-          value: State.get('requests.limit')
-        },
-        flow_control_type: 'break'
-      }),
-      new Step({
-        name: 'execute-request',
-        callable: async () => {
-          const response = await fetch('/api/data');
-          return response.json();
-        }
-      })
-    ]
-  });
-
-  const result = await requestWorkflow.execute();
-  rateLimited.value = result.status === 'FAILED';
-};
-</script>
-```
-
-### Validation Chain (Node.js)
-
-```javascript
-import { FlowControlStep, Workflow, Step, State } from 'micro-flow';
-
-function createValidationChain(userData) {
-  State.set('validation.data', userData);
-  State.set('validation.passed', true);
-
-  return new Workflow({
-    name: 'validation-chain',
-    exit_on_error: false,
-    steps: [
-      new Step({
-        name: 'check-email',
-        callable: async () => {
-          const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userData.email);
-          if (!valid) State.set('validation.passed', false);
-          return valid;
-        }
-      }),
-      new FlowControlStep({
-        name: 'break-if-invalid',
-        conditional: {
-          subject: State.get('validation.passed'),
-          operator: '===',
-          value: false
-        },
-        flow_control_type: 'break'
-      }),
-      new Step({
-        name: 'check-password',
-        callable: async () => {
-          const valid = userData.password.length >= 8;
-          if (!valid) State.set('validation.passed', false);
-          return valid;
-        }
-      }),
-      new FlowControlStep({
-        name: 'break-if-invalid-2',
-        conditional: {
-          subject: State.get('validation.passed'),
-          operator: '===',
-          value: false
-        },
-        flow_control_type: 'break'
-      }),
-      new Step({
-        name: 'check-username',
-        callable: async () => {
-          const valid = userData.username.length >= 3;
-          return valid;
-        }
-      })
-    ]
-  });
-}
-
-const validation = createValidationChain({
-  email: 'user@example.com',
-  password: 'secure123',
-  username: 'john'
+  ],
 });
 
-await validation.execute();
-console.log('Validation passed:', State.get('validation.passed'));
+State.set('pipeline.input', '');
+await wf.execute();
+console.log(wf.results.length); // 2 — only validate-input and halt-if-invalid ran
 ```
 
-## See Also
+### Skip optional step based on feature flag
 
-- [LogicStep](logic_step.md) - Parent class with condition checking
-- [ConditionalStep](conditional_step.md) - Branching logic
-- [Workflow](../workflow.md) - Workflow execution control
-- [Flow Control Types](../../enums/flow_control_types.md) - Available flow control types
+```javascript
+import { Workflow, Step, FlowControlStep, State, flow_control_types } from '@ronaldroe/micro-flow';
+
+State.set('features.analytics', false);
+
+const wf = new Workflow({
+  name: 'page-load',
+  steps: [
+    new Step({
+      name: 'render-page',
+      callable: async () => ({ html: '<html>...</html>' }),
+    }),
+    new FlowControlStep({
+      name: 'skip-analytics-if-disabled',
+      conditional: {
+        subject: () => State.get('features.analytics'),
+        operator: '===',
+        value: false,
+      },
+      flow_control_type: flow_control_types.SKIP,
+    }),
+    new Step({
+      name: 'track-pageview',
+      callable: async () => {
+        // Skipped when analytics is disabled
+        return { tracked: true };
+      },
+    }),
+    new Step({
+      name: 'log-request',
+      callable: async () => ({ logged: true }),
+    }),
+  ],
+});
+
+await wf.execute();
+// track-pageview is skipped; render-page, skip-analytics-if-disabled, and log-request run
+```
+
+### Conditional break based on HTTP response
+
+```javascript
+import { Workflow, Step, FlowControlStep, State, flow_control_types } from '@ronaldroe/micro-flow';
+
+const wf = new Workflow({
+  name: 'api-pipeline',
+  exit_on_error: false,
+  steps: [
+    new Step({
+      name: 'call-api',
+      callable: async function () {
+        try {
+          const res = await fetch('https://api.example.com/health');
+          this.setState('api.status', res.status);
+          return { status: res.status };
+        } catch (e) {
+          this.setState('api.status', 0);
+          return { status: 0 };
+        }
+      },
+    }),
+    new FlowControlStep({
+      name: 'abort-if-unavailable',
+      conditional: {
+        subject: () => State.get('api.status'),
+        operator: 'not_equals',
+        value: 200,
+      },
+      flow_control_type: flow_control_types.BREAK,
+    }),
+    new Step({
+      name: 'process-response',
+      callable: async () => ({ processed: true }),
+    }),
+  ],
+});
+
+await wf.execute();
+```
+
+## Related
+
+- [LogicStep](logic_step.md) — Parent class.
+- [Workflow](../workflow.md) — The `should_break` and `should_skip` flags are on the workflow.
+- [flow_control_types](../../../enums/flow_control_types.md) — `BREAK` and `SKIP` enum values.
+- [conditional_step_comparators](../../../enums/conditional_step_comparators.md) — Available operators.
