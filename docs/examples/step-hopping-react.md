@@ -1,296 +1,421 @@
-# Step Hopping - React
+# Step Hopping — React
 
-Dynamic workflow navigation using step indices and step IDs in a React application.
+Demonstrates dynamic workflow manipulation inside a React component: adding steps at runtime, deleting steps by ID, reordering with `moveStep`, and pausing / resuming — all driven by user interaction.
 
 ## Overview
 
-This example demonstrates "step hopping" - the ability to navigate to specific steps in a workflow by either their array index or their unique ID. This is useful for implementing features like "skip to step", "go back to step", or conditional navigation in multi-step processes.
+You will learn:
+- Managing a `Workflow` instance in a React ref (`useRef`) across renders
+- Adding steps with `addStep()`, `addStepAtIndex()`, `unshiftStep()`
+- Removing steps with `deleteStep()`, `popStep()`
+- Reordering steps with `moveStep(fromIndex, toIndex)`
+- Pausing and resuming execution via `pause()` / `resume()`
+- Displaying live step order and execution results with React state
+- Listening to `WORKFLOW_STEP_ADDED`, `WORKFLOW_STEP_REMOVED`, `WORKFLOW_STEP_MOVED` events
 
-## Code
+## Complete Example
 
-```javascript
-import React, { useState, useRef } from 'react';
-import { Workflow, Step, ConditionalStep } from 'micro-flow';
+```jsx
+// WorkflowBuilder.jsx
+import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Workflow,
+  Step,
+  DelayStep,
+  ConditionalStep,
+  State,
+  delay_types,
+  workflow_event_names,
+  step_event_names,
+} from '@ronaldroe/micro-flow';
 
-function StepHoppingDemo() {
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [executionLog, setExecutionLog] = useState([]);
-  const [stepResults, setStepResults] = useState({});
-  const workflowRef = useRef(null);
+// ─── Step factory ─────────────────────────────────────────────────────────────
 
-  // Initialize workflow with identifiable steps
-  const initializeWorkflow = () => {
-    const step1 = new Step({
-      name: 'user-info',
-      callable: async () => {
-        addLog('Collecting user information...');
-        return { step: 'user-info', data: { collected: true } };
-      }
-    });
+let stepCounter = 0;
 
-    const step2 = new Step({
-      name: 'preferences',
-      callable: async () => {
-        addLog('Setting preferences...');
-        return { step: 'preferences', data: { set: true } };
-      }
-    });
+function makeStep(type) {
+  stepCounter++;
+  const id = stepCounter;
 
-    const step3 = new Step({
-      name: 'review',
-      callable: async () => {
-        addLog('Reviewing data...');
-        return { step: 'review', data: { reviewed: true } };
-      }
-    });
+  switch (type) {
+    case 'action':
+      return new Step({
+        name: `action-${id}`,
+        callable: async function () {
+          await new Promise((r) => setTimeout(r, 100 + Math.random() * 200));
+          const count = (this.getState('pipeline.actionCount') ?? 0) + 1;
+          this.setState('pipeline.actionCount', count);
+          return { type: 'action', id, count };
+        },
+      });
 
-    const step4 = new Step({
-      name: 'confirmation',
-      callable: async () => {
-        addLog('Confirming submission...');
-        return { step: 'confirmation', data: { confirmed: true } };
-      }
-    });
+    case 'delay':
+      return new DelayStep({
+        name: `delay-${id}`,
+        delay_type: delay_types.RELATIVE,
+        relative_delay_ms: 500,
+      });
 
-    const workflow = new Workflow({
-      name: 'step-hopping-demo',
-      steps: [step1, step2, step3, step4]
-    });
+    case 'conditional':
+      return new ConditionalStep({
+        name: `conditional-${id}`,
+        conditional: {
+          subject: () => (State.get('pipeline.actionCount') ?? 0) % 2 === 0,
+          operator: '===',
+          value: true,
+        },
+        true_callable: async () => ({ branch: 'even', id }),
+        false_callable: async () => ({ branch: 'odd', id }),
+      });
 
-    workflowRef.current = workflow;
-    return workflow;
-  };
+    default:
+      return new Step({
+        name: `step-${id}`,
+        callable: async () => ({ id }),
+      });
+  }
+}
 
-  // Method 1: Hop to step using array index
-  const hopToStepByIndex = async (index) => {
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export default function WorkflowBuilder() {
+  const workflowRef  = useRef(null);
+  const runningRef   = useRef(false);
+
+  const [stepList,    setStepList]    = useState([]);     // [{id, name}]
+  const [results,     setResults]     = useState([]);
+  const [status,      setStatus]      = useState('idle');
+  const [currentStep, setCurrentStep] = useState(null);
+  const [logs,        setLogs]        = useState([]);
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+
+  function log(message) {
+    setLogs((prev) => [...prev.slice(-49), `[${new Date().toLocaleTimeString()}] ${message}`]);
+  }
+
+  function syncStepList() {
+    const wf = workflowRef.current;
+    if (!wf) return;
+    setStepList(wf.steps.map((s) => ({ id: s.id, name: s.name, type: s.constructor.name })));
+  }
+
+  function getOrCreateWorkflow() {
     if (!workflowRef.current) {
-      workflowRef.current = initializeWorkflow();
+      workflowRef.current = new Workflow({ name: 'builder-flow', exit_on_error: false });
     }
+    return workflowRef.current;
+  }
 
-    const workflow = workflowRef.current;
+  // ── Event wiring ─────────────────────────────────────────────────────────────
 
-    // Validate index
-    if (index < 0 || index >= workflow._steps.length) {
-      addLog(`❌ Invalid index: ${index}. Valid range: 0-${workflow._steps.length - 1}`);
-      return;
-    }
+  useEffect(() => {
+    const wfEvents   = State.get('events.workflow');
+    const stepEvents = State.get('events.step');
 
-    // Get step by index
-    const step = workflow._steps[index];
-    
-    addLog(`🎯 Hopping to step at index ${index}: "${step.name}"`);
-    
-    // Set current step and execute
-    workflow.current_step = step.id;
-    setCurrentStepIndex(index);
-    
-    try {
-      const result = await step.execute();
-      setStepResults(prev => ({ ...prev, [step.name]: result }));
-      addLog(`✅ Step "${step.name}" completed successfully`);
-    } catch (error) {
-      addLog(`❌ Step "${step.name}" failed: ${error.message}`);
-    }
-  };
+    const onRunning = (data) => {
+      setStatus('running');
+      setResults([]);
+      log(`Workflow "${data.name}" started`);
+    };
 
-  // Method 2: Hop to step using step ID
-  const hopToStepById = async (stepId) => {
-    if (!workflowRef.current) {
-      workflowRef.current = initializeWorkflow();
-    }
+    const onComplete = (data) => {
+      setStatus('complete');
+      runningRef.current = false;
+      setCurrentStep(null);
+      setResults(data.results ?? []);
+      log(`Workflow complete (${data.timing?.execution_time_ms}ms)`);
+    };
 
-    const workflow = workflowRef.current;
+    const onFailed = (data) => {
+      setStatus('failed');
+      runningRef.current = false;
+      setCurrentStep(null);
+      log(`Workflow failed`);
+    };
 
-    // Get step by ID from steps_by_id object
-    const step = workflow.steps_by_id[stepId];
+    const onPaused = (data) => {
+      setStatus('paused');
+      log(`Paused after step: ${data.current_step}`);
+    };
 
-    if (!step) {
-      addLog(`❌ Step with ID "${stepId}" not found`);
-      return;
-    }
+    const onResumed = () => {
+      setStatus('running');
+      log('Resumed');
+    };
 
-    // Find the index for UI update
-    const index = workflow._steps.findIndex(s => s.id === stepId);
-    
-    addLog(`🎯 Hopping to step with ID "${stepId}": "${step.name}"`);
-    
-    // Set current step and execute
-    workflow.current_step = stepId;
-    setCurrentStepIndex(index);
-    
-    try {
-      const result = await step.execute();
-      setStepResults(prev => ({ ...prev, [step.name]: result }));
-      addLog(`✅ Step "${step.name}" completed successfully`);
-    } catch (error) {
-      addLog(`❌ Step "${step.name}" failed: ${error.message}`);
-    }
-  };
+    const onStepRunning = (data) => {
+      setCurrentStep(data.id);
+      log(`  ▶ ${data.name}`);
+    };
 
-  // Helper function to add to execution log
-  const addLog = (message) => {
-    setExecutionLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
-  };
+    const onStepComplete = (data) => {
+      setCurrentStep(null);
+      log(`  ✓ ${data.name} (${data.timing?.execution_time_ms}ms)`);
+    };
 
-  // Get all step IDs for the ID selector
-  const getStepIds = () => {
-    if (!workflowRef.current) return [];
-    return workflowRef.current._steps.map(step => ({ id: step.id, name: step.name }));
-  };
+    const onStepFailed = (data) => {
+      log(`  ✗ ${data.name}: ${data.errors?.[0]?.message}`);
+    };
 
-  // Initialize workflow on mount
-  React.useEffect(() => {
-    initializeWorkflow();
+    const onStepAdded = () => {
+      syncStepList();
+      log(`Step added`);
+    };
+
+    const onStepRemoved = () => {
+      syncStepList();
+      log(`Step removed`);
+    };
+
+    const onStepMoved = () => {
+      syncStepList();
+      log(`Step moved`);
+    };
+
+    wfEvents.on(workflow_event_names.WORKFLOW_RUNNING,      onRunning);
+    wfEvents.on(workflow_event_names.WORKFLOW_COMPLETE,     onComplete);
+    wfEvents.on(workflow_event_names.WORKFLOW_FAILED,       onFailed);
+    wfEvents.on(workflow_event_names.WORKFLOW_PAUSED,       onPaused);
+    wfEvents.on(workflow_event_names.WORKFLOW_RESUMED,      onResumed);
+    wfEvents.on(workflow_event_names.WORKFLOW_STEP_ADDED,   onStepAdded);
+    wfEvents.on(workflow_event_names.WORKFLOW_STEP_REMOVED, onStepRemoved);
+    wfEvents.on(workflow_event_names.WORKFLOW_STEP_MOVED,   onStepMoved);
+    stepEvents.on(step_event_names.STEP_RUNNING,  onStepRunning);
+    stepEvents.on(step_event_names.STEP_COMPLETE, onStepComplete);
+    stepEvents.on(step_event_names.STEP_FAILED,   onStepFailed);
+
+    return () => {
+      wfEvents.off(workflow_event_names.WORKFLOW_RUNNING,      onRunning);
+      wfEvents.off(workflow_event_names.WORKFLOW_COMPLETE,     onComplete);
+      wfEvents.off(workflow_event_names.WORKFLOW_FAILED,       onFailed);
+      wfEvents.off(workflow_event_names.WORKFLOW_PAUSED,       onPaused);
+      wfEvents.off(workflow_event_names.WORKFLOW_RESUMED,      onResumed);
+      wfEvents.off(workflow_event_names.WORKFLOW_STEP_ADDED,   onStepAdded);
+      wfEvents.off(workflow_event_names.WORKFLOW_STEP_REMOVED, onStepRemoved);
+      wfEvents.off(workflow_event_names.WORKFLOW_STEP_MOVED,   onStepMoved);
+      stepEvents.off(step_event_names.STEP_RUNNING,  onStepRunning);
+      stepEvents.off(step_event_names.STEP_COMPLETE, onStepComplete);
+      stepEvents.off(step_event_names.STEP_FAILED,   onStepFailed);
+    };
   }, []);
 
+  // ── Manipulation handlers ─────────────────────────────────────────────────
+
+  const handleAddStep = useCallback((type) => {
+    const wf   = getOrCreateWorkflow();
+    const step = makeStep(type);
+    wf.addStep(step);
+  }, []);
+
+  const handlePrependStep = useCallback((type) => {
+    const wf   = getOrCreateWorkflow();
+    const step = makeStep(type);
+    wf.unshiftStep(step);
+  }, []);
+
+  const handleInsertMiddle = useCallback((type) => {
+    const wf    = getOrCreateWorkflow();
+    const step  = makeStep(type);
+    const mid   = Math.floor(wf.steps.length / 2);
+    wf.addStepAtIndex(step, mid);
+  }, []);
+
+  const handleRemoveStep = useCallback((stepId) => {
+    const wf = workflowRef.current;
+    if (!wf) return;
+    wf.deleteStep(stepId);
+  }, []);
+
+  const handlePopStep = useCallback(() => {
+    const wf = workflowRef.current;
+    if (!wf || wf.isEmpty()) return;
+    const popped = wf.popStep();
+    log(`Popped step: ${popped.name}`);
+  }, []);
+
+  const handleMoveUp = useCallback((stepId) => {
+    const wf  = workflowRef.current;
+    if (!wf) return;
+    const idx = wf.steps.findIndex((s) => s.id === stepId);
+    if (idx > 0) wf.moveStep(idx, idx - 1);
+  }, []);
+
+  const handleMoveDown = useCallback((stepId) => {
+    const wf  = workflowRef.current;
+    if (!wf) return;
+    const idx = wf.steps.findIndex((s) => s.id === stepId);
+    if (idx < wf.steps.length - 1) wf.moveStep(idx, idx + 1);
+  }, []);
+
+  const handleClearSteps = useCallback(() => {
+    const wf = workflowRef.current;
+    if (!wf) return;
+    wf.clearSteps();
+    log('All steps cleared');
+    syncStepList();
+  }, []);
+
+  const handleRun = useCallback(async () => {
+    if (runningRef.current) return;
+
+    const wf = getOrCreateWorkflow();
+    if (wf.isEmpty()) {
+      log('No steps to run');
+      return;
+    }
+
+    runningRef.current = true;
+    State.reset();
+    await wf.execute();
+  }, []);
+
+  const handlePause = useCallback(() => {
+    workflowRef.current?.pause();
+  }, []);
+
+  const handleResume = useCallback(async () => {
+    const wf = workflowRef.current;
+    if (!wf) return;
+    await wf.resume();
+  }, []);
+
+  const handleReset = useCallback(() => {
+    workflowRef.current = new Workflow({ name: 'builder-flow', exit_on_error: false });
+    runningRef.current  = false;
+    setStepList([]);
+    setResults([]);
+    setStatus('idle');
+    setCurrentStep(null);
+    setLogs([]);
+    State.reset();
+    log('Reset complete');
+  }, []);
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  const isRunning = status === 'running';
+  const isPaused  = status === 'paused';
+
   return (
-    <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-      <h1>Step Hopping Demo</h1>
-      
-      <div style={{ marginBottom: '20px' }}>
-        <h2>Method 1: Hop by Array Index</h2>
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {[0, 1, 2, 3].map(index => (
-            <button
-              key={index}
-              onClick={() => hopToStepByIndex(index)}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: currentStepIndex === index ? '#4CAF50' : '#008CBA',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              Jump to Index {index}
-            </button>
-          ))}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, padding: 24, fontFamily: 'system-ui', maxWidth: 1200 }}>
+
+      {/* Left: Controls + Step List */}
+      <div>
+        <h2>Workflow Builder</h2>
+        <p style={{ color: '#6b7280' }}>Status: <strong>{status}</strong></p>
+
+        {/* Add step buttons */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          <button onClick={() => handleAddStep('action')}      disabled={isRunning}>+ Action (end)</button>
+          <button onClick={() => handlePrependStep('action')}  disabled={isRunning}>+ Action (start)</button>
+          <button onClick={() => handleInsertMiddle('action')} disabled={isRunning}>+ Action (middle)</button>
+          <button onClick={() => handleAddStep('delay')}       disabled={isRunning}>+ Delay</button>
+          <button onClick={() => handleAddStep('conditional')} disabled={isRunning}>+ Conditional</button>
+          <button onClick={handlePopStep}    disabled={isRunning || stepList.length === 0}>Pop Last</button>
+          <button onClick={handleClearSteps} disabled={isRunning || stepList.length === 0}>Clear All</button>
+        </div>
+
+        {/* Execution controls */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+          <button onClick={handleRun}    disabled={isRunning || stepList.length === 0} style={{ background: '#6366f1', color: '#fff' }}>
+            Run
+          </button>
+          <button onClick={handlePause}  disabled={!isRunning}>Pause</button>
+          <button onClick={handleResume} disabled={!isPaused}>Resume</button>
+          <button onClick={handleReset}  disabled={isRunning}>Reset</button>
+        </div>
+
+        {/* Step list */}
+        <div>
+          <h3>Steps ({stepList.length})</h3>
+          {stepList.length === 0 ? (
+            <p style={{ color: '#9ca3af' }}>No steps — add some above</p>
+          ) : (
+            <ol style={{ padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {stepList.map((s, i) => (
+                <li
+                  key={s.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '8px 12px',
+                    background: s.id === currentStep ? '#ede9fe' : '#f9fafb',
+                    border: '1px solid',
+                    borderColor: s.id === currentStep ? '#6366f1' : '#e5e7eb',
+                    borderRadius: 8,
+                  }}
+                >
+                  <span style={{ color: '#9ca3af', width: 20 }}>{i + 1}.</span>
+                  <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 13 }}>{s.name}</span>
+                  <span style={{ fontSize: 11, color: '#6b7280', background: '#e5e7eb', padding: '2px 6px', borderRadius: 4 }}>
+                    {s.type}
+                  </span>
+                  <button onClick={() => handleMoveUp(s.id)}   disabled={isRunning || i === 0} style={{ padding: '2px 8px' }}>↑</button>
+                  <button onClick={() => handleMoveDown(s.id)} disabled={isRunning || i === stepList.length - 1} style={{ padding: '2px 8px' }}>↓</button>
+                  <button onClick={() => handleRemoveStep(s.id)} disabled={isRunning} style={{ padding: '2px 8px', color: '#ef4444' }}>✕</button>
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
       </div>
 
-      <div style={{ marginBottom: '20px' }}>
-        <h2>Method 2: Hop by Step ID</h2>
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {getStepIds().map(({ id, name }) => (
-            <button
-              key={id}
-              onClick={() => hopToStepById(id)}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#FF9800',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              Jump to "{name}"
-            </button>
-          ))}
+      {/* Right: Logs + Results */}
+      <div>
+        <h2>Execution Log</h2>
+        <div style={{ height: 300, overflowY: 'auto', background: '#0f0f0f', color: '#d1fae5', fontFamily: 'monospace', fontSize: 12, padding: 12, borderRadius: 8, marginBottom: 24 }}>
+          {logs.length === 0
+            ? <span style={{ color: '#374151' }}>No activity yet</span>
+            : logs.map((l, i) => <div key={i}>{l}</div>)
+          }
         </div>
-      </div>
 
-      <div style={{ marginBottom: '20px' }}>
-        <h3>Current Step: {currentStepIndex}</h3>
-        {workflowRef.current && workflowRef.current._steps[currentStepIndex] && (
-          <p>
-            <strong>Name:</strong> {workflowRef.current._steps[currentStepIndex].name}<br />
-            <strong>ID:</strong> {workflowRef.current._steps[currentStepIndex].id}
-          </p>
+        <h2>Results ({results.length})</h2>
+        {results.length === 0 ? (
+          <p style={{ color: '#9ca3af' }}>Run the workflow to see results</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {results.map((r, i) => (
+              <div key={i} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', fontFamily: 'monospace', fontSize: 12 }}>
+                <strong>{i + 1}. {r.message}</strong>
+                <pre style={{ margin: '4px 0 0', color: '#374151' }}>{JSON.stringify(r.data, null, 2)}</pre>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
-      <div style={{ marginBottom: '20px' }}>
-        <h3>Step Results:</h3>
-        <pre style={{ 
-          backgroundColor: '#f5f5f5', 
-          padding: '10px', 
-          borderRadius: '4px',
-          maxHeight: '200px',
-          overflow: 'auto'
-        }}>
-          {JSON.stringify(stepResults, null, 2)}
-        </pre>
-      </div>
-
-      <div>
-        <h3>Execution Log:</h3>
-        <div style={{ 
-          backgroundColor: '#f5f5f5', 
-          padding: '10px', 
-          borderRadius: '4px',
-          maxHeight: '300px',
-          overflow: 'auto',
-          fontFamily: 'monospace',
-          fontSize: '12px'
-        }}>
-          {executionLog.map((log, index) => (
-            <div key={index}>{log}</div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ marginTop: '20px', padding: '10px', backgroundColor: '#e3f2fd', borderRadius: '4px' }}>
-        <h4>💡 Tips:</h4>
-        <ul>
-          <li><strong>By Index:</strong> Use when you know the step's position in the workflow</li>
-          <li><strong>By ID:</strong> Use when you have a reference to a specific step or need guaranteed targeting</li>
-          <li>Step IDs are unique and persist even if steps are reordered</li>
-          <li>Array indices change if steps are added/removed before them</li>
-        </ul>
-      </div>
     </div>
   );
 }
-
-export default StepHoppingDemo;
 ```
 
-## Output
+## Key Concepts
 
-When you interact with the component, you'll see:
+### Workflow in a Ref
 
-```
-[10:30:45] 🎯 Hopping to step at index 2: "review"
-[10:30:45] Reviewing data...
-[10:30:45] ✅ Step "review" completed successfully
+The `Workflow` instance is stored in `useRef` so it persists across renders without triggering re-renders. `getOrCreateWorkflow()` lazily initializes it on the first interaction.
 
-[10:30:52] 🎯 Hopping to step with ID "a1b2c3d4": "preferences"
-[10:30:52] Setting preferences...
-[10:30:52] ✅ Step "preferences" completed successfully
-```
+### Syncing React State from Events
 
-## Key Points
+`syncStepList()` reads `wf.steps` and updates the React `stepList` state. It is called from the `WORKFLOW_STEP_ADDED`, `WORKFLOW_STEP_REMOVED`, and `WORKFLOW_STEP_MOVED` event handlers, ensuring the UI always reflects the actual workflow structure.
 
-### Method 1: Array Index (`workflow._steps[index]`)
-- **Pros:**
-  - Simple numeric access
-  - Fast O(1) lookup
-  - Intuitive for sequential navigation
-- **Cons:**
-  - Indices change when steps are added/removed
-  - Must validate bounds
+### Move Up / Move Down
 
-### Method 2: Step ID (`workflow.steps_by_id[stepId]`)
-- **Pros:**
-  - Stable reference (doesn't change)
-  - Safe for dynamic workflows
-  - Better for persistence (save/restore state)
-- **Cons:**
-  - Must track step IDs
-  - Slightly more verbose
+`moveStep(fromIndex, toIndex)` takes the current index and target index. The up/down buttons compute these by finding the step's current position in `wf.steps`.
 
-## Use Cases
+### Pause During Execution
 
-- **Wizard navigation:** "Go to Step 3" or "Back to Review"
-- **Conditional routing:** Skip steps based on user input
-- **Error recovery:** Jump to a specific step after validation failure
-- **Save/Resume:** Store step ID to resume workflow later
-- **A/B testing:** Route users to different steps dynamically
+`handlePause` calls `workflowRef.current.pause()`, which sets `should_pause = true`. After the current step completes (or delay resolves), execution suspends. The UI transitions to the `'paused'` status and enables the Resume button.
+
+### Clean Event Listener Teardown
+
+All listeners registered with `wfEvents.on()` and `stepEvents.on()` inside the `useEffect` are removed via `.off()` in the cleanup function. This prevents duplicate handlers across React StrictMode double-invocations and component unmounts.
 
 ## Related Examples
 
-- [Multi-Step Form](form-workflow-react.md)
-- [Basic Workflow](basic-workflow-node.md)
-- [Data Fetching](data-fetching-vue.md)
+- [Step Hopping — Node.js](step-hopping-node.md) — Same patterns outside React
+- [Form Workflow — React](form-workflow-react.md) — Multi-step form
+- [Basic Workflow — Node.js](basic-workflow-node.md) — Core patterns

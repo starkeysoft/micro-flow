@@ -1,8 +1,16 @@
 # LogicStep
 
-LogicStep class for conditional logic operations. Provides the foundation for conditional branching with comparison operators.
+Extends `Step` with a configurable conditional expression. `LogicStep` evaluates a `{ subject, operator, value }` triple and exposes `checkCondition()` as a boolean test. It is the base class for `ConditionalStep`, `FlowControlStep`, `LoopStep`, and `Case`.
 
-Extends: [Step](step.md)
+**Extends:** [Step](step.md)
+
+## Table of Contents
+- [Constructor](#constructor)
+- [Properties](#properties)
+- [Methods](#methods)
+- [Supported Operators](#supported-operators)
+- [Examples](#examples)
+- [Related](#related)
 
 ## Constructor
 
@@ -10,526 +18,229 @@ Extends: [Step](step.md)
 
 Creates a new LogicStep instance.
 
-**Parameters:**
-- `options` (Object) - Configuration options
-  - `name` (string, optional) - Name of the step
-  - `callable` (Function, optional) - Function to execute (default: `async () => {}`)
-  - `conditional` (Object, optional) - Conditional configuration
-    - `subject` (any|Function) - Subject to evaluate. Can be a function that returns the value (evaluated at check time).
-    - `operator` (string) - Comparison operator
-    - `value` (any|Function) - Value to compare against. Can be a function that returns the value (evaluated at check time). Exception: for `custom_function` operator, value IS the comparison function.
+#### Parameters
 
-**Example (Node.js - Basic Logic):**
-```javascript
-import { LogicStep } from 'micro-flow';
-
-const ageCheck = new LogicStep({
-  name: 'check-age',
-  conditional: {
-    subject: 25,
-    operator: '>=',
-    value: 18
-  },
-  callable: async () => {
-    return { allowed: true };
-  }
-});
-
-const result = await ageCheck.execute();
-console.log('Age check:', result.result);
-```
-
-**Example (Browser - Dynamic Validation):**
-```javascript
-import { LogicStep } from './micro-flow.js';
-
-const passwordStrength = new LogicStep({
-  name: 'validate-password',
-  conditional: {
-    subject: 'MyP@ssw0rd'.length,
-    operator: '>=',
-    value: 8
-  },
-  callable: async () => {
-    return { valid: true, message: 'Password is strong' };
-  }
-});
-
-if (passwordStrength.checkCondition()) {
-  console.log('Password meets requirements');
-}
-```
-
-**Example (Node.js - Environment Check):**
-```javascript
-import { LogicStep } from 'micro-flow';
-
-const envCheck = new LogicStep({
-  name: 'check-environment',
-  conditional: {
-    subject: process.env.NODE_ENV,
-    operator: '===',
-    value: 'production'
-  },
-  callable: async () => {
-    console.log('Running in production mode');
-  }
-});
-```
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `options.name` | `string` | `'step-<uuid>'` | Human-readable identifier. |
+| `options.callable` | `Function\|Step\|Workflow` | `async () => {}` | Work to execute when `execute()` is called. |
+| `options.conditional` | `Object` | `{ subject: null, operator: null, value: null }` | Conditional configuration. |
+| `options.conditional.subject` | `any\|Function` | `null` | Value (or function returning value) to evaluate. Evaluated at check time if a function. |
+| `options.conditional.operator` | `string` | `null` | Comparison operator string (see [Supported Operators](#supported-operators)). |
+| `options.conditional.value` | `any\|Function` | `null` | Value (or function returning value) to compare against. For `CUSTOM_FUNCTION`, `value` is the comparison function itself. |
 
 ## Properties
 
-- `conditional_config` (Object) - The conditional configuration containing subject, operator, and value
-- `conditional_config.subject` (any|Function) - The subject value to evaluate (or function returning it)
-- `conditional_config.operator` (string) - The comparison operator to use
-- `conditional_config.value` (any|Function, optional) - The value to compare against (or function returning it). Optional for operators that don't need a value (e.g., `empty`, `nullish`).
+| Property | Type | Description |
+|----------|------|-------------|
+| `conditional_config` | `Object` | Stores `{ subject, operator, value }`. Updated by `setConditional()`. |
 
-All properties inherited from [Step](step.md)
+All properties from [Step](step.md) are inherited.
 
 ## Methods
 
-### `checkCondition()`
+### `checkCondition()` → `boolean`
 
-Evaluates the conditional expression using the configured operator.
+Evaluates the conditional expression. If `subject` or `value` are functions, they are called first to resolve the actual values. For the `CUSTOM_FUNCTION` operator, `value(subject)` is called directly.
 
-**Returns:** boolean - True if the condition is met
+**Returns:** `true` if the condition is satisfied, `false` otherwise.
 
-**Throws:** Error - If the operator is unknown
+**Throws:** `Error` if the operator is unknown.
 
-**Note:** If `subject` or `value` are functions, they are called to get the actual value before comparison. Exception: for `custom_function` operator, the value function is passed the subject directly.
-
-**Supported Operators:**
-- `'==='`, `'strict_equals'` - Strict equality
-- `'=='`, `'equals'` - Loose equality
-- `'!='`, `'not_equals'` - Loose inequality
-- `'!=='`, `'strict_not_equals'` - Strict inequality
-- `'>'`, `'greater_than'` - Greater than
-- `'<'`, `'less_than'` - Less than
-- `'>='`, `'greater_than_or_equal'` - Greater than or equal
-- `'<='`, `'less_than_or_equal'` - Less than or equal
-- `'string_contains'`, `'string_includes'` - String contains value
-- `'array_contains'`, `'array_includes'` - Array contains value
-- `'empty'` - Subject is empty (`''`, `null`, `undefined`, or length `0`)
-- `'not_empty'` - Subject is not empty
-- `'regex_match'` - Subject matches regex pattern string in `value`
-- `'regex_not_match'` - Subject does not match regex pattern string in `value`
-- `'starts_with'` - Subject starts with string `value`
-- `'ends_with'` - Subject ends with string `value`
-- `'in'` - Subject is included in array `value`
-- `'not_in'` - Subject is not included in array `value`
-- `'nullish'` - Subject is `null` or `undefined`
-- `'not_nullish'` - Subject is not `null` or `undefined`
-- `'custom_function'` - `value` is a function invoked as `value(subject)`
-
-**Example (Node.js - Custom Validation):**
+**Example:**
 ```javascript
-import { LogicStep } from 'micro-flow';
+import { LogicStep, State } from '@ronaldroe/micro-flow';
 
-const priceCheck = new LogicStep({
-  name: 'validate-price',
+const check = new LogicStep({
+  name: 'inventory-check',
   conditional: {
-    subject: 99.99,
-    operator: '<=',
-    value: 100
-  }
-});
-
-if (priceCheck.checkCondition()) {
-  console.log('Price is within budget');
-} else {
-  console.log('Price exceeds budget');
-}
-```
-
-**Example (Browser - Form Validation):**
-```javascript
-import { LogicStep } from './micro-flow.js';
-
-function validateForm(formData) {
-  const emailCheck = new LogicStep({
-    name: 'validate-email',
-    conditional: {
-      subject: formData.email.includes('@'),
-      operator: '===',
-      value: true
-    }
-  });
-  
-  const ageCheck = new LogicStep({
-    name: 'validate-age',
-    conditional: {
-      subject: parseInt(formData.age),
-      operator: '>=',
-      value: 13
-    }
-  });
-  
-  return emailCheck.checkCondition() && ageCheck.checkCondition();
-}
-
-const isValid = validateForm({ email: 'user@example.com', age: '25' });
-console.log('Form is valid:', isValid);
-```
-
-**Example (Node.js - Custom Function Comparator):**
-```javascript
-import { LogicStep } from 'micro-flow';
-
-const customCheck = new LogicStep({
-  name: 'custom-check',
-  conditional: {
-    subject: { score: 42 },
-    operator: 'custom_function',
-    value: (subject) => subject.score >= 40
-  }
-});
-
-if (customCheck.checkCondition()) {
-  console.log('Custom check passed');
-}
-```
-
-**Example (Node.js - Dynamic Subject with Function):**
-```javascript
-import { LogicStep, State } from 'micro-flow';
-
-// Subject is a function - evaluated each time checkCondition() is called
-const dynamicCheck = new LogicStep({
-  name: 'dynamic-counter-check',
-  conditional: {
-    subject: () => State.get('counter'),  // Evaluated dynamically
-    operator: '<',
-    value: 10
-  }
-});
-
-State.set('counter', 5);
-console.log(dynamicCheck.checkCondition()); // true
-
-State.set('counter', 15);
-console.log(dynamicCheck.checkCondition()); // false
-```
-
-### `conditionalIsValid()`
-
-Checks if the conditional configuration is valid (all required properties are set).
-
-**Returns:** boolean - True if conditional is valid
-
-**Example (Node.js - Validation):**
-```javascript
-import { LogicStep } from 'micro-flow';
-
-const incompleteLogic = new LogicStep({
-  name: 'incomplete',
-  conditional: {
-    subject: null,
-    operator: '===',
-    value: null
-  }
-});
-
-if (!incompleteLogic.conditionalIsValid()) {
-  console.log('Conditional configuration is incomplete');
-}
-
-const completeLogic = new LogicStep({
-  name: 'complete',
-  conditional: {
-    subject: 10,
+    subject: () => State.get('inventory.count'),
     operator: '>',
-    value: 5
-  }
+    value: 0,
+  },
 });
 
-if (completeLogic.conditionalIsValid()) {
-  console.log('Conditional configuration is valid');
-}
+State.set('inventory.count', 5);
+console.log(check.checkCondition()); // true
+
+State.set('inventory.count', 0);
+console.log(check.checkCondition()); // false
 ```
+
+---
+
+### `conditionalIsValid()` → `boolean`
+
+Returns `true` if both `conditional_config.subject` and `conditional_config.operator` are non-null and non-undefined.
+
+**Returns:** `boolean`
+
+**Example:**
+```javascript
+import { LogicStep } from '@ronaldroe/micro-flow';
+
+const invalid = new LogicStep({
+  name: 'incomplete',
+  conditional: { subject: null, operator: '===', value: true },
+});
+console.log(invalid.conditionalIsValid()); // false
+
+const valid = new LogicStep({
+  name: 'complete',
+  conditional: { subject: 5, operator: '>', value: 0 },
+});
+console.log(valid.conditionalIsValid()); // true
+```
+
+---
 
 ### `setConditional(conditional)`
 
-Sets the conditional properties (subject, operator, value).
+Updates the `conditional_config` with a new configuration object.
 
 **Parameters:**
-- `conditional` (Object) - Conditional configuration object
-  - `subject` (any) - Subject to evaluate
-  - `operator` (string) - Comparison operator
-  - `value` (any) - Value to compare against
 
-**Example (Node.js - Dynamic Conditions):**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `conditional` | `Object` | Object with `subject`, `operator`, and optionally `value`. |
+
+**Example:**
 ```javascript
-import { LogicStep } from 'micro-flow';
+import { LogicStep } from '@ronaldroe/micro-flow';
 
-const dynamicLogic = new LogicStep({
-  name: 'dynamic-check',
+const step = new LogicStep({
+  name: 'updatable-check',
+  conditional: { subject: 0, operator: '===', value: 0 },
+});
+
+step.setConditional({ subject: 10, operator: '>=', value: 5 });
+console.log(step.checkCondition()); // true
+```
+
+## Supported Operators
+
+| Enum Key | String Value | Description |
+|----------|-------------|-------------|
+| `STRICT_EQUALS` | `'strict_equals'` or `'==='` | Strict equality (`===`) |
+| `EQUALS` | `'equals'` or `'=='` | Loose equality (`==`) |
+| `NOT_EQUALS` | `'not_equals'` or `'!='` | Loose inequality (`!=`) |
+| `STRICT_NOT_EQUALS` | `'strict_not_equals'` or `'!=='` | Strict inequality (`!==`) |
+| `GREATER_THAN` | `'greater_than'` or `'>'` | Greater than |
+| `LESS_THAN` | `'less_than'` or `'<'` | Less than |
+| `GREATER_THAN_OR_EQUAL` | `'greater_than_or_equal'` or `'>='` | Greater than or equal |
+| `LESS_THAN_OR_EQUAL` | `'less_than_or_equal'` or `'<='` | Less than or equal |
+| `STRING_CONTAINS` | `'string_contains'` / `'string_includes'` | String includes substring |
+| `STRING_NOT_CONTAINS` | `'string_not_contains'` / `'string_not_includes'` | String does not include substring |
+| `STRING_STARTS_WITH` | `'string_starts_with'` | String starts with value |
+| `STRING_ENDS_WITH` | `'string_ends_with'` | String ends with value |
+| `ARRAY_CONTAINS` | `'array_contains'` / `'array_includes'` | Array includes element |
+| `ARRAY_NOT_CONTAINS` | `'array_not_contains'` / `'array_not_includes'` | Array does not include element |
+| `IN` | `'in'` | Subject is in array value |
+| `NOT_IN` | `'not_in'` | Subject is not in array value |
+| `EMPTY` | `'empty'` | Subject is `''`, `null`, `undefined`, or length `0` |
+| `NOT_EMPTY` | `'not_empty'` | Subject is not empty |
+| `REGEX_MATCH` | `'regex_match'` | Subject matches regex pattern in value |
+| `REGEX_NOT_MATCH` | `'regex_not_match'` | Subject does not match regex |
+| `NULLISH` | `'nullish'` | Subject is `null` or `undefined` |
+| `NOT_NULLISH` | `'not_nullish'` | Subject is not `null`/`undefined` |
+| `IS_TYPE` | `'is_type'` | `typeof subject === value` |
+| `IS_NOT_TYPE` | `'is_not_type'` | `typeof subject !== value` |
+| `CUSTOM_FUNCTION` | `'custom_function'` | `value(subject)` — `value` is the comparison function |
+
+## Examples
+
+### Dynamic subject from State
+
+```javascript
+import { LogicStep, State } from '@ronaldroe/micro-flow';
+
+State.set('queue.length', 7);
+
+const queueCheck = new LogicStep({
+  name: 'queue-not-empty',
   conditional: {
-    subject: 0,
-    operator: '===',
-    value: 0
-  }
+    subject: () => State.get('queue.length'),
+    operator: 'greater_than',
+    value: 0,
+  },
 });
 
-// Update condition dynamically
-dynamicLogic.setConditional({
-  subject: userScore,
-  operator: '>=',
-  value: passingScore
+console.log(queueCheck.checkCondition()); // true
+```
+
+### Custom function operator
+
+```javascript
+import { LogicStep } from '@ronaldroe/micro-flow';
+
+const complexCheck = new LogicStep({
+  name: 'credit-check',
+  conditional: {
+    subject: { score: 720, income: 80000 },
+    operator: 'custom_function',
+    value: (profile) => profile.score >= 700 && profile.income >= 50000,
+  },
 });
 
-if (dynamicLogic.checkCondition()) {
-  console.log('User passed!');
-}
+console.log(complexCheck.checkCondition()); // true
 ```
 
-## Common Patterns
-
-### Data Validation Pipeline (Node.js)
+### Using operators from enum
 
 ```javascript
-import { LogicStep, Workflow, Step } from 'micro-flow';
+import { LogicStep, conditional_step_comparators } from '@ronaldroe/micro-flow';
 
-async function validateUserData(userData) {
-  const validations = [
-    new LogicStep({
-      name: 'validate-username',
-      conditional: {
-        subject: userData.username.length,
-        operator: '>=',
-        value: 3
-      }
-    }),
-    new LogicStep({
-      name: 'validate-email',
-      conditional: {
-        subject: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userData.email),
-        operator: '===',
-        value: true
-      }
-    }),
-    new LogicStep({
-      name: 'validate-age',
-      conditional: {
-        subject: userData.age,
-        operator: '>=',
-        value: 18
-      }
-    })
-  ];
-  
-  const results = validations.map(step => ({
-    name: step.name,
-    valid: step.checkCondition()
-  }));
-  
-  const allValid = results.every(r => r.valid);
-  return { valid: allValid, validations: results };
-}
-
-const validation = await validateUserData({
-  username: 'john_doe',
-  email: 'john@example.com',
-  age: 25
+const emailCheck = new LogicStep({
+  name: 'validate-email',
+  conditional: {
+    subject: 'user@example.com',
+    operator: conditional_step_comparators.STRING_CONTAINS,
+    value: '@',
+  },
 });
 
-console.log('Validation results:', validation);
+console.log(emailCheck.checkCondition()); // true
 ```
 
-### Access Control (Node.js)
+### Array membership check
 
 ```javascript
-import { LogicStep } from 'micro-flow';
+import { LogicStep } from '@ronaldroe/micro-flow';
 
-class AccessControl {
-  constructor(userRole) {
-    this.userRole = userRole;
-  }
-  
-  canAccess(requiredRole) {
-    const roleHierarchy = {
-      admin: 3,
-      moderator: 2,
-      user: 1,
-      guest: 0
-    };
-    
-    const accessCheck = new LogicStep({
-      name: 'check-access',
-      conditional: {
-        subject: roleHierarchy[this.userRole] || 0,
-        operator: '>=',
-        value: roleHierarchy[requiredRole] || 0
-      }
-    });
-    
-    return accessCheck.checkCondition();
-  }
-}
-
-const ac = new AccessControl('moderator');
-console.log('Can access admin panel:', ac.canAccess('admin')); // false
-console.log('Can access user panel:', ac.canAccess('user')); // true
-```
-
-### Threshold Monitoring (Node.js)
-
-```javascript
-import { LogicStep, Step, Workflow } from 'micro-flow';
-
-class ThresholdMonitor {
-  constructor(threshold, metricGetter) {
-    this.threshold = threshold;
-    this.metricGetter = metricGetter;
-  }
-  
-  async check() {
-    const currentValue = await this.metricGetter();
-    
-    const thresholdCheck = new LogicStep({
-      name: 'check-threshold',
-      conditional: {
-        subject: currentValue,
-        operator: '>',
-        value: this.threshold
-      }
-    });
-    
-    if (thresholdCheck.checkCondition()) {
-      console.warn(`Threshold exceeded: ${currentValue} > ${this.threshold}`);
-      await this.triggerAlert(currentValue);
-    }
-    
-    return {
-      exceeded: thresholdCheck.checkCondition(),
-      value: currentValue,
-      threshold: this.threshold
-    };
-  }
-  
-  async triggerAlert(value) {
-    console.log(`ALERT: Value ${value} exceeded threshold ${this.threshold}`);
-  }
-}
-
-const cpuMonitor = new ThresholdMonitor(80, async () => {
-  // Get CPU usage (mock)
-  return Math.random() * 100;
+const roleCheck = new LogicStep({
+  name: 'has-admin-role',
+  conditional: {
+    subject: 'admin',
+    operator: 'in',
+    value: ['admin', 'superadmin'],
+  },
 });
 
-const result = await cpuMonitor.check();
-console.log('Monitor result:', result);
+console.log(roleCheck.checkCondition()); // true
 ```
 
-### Feature Flags (Browser)
+### Regex validation
 
 ```javascript
-import { LogicStep } from './micro-flow.js';
+import { LogicStep } from '@ronaldroe/micro-flow';
 
-class FeatureFlags {
-  constructor(flags) {
-    this.flags = flags;
-  }
-  
-  isEnabled(featureName) {
-    const featureCheck = new LogicStep({
-      name: `check-${featureName}`,
-      conditional: {
-        subject: this.flags[featureName],
-        operator: '===',
-        value: true
-      }
-    });
-    
-    return featureCheck.checkCondition();
-  }
-}
-
-const flags = new FeatureFlags({
-  newUI: true,
-  darkMode: false,
-  betaFeatures: true
+const phoneCheck = new LogicStep({
+  name: 'valid-phone',
+  conditional: {
+    subject: '+1-555-867-5309',
+    operator: 'regex_match',
+    value: '^\\+?[1-9]\\d{1,14}$',
+  },
 });
 
-if (flags.isEnabled('newUI')) {
-  console.log('Showing new UI');
-}
-
-if (!flags.isEnabled('darkMode')) {
-  console.log('Using light mode');
-}
+console.log(phoneCheck.checkCondition()); // true
 ```
-
-### Range Validation (Node.js)
-
-```javascript
-import { LogicStep } from 'micro-flow';
-
-function isInRange(value, min, max) {
-  const minCheck = new LogicStep({
-    name: 'check-minimum',
-    conditional: {
-      subject: value,
-      operator: '>=',
-      value: min
-    }
-  });
-  
-  const maxCheck = new LogicStep({
-    name: 'check-maximum',
-    conditional: {
-      subject: value,
-      operator: '<=',
-      value: max
-    }
-  });
-  
-  return minCheck.checkCondition() && maxCheck.checkCondition();
-}
-
-console.log('Score in range:', isInRange(75, 0, 100)); // true
-console.log('Temperature in range:', isInRange(-5, 0, 100)); // false
-```
-
-### Type Checking (Browser)
-
-```javascript
-import { LogicStep } from './micro-flow.js';
-
-function validateInput(input, expectedType) {
-  const typeCheck = new LogicStep({
-    name: 'validate-type',
-    conditional: {
-      subject: typeof input,
-      operator: '===',
-      value: expectedType
-    }
-  });
-  
-  if (!typeCheck.checkCondition()) {
-    throw new TypeError(
-      `Expected ${expectedType}, got ${typeof input}`
-    );
-  }
-  
-  return true;
-}
-
-validateInput('hello', 'string'); // OK
-validateInput(42, 'number'); // OK
-// validateInput('hello', 'number'); // Throws TypeError
-```
-
-## Notes
-
-- LogicStep is the base class for [ConditionalStep](conditional_step.md) and [LoopStep](loop_step.md)
-- The `checkCondition()` method is used internally by child classes for decision making
-- Supports both symbol operators (`===`, `>=`) and word operators (`strict_equals`, `greater_than_or_equal`)
-- All comparisons follow JavaScript's standard comparison rules
-- The `conditionalIsValid()` method checks for null and undefined values, not type validity
 
 ## Related
 
-- [ConditionalStep](conditional_step.md) - Extends LogicStep for branching logic
-- [LoopStep](loop_step.md) - Extends LogicStep for iterative execution
-- [Step](step.md) - Base step class
-- [conditional_step_comparators enum](../../enums/conditional_step_comparators.md) - Available comparison operators
+- [Step](step.md) — Parent class.
+- [ConditionalStep](conditional_step.md) — Branches based on `checkCondition()`.
+- [FlowControlStep](flow_control_step.md) — Breaks or skips the parent workflow.
+- [LoopStep](loop_step.md) — Loops while `checkCondition()` is true.
+- [Case](case.md) — A single case in a `SwitchStep`.
+- [conditional_step_comparators](../../../enums/conditional_step_comparators.md) — Full enum of operator values.

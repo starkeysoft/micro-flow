@@ -1,279 +1,150 @@
-# Conditional Step Comparators
+# conditional_step_comparators
 
-Enumeration of comparison operators for conditional steps. Provides both named and symbolic operator formats.
+The full set of comparison operators supported by `LogicStep.checkCondition()`. Each operator has a named string form and most also have a sign alias (e.g. `'==='` alongside `'strict_equals'`). Both forms are accepted anywhere an operator is expected.
+
+## Table of Contents
+- [Values](#values)
+- [Usage](#usage)
+- [Related](#related)
 
 ## Values
 
-### Equality Operators
+### Equality
 
-- `EQUALS` - `'equals'` - Loose equality comparison
-- `SIGN_EQUALS` - `'=='` - Loose equality (symbolic)
-- `STRICT_EQUALS` - `'strict_equals'` - Strict equality comparison
-- `SIGN_STRICT_EQUALS` - `'==='` - Strict equality (symbolic)
+| Key | Value | Description |
+|-----|-------|-------------|
+| `STRICT_EQUALS` | `'strict_equals'` | Strict equality: `subject === value` |
+| `SIGN_STRICT_EQUALS` | `'==='` | Sign alias for `STRICT_EQUALS` |
+| `EQUALS` | `'equals'` | Loose equality: `subject == value` |
+| `SIGN_EQUALS` | `'=='` | Sign alias for `EQUALS` |
+| `STRICT_NOT_EQUALS` | `'strict_not_equals'` | Strict inequality: `subject !== value` |
+| `SIGN_STRICT_NOT_EQUALS` | `'!=='` | Sign alias for `STRICT_NOT_EQUALS` |
+| `NOT_EQUALS` | `'not_equals'` | Loose inequality: `subject != value` |
+| `SIGN_NOT_EQUALS` | `'!='` | Sign alias for `NOT_EQUALS` |
 
-### Inequality Operators
+### Comparison
 
-- `NOT_EQUALS` - `'not_equals'` - Loose inequality comparison
-- `SIGN_NOT_EQUALS` - `'!='` - Loose inequality (symbolic)
-- `STRICT_NOT_EQUALS` - `'strict_not_equals'` - Strict inequality comparison
-- `SIGN_STRICT_NOT_EQUALS` - `'!=='` - Strict inequality (symbolic)
+| Key | Value | Description |
+|-----|-------|-------------|
+| `GREATER_THAN` | `'greater_than'` | `subject > value` |
+| `SIGN_GREATER_THAN` | `'>'` | Sign alias for `GREATER_THAN` |
+| `LESS_THAN` | `'less_than'` | `subject < value` |
+| `SIGN_LESS_THAN` | `'<'` | Sign alias for `LESS_THAN` |
+| `GREATER_THAN_OR_EQUAL` | `'greater_than_or_equal'` | `subject >= value` |
+| `SIGN_GREATER_THAN_OR_EQUAL` | `'>='` | Sign alias for `GREATER_THAN_OR_EQUAL` |
+| `LESS_THAN_OR_EQUAL` | `'less_than_or_equal'` | `subject <= value` |
+| `SIGN_LESS_THAN_OR_EQUAL` | `'<='` | Sign alias for `LESS_THAN_OR_EQUAL` |
 
-### Comparison Operators
+### String
 
-- `GREATER_THAN` - `'greater_than'` - Greater than comparison
-- `SIGN_GREATER_THAN` - `'>'` - Greater than (symbolic)
-- `LESS_THAN` - `'less_than'` - Less than comparison
-- `SIGN_LESS_THAN` - `'<'` - Less than (symbolic)
-- `GREATER_THAN_OR_EQUAL` - `'greater_than_or_equal'` - Greater than or equal comparison
-- `SIGN_GREATER_THAN_OR_EQUAL` - `'>='` - Greater than or equal (symbolic)
-- `LESS_THAN_OR_EQUAL` - `'less_than_or_equal'` - Less than or equal comparison
-- `SIGN_LESS_THAN_OR_EQUAL` - `'<='` - Less than or equal (symbolic)
+| Key | Value | Description |
+|-----|-------|-------------|
+| `STRING_CONTAINS` | `'string_contains'` | `subject.includes(value)` |
+| `STRING_INCLUDES` | `'string_includes'` | Alias for `STRING_CONTAINS` |
+| `STRING_NOT_CONTAINS` | `'string_not_contains'` | `!subject.includes(value)` |
+| `STRING_NOT_INCLUDES` | `'string_not_includes'` | Alias for `STRING_NOT_CONTAINS` |
+| `STRING_STARTS_WITH` | `'string_starts_with'` | `subject.startsWith(value)` |
+| `STRING_ENDS_WITH` | `'string_ends_with'` | `subject.endsWith(value)` |
+| `REGEX_MATCH` | `'regex_match'` | `new RegExp(value).test(subject)` |
+| `REGEX_NOT_MATCH` | `'regex_not_match'` | `!new RegExp(value).test(subject)` |
 
-### String Operators
+### Array
 
-- `STRING_CONTAINS` - `'string_contains'` - Subject contains the value (string)
-- `STRING_INCLUDES` - `'string_includes'` - Subject includes the value (string)
-- `STRING_STARTS_WITH` - `'string_starts_with'` - Subject starts with the value
-- `STRING_ENDS_WITH` - `'string_ends_with'` - Subject ends with the value
+| Key | Value | Description |
+|-----|-------|-------------|
+| `ARRAY_CONTAINS` | `'array_contains'` | `subject.includes(value)` (subject is array) |
+| `ARRAY_INCLUDES` | `'array_includes'` | Alias for `ARRAY_CONTAINS` |
+| `ARRAY_NOT_CONTAINS` | `'array_not_contains'` | `!subject.includes(value)` (subject is array) |
+| `ARRAY_NOT_INCLUDES` | `'array_not_includes'` | Alias for `ARRAY_NOT_CONTAINS` |
+| `IN` | `'in'` | `value.includes(subject)` (value is array) |
+| `NOT_IN` | `'not_in'` | `!value.includes(subject)` (value is array) |
 
-### Array Operators
+### Existence
 
-- `ARRAY_CONTAINS` - `'array_contains'` - Subject contains the value (array)
-- `ARRAY_INCLUDES` - `'array_includes'` - Subject includes the value (array)
+| Key | Value | Description |
+|-----|-------|-------------|
+| `EMPTY` | `'empty'` | Subject is `''`, `null`, `undefined`, or has length `0` |
+| `NOT_EMPTY` | `'not_empty'` | Subject is not empty |
+| `NULLISH` | `'nullish'` | `subject == null` (null or undefined) |
+| `NOT_NULLISH` | `'not_nullish'` | `subject != null` |
 
-### Empty Checks
+### Type
 
-- `EMPTY` - `'empty'` - Subject is empty (string/array/object)
-- `NOT_EMPTY` - `'not_empty'` - Subject is not empty (string/array/object)
+| Key | Value | Description |
+|-----|-------|-------------|
+| `IS_TYPE` | `'is_type'` | `typeof subject === value` |
+| `IS_NOT_TYPE` | `'is_not_type'` | `typeof subject !== value` |
 
-### Regex Operators
+### Custom
 
-- `REGEX_MATCH` - `'regex_match'` - Subject matches the regex value
-- `REGEX_NOT_MATCH` - `'regex_not_match'` - Subject does not match the regex value
+| Key | Value | Description |
+|-----|-------|-------------|
+| `CUSTOM_FUNCTION` | `'custom_function'` | `value(subject)` — `value` is the comparison function; returns truthy/falsy |
 
-### Set Membership Operators
-
-- `IN` - `'in'` - Subject is in the value collection
-- `NOT_IN` - `'not_in'` - Subject is not in the value collection
-
-### Nullish Checks
-
-- `NULLISH` - `'nullish'` - Subject is null or undefined
-- `NOT_NULLISH` - `'not_nullish'` - Subject is not null or undefined
-
-### Custom Operator
-
-- `CUSTOM_FUNCTION` - `'custom_function'` - Delegates evaluation to a custom function. When using custom function, the `value` must be a function that takes one argument. The `subject` is passed to the `value` function.
-
-## Usage Examples
-
-### Node.js - Numeric Comparison
+## Usage
 
 ```javascript
-import { LogicStep, conditional_step_comparators } from 'micro-flow';
+import { LogicStep, conditional_step_comparators } from '@ronaldroe/micro-flow';
 
-const temperatureCheck = new LogicStep({
-  name: 'check-temp',
+// Using the named constant
+const check = new LogicStep({
+  name: 'email-check',
   conditional: {
-    subject: 75,
-    operator: conditional_step_comparators.GREATER_THAN,
-    value: 70
+    subject: 'user@example.com',
+    operator: conditional_step_comparators.STRING_CONTAINS,
+    value: '@',
   },
-  callable: async () => {
-    console.log('Temperature is above threshold');
-  }
 });
-```
+console.log(check.checkCondition()); // true
 
-### Node.js - String Comparison
+// Using the sign alias directly
+const gtCheck = new LogicStep({
+  name: 'age-check',
+  conditional: { subject: 25, operator: '>=', value: 18 },
+});
+console.log(gtCheck.checkCondition()); // true
 
-```javascript
-import { ConditionalStep, conditional_step_comparators } from 'micro-flow';
-
-const envCheck = new ConditionalStep({
-  name: 'env-check',
+// CUSTOM_FUNCTION — value is the comparator
+const customCheck = new LogicStep({
+  name: 'credit-score',
   conditional: {
-    subject: process.env.NODE_ENV,
-    operator: conditional_step_comparators.STRICT_EQUALS,
-    value: 'production'
+    subject: { score: 720, history: 5 },
+    operator: conditional_step_comparators.CUSTOM_FUNCTION,
+    value: (profile) => profile.score >= 700 && profile.history >= 2,
   },
-  true_callable: async () => {
-    return loadProductionConfig();
-  },
-  false_callable: async () => {
-    return loadDevConfig();
-  }
 });
-```
+console.log(customCheck.checkCondition()); // true
 
-### Browser - Using Symbolic Operators
-
-```javascript
-import { LogicStep } from './micro-flow.js';
-
-const ageVerification = new LogicStep({
-  name: 'verify-age',
+// IN operator — subject is in an allowed list
+const roleCheck = new LogicStep({
+  name: 'role-check',
   conditional: {
-    subject: userAge,
-    operator: '>=', // Using symbolic operator
-    value: 18
+    subject: 'editor',
+    operator: conditional_step_comparators.IN,
+    value: ['admin', 'editor', 'moderator'],
   },
-  callable: async () => {
-    console.log('User is an adult');
-  }
 });
+console.log(roleCheck.checkCondition()); // true
+
+// EMPTY / NOT_EMPTY
+const notEmpty = new LogicStep({
+  name: 'has-items',
+  conditional: { subject: [1, 2, 3], operator: 'not_empty' },
+});
+console.log(notEmpty.checkCondition()); // true
+
+// IS_TYPE
+const typeCheck = new LogicStep({
+  name: 'is-number',
+  conditional: { subject: 42, operator: 'is_type', value: 'number' },
+});
+console.log(typeCheck.checkCondition()); // true
 ```
 
-### React - Dynamic Conditionals
+## Related
 
-```javascript
-import { ConditionalStep } from './micro-flow.js';
-import { useState } from 'react';
-
-function DynamicComparison() {
-  const [value, setValue] = useState(0);
-  const [operator, setOperator] = useState('===');
-  const [threshold, setThreshold] = useState(10);
-
-  const runCheck = async () => {
-    const step = new ConditionalStep({
-      name: 'dynamic-check',
-      conditional: {
-        subject: value,
-        operator: operator,
-        value: threshold
-      },
-      true_callable: async () => 'Condition met',
-      false_callable: async () => 'Condition not met'
-    });
-
-    const result = await step.execute();
-    console.log(result.result);
-  };
-
-  return (
-    <div>
-      <input type="number" value={value} onChange={e => setValue(Number(e.target.value))} />
-      <select value={operator} onChange={e => setOperator(e.target.value)}>
-        <option value="===">Strictly equals</option>
-        <option value="==">Equals</option>
-        <option value=">">Greater than</option>
-        <option value="<">Less than</option>
-        <option value=">=">Greater or equal</option>
-        <option value="<=">Less or equal</option>
-      </select>
-      <input type="number" value={threshold} onChange={e => setThreshold(Number(e.target.value))} />
-      <button onClick={runCheck}>Check</button>
-    </div>
-  );
-}
-```
-
-### Vue - Type Checking
-
-```vue
-<template>
-  <div>
-    <button @click="checkType">Check Type</button>
-    <p>{{ message }}</p>
-  </div>
-</template>
-
-<script setup>
-import { ref } from 'vue';
-import { LogicStep } from './micro-flow.js';
-
-const message = ref('');
-
-const checkType = async () => {
-  const value = '42';
-  
-  // Loose equality - will match
-  const looseCheck = new LogicStep({
-    name: 'loose',
-    conditional: { subject: value, operator: '==', value: 42 }
-  });
-  
-  // Strict equality - will not match
-  const strictCheck = new LogicStep({
-    name: 'strict',
-    conditional: { subject: value, operator: '===', value: 42 }
-  });
-
-  message.value = `Loose: ${looseCheck.checkCondition()}, Strict: ${strictCheck.checkCondition()}`;
-};
-</script>
-```
-
-### Node.js - Range Validation
-
-```javascript
-import { Workflow, LogicStep } from 'micro-flow';
-
-function validateRange(value, min, max) {
-  return new Workflow({
-    name: 'range-validation',
-    steps: [
-      new LogicStep({
-        name: 'check-min',
-        conditional: {
-          subject: value,
-          operator: '>=',
-          value: min
-        },
-        callable: async () => {
-          console.log('Value meets minimum');
-        }
-      }),
-      new LogicStep({
-        name: 'check-max',
-        conditional: {
-          subject: value,
-          operator: '<=',
-          value: max
-        },
-        callable: async () => {
-          console.log('Value meets maximum');
-        }
-      })
-    ]
-  });
-}
-
-const workflow = validateRange(50, 0, 100);
-await workflow.execute();
-```
-
-## Operator Comparison Table
-
-| Named Operator | Symbolic | Description | Example |
-|---|---|---|---|
-| `STRICT_EQUALS` | `===` | Strict equality (type + value) | `5 === 5` → true, `'5' === 5` → false |
-| `EQUALS` | `==` | Loose equality (value) | `5 == '5'` → true |
-| `STRICT_NOT_EQUALS` | `!==` | Strict inequality | `5 !== '5'` → true |
-| `NOT_EQUALS` | `!=` | Loose inequality | `5 != 6` → true |
-| `GREATER_THAN` | `>` | Greater than | `10 > 5` → true |
-| `LESS_THAN` | `<` | Less than | `3 < 7` → true |
-| `GREATER_THAN_OR_EQUAL` | `>=` | Greater than or equal | `5 >= 5` → true |
-| `LESS_THAN_OR_EQUAL` | `<=` | Less than or equal | `4 <= 4` → true |
-| `STRING_CONTAINS` | n/a | String contains | `'abc' contains 'b'` → true |
-| `STRING_INCLUDES` | n/a | String includes | `'abc' includes 'b'` → true |
-| `STRING_STARTS_WITH` | n/a | String starts with | `'abc' startsWith 'a'` → true |
-| `STRING_ENDS_WITH` | n/a | String ends with | `'abc' endsWith 'c'` → true |
-| `ARRAY_CONTAINS` | n/a | Array contains | `[1,2] contains 2` → true |
-| `ARRAY_INCLUDES` | n/a | Array includes | `[1,2] includes 2` → true |
-| `EMPTY` | n/a | Empty check | `'' is empty` → true |
-| `NOT_EMPTY` | n/a | Not empty check | `'a' not empty` → true |
-| `REGEX_MATCH` | n/a | Regex match | `'abc' =~ /a/` → true |
-| `REGEX_NOT_MATCH` | n/a | Regex non-match | `'abc' !~ /z/` → true |
-| `IN` | n/a | Membership | `2 in [1,2,3]` → true |
-| `NOT_IN` | n/a | Non-membership | `4 not in [1,2,3]` → true |
-| `NULLISH` | n/a | Null/undefined check | `null is nullish` → true |
-| `NOT_NULLISH` | n/a | Not null/undefined check | `'a' not nullish` → true |
-| `CUSTOM_FUNCTION` | n/a | Custom evaluation | `fn(subject, value)` → result |
-
-## See Also
-
-- [LogicStep](../classes/steps/logic_step.md) - Uses these comparators
-- [ConditionalStep](../classes/steps/conditional_step.md) - Uses these comparators
-- [FlowControlStep](../classes/steps/flow_control_step.md) - Uses these comparators
+- [LogicStep](../classes/steps/logic_step.md) — Consumes these operators in `checkCondition()`.
+- [ConditionalStep](../classes/steps/conditional_step.md) — Uses operators for branching.
+- [FlowControlStep](../classes/steps/flow_control_step.md) — Uses operators for break/skip decisions.
+- [LoopStep](../classes/steps/loop_step.md) — Uses operators for `while` conditions.
+- [Case](../classes/steps/case.md) — Uses operators for switch case matching.
