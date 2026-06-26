@@ -54,7 +54,7 @@ export default class FlowControlStep extends LogicStep {
         this.getState('events.step.event_names.CONDITIONAL_TRUE_BRANCH_EXECUTED'),
         `Break condition met for step: ${this.name}`
       );
-      this.setParentWorkflowValue(this.parentWorkflowId, `should_${this.flow_control_type}`, true);
+      this.setParentWorkflowValue(this.parent_workflow_id, `should_${this.flow_control_type}`, true);
 
       return true;
     } else {
@@ -62,7 +62,7 @@ export default class FlowControlStep extends LogicStep {
         this.getState('events.step.event_names.CONDITIONAL_FALSE_BRANCH_EXECUTED'),
         `Break condition not met for step: ${this.name}`
       );
-      this.setParentWorkflowValue(this.parentWorkflowId, `should_${this.flow_control_type}`, false);
+      this.setParentWorkflowValue(this.parent_workflow_id, `should_${this.flow_control_type}`, false);
 
       return false;
     }

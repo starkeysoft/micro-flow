@@ -153,7 +153,7 @@ describe('Workflow', () => {
       const step = new Step({
         name: 'check-status',
         callable: async function() {
-          const workflow = State.get('workflows')[this.parentWorkflowId];
+          const workflow = State.get('workflows')[this.parent_workflow_id];
           statusDuringExecution = workflow.status;
         }
       });
@@ -229,7 +229,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         name: 'set-break',
         callable: async function() {
-          const workflow = State.get('workflows')[this.parentWorkflowId];
+          const workflow = State.get('workflows')[this.parent_workflow_id];
           workflow.should_break = true;
           return 'set break';
         }
@@ -254,7 +254,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         name: 'set-skip',
         callable: async function() {
-          const workflow = State.get('workflows')[this.parentWorkflowId];
+          const workflow = State.get('workflows')[this.parent_workflow_id];
           workflow.should_skip = true;
           results.push('step1');
           return 'set skip';
@@ -289,7 +289,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         name: 'set-pause',
         callable: async function() {
-          const workflow = State.get('workflows')[this.parentWorkflowId];
+          const workflow = State.get('workflows')[this.parent_workflow_id];
           workflow.should_pause = true;
           return 'set pause';
         }
@@ -310,12 +310,12 @@ describe('Workflow', () => {
       expect(workflow.results).toHaveLength(1);
     });
 
-    it('should set parentWorkflowId on steps during execution', async () => {
+    it('should set parent_workflow_id on steps during execution', async () => {
       let capturedParentId;
       const step = new Step({
         name: 'capture-parent',
         callable: async function() {
-          capturedParentId = this.parentWorkflowId;
+          capturedParentId = this.parent_workflow_id;
         }
       });
       
@@ -335,7 +335,7 @@ describe('Workflow', () => {
           step1Count++;
           // Only pause on first execution
           if (step1Count === 1) {
-            const workflow = State.get('workflows')[this.parentWorkflowId];
+            const workflow = State.get('workflows')[this.parent_workflow_id];
             workflow.should_pause = true;
           }
           return 'step1 done';
@@ -437,20 +437,20 @@ describe('Workflow', () => {
       expect(workflow.steps_by_id[step.id]).toBe(step);
     });
 
-    it('should set parentWorkflowId on the step', () => {
+    it('should set parent_workflow_id on the step', () => {
       const workflow = new Workflow({});
       const step = new Step({ name: 'new-step' });
       
       workflow.addStep(step);
       
-      expect(step.parentWorkflowId).toBe(workflow.id);
+      expect(step.parent_workflow_id).toBe(workflow.id);
     });
 
     it('should throw error for invalid step', () => {
       const workflow = new Workflow({});
       const invalidStep = { name: 'not-a-step' };
       
-      expect(() => workflow.addStep(invalidStep)).toThrow('Invalid step type');
+      expect(() => workflow.addStep(invalidStep)).toThrow('Invalid input. Must be an instance of Step.');
     });
 
     it('should initialize _steps array if undefined', () => {
@@ -499,13 +499,13 @@ describe('Workflow', () => {
       expect(workflow.steps_by_id[step.id]).toBe(step);
     });
 
-    it('should set parentWorkflowId on the step', () => {
+    it('should set parent_workflow_id on the step', () => {
       const workflow = new Workflow({});
       const step = new Step({ name: 'inserted-step' });
       
       workflow.addStepAtIndex(step, 0);
       
-      expect(step.parentWorkflowId).toBe(workflow.id);
+      expect(step.parent_workflow_id).toBe(workflow.id);
     });
 
     it('should initialize steps_by_id if undefined', () => {
@@ -822,13 +822,13 @@ describe('Workflow', () => {
       expect(workflow.steps_by_id[step.id]).toBe(step);
     });
 
-    it('should set parentWorkflowId on the step', () => {
+    it('should set parent_workflow_id on the step', () => {
       const workflow = new Workflow({});
       const step = new Step({ name: 'new-step' });
       
       workflow.unshiftStep(step);
       
-      expect(step.parentWorkflowId).toBe(workflow.id);
+      expect(step.parent_workflow_id).toBe(workflow.id);
     });
 
     it('should throw error for invalid step', () => {
@@ -876,7 +876,7 @@ describe('Workflow', () => {
       
       expect(() => {
         workflow.steps = [validStep, invalidStep];
-      }).toThrow('Invalid step type. Step at index 1 is not an instance of Step.');
+      }).toThrow('Invalid input. Must be an instance of Step.');
     });
   });
 
@@ -954,7 +954,7 @@ describe('Workflow', () => {
         name: 'step-1',
         callable: async function() {
           results.push('step1');
-          const workflow = State.get('workflows')[this.parentWorkflowId];
+          const workflow = State.get('workflows')[this.parent_workflow_id];
           const dynamicStep = new Step({
             name: 'dynamic-step',
             callable: async () => {
@@ -1034,7 +1034,7 @@ describe('Workflow', () => {
         name: 'step-1',
         callable: async function() {
           if (pauseOnFirst) {
-            const wf = State.get('workflows')[this.parentWorkflowId];
+            const wf = State.get('workflows')[this.parent_workflow_id];
             wf.pause();
             pauseOnFirst = false;
           }
@@ -1061,7 +1061,7 @@ describe('Workflow', () => {
       const step = new Step({
         name: 'step-1',
         callable: async function() {
-          const wf = State.get('workflows')[this.parentWorkflowId];
+          const wf = State.get('workflows')[this.parent_workflow_id];
           wf.pause();
           return 'result';
         }

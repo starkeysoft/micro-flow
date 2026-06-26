@@ -123,7 +123,7 @@ export default class Workflow extends Base {
   async step() {
     const step = this.steps_by_id[this.current_step];
 
-    step.parentWorkflowId = this.id;
+    step.parent_workflow_id = this.id;
     const result = await step.execute();
 
     if (step.status === this.getState('statuses.step.FAILED')) {
@@ -155,7 +155,7 @@ export default class Workflow extends Base {
 
     this.steps_by_id[step.id] = step;
 
-    step.parentWorkflowId = this.id;
+    step.parent_workflow_id = this.id;
     this._steps.push(step);
   }
 
@@ -170,7 +170,7 @@ export default class Workflow extends Base {
     }
 
     this.steps_by_id[step.id] = step;
-    step.parentWorkflowId = this.id;
+    step.parent_workflow_id = this.id;
     this._steps.splice(index, 0, step);
   }
 
@@ -481,7 +481,7 @@ export default class Workflow extends Base {
 
     this.steps_by_id[step.id] = step;
 
-    step.parentWorkflowId = this.id;
+    step.parent_workflow_id = this.id;
     this._steps.unshift(step);
   }
 

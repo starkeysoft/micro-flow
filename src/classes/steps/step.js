@@ -79,7 +79,8 @@ export default class Step extends Base {
     try {
       this.result = await Promise.race([this._callable(), this.timeout]);
     } catch (error) {
-      if (this.max_retries && ++this.retry_count < this.max_retries) {
+      if (this.max_retries && this.retry_count < this.max_retries) {
+        this.retry_count++;
         this.retry_results.push({
           retry_count: this.retry_count,
           result: await this.execute(),
@@ -199,7 +200,7 @@ export default class Step extends Base {
 
     if (['step', 'workflow'].includes(this.callable_type)) {
       if (this.callable_type === 'step') {
-        callable.parentWorkflowId = this.parentWorkflowId ?? null;
+        callable.parent_workflow_id = this.parent_workflow_id ?? null;
       }
 
       this._callable = callable.execute.bind(callable);
@@ -226,6 +227,8 @@ export default class Step extends Base {
       errors: this.errors,
       result: this.result,
       timing: this.timing,
+      status: this.status,
+      parent_workflow_id: this.parent_workflow_id,
     };
 
     if (this.callable_type === Step.callable_types.Function) {

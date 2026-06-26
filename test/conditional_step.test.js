@@ -1009,12 +1009,12 @@ describe('ConditionalStep', () => {
     });
   });
 
-  describe('parentWorkflowId propagation', () => {
-    it('should propagate parentWorkflowId to nested steps', async () => {
+  describe('parent_workflow_id propagation', () => {
+    it('should propagate parent_workflow_id to nested steps', async () => {
       const innerStep = new Step({
         name: 'inner',
         callable: async function() {
-          return this.parentWorkflowId;
+          return this.parent_workflow_id;
         }
       });
 

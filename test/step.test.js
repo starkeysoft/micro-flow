@@ -108,7 +108,7 @@ describe('Step', () => {
       expect(result.result).toBe('test result');
     });
 
-    it('should return the step instance', async () => {
+    it('should return the serialized step', async () => {
       const step = new Step({
         name: 'test-step',
         callable: async () => 'result'
@@ -116,7 +116,7 @@ describe('Step', () => {
 
       const result = await step.execute();
 
-      expect(result).toBe(step);
+      expect(result).toEqual(step.prepareForSerialization());
     });
 
     it('should set status to RUNNING during execution', async () => {
@@ -217,7 +217,7 @@ describe('Step', () => {
 
       const result = await step.execute();
 
-      expect(result).toBe(step);
+      expect(result).toEqual(step.prepareForSerialization());
       expect(step.errors).toHaveLength(1);
     });
 
@@ -584,7 +584,7 @@ describe('Step', () => {
     it('should set a value on the parent workflow', () => {
       const workflow = new Workflow({ name: 'parent-workflow' });
       const step = new Step({ name: 'child-step' });
-      step.parentWorkflowId = workflow.id;
+      step.parent_workflow_id = workflow.id;
 
       step.setParentWorkflowValue(workflow.id, 'customProperty', 'customValue');
 
@@ -677,22 +677,22 @@ describe('Step', () => {
       expect(result.status).toBe(State.get('statuses.workflow').COMPLETE);
     });
 
-    it('should set parentWorkflowId on nested Step', () => {
+    it('should set parent_workflow_id on nested Step', () => {
       const outerStep = new Step({ name: 'outer' });
-      outerStep.parentWorkflowId = 'test-workflow-id';
+      outerStep.parent_workflow_id = 'test-workflow-id';
 
       const innerStep = new Step({ name: 'inner' });
       outerStep.callable = innerStep;
 
-      expect(innerStep.parentWorkflowId).toBe('test-workflow-id');
+      expect(innerStep.parent_workflow_id).toBe('test-workflow-id');
     });
 
-    it('should set parentWorkflowId to null on nested Step when outer has no parent', () => {
+    it('should set parent_workflow_id to null on nested Step when outer has no parent', () => {
       const outerStep = new Step({ name: 'outer' });
       const innerStep = new Step({ name: 'inner' });
       outerStep.callable = innerStep;
 
-      expect(innerStep.parentWorkflowId).toBeNull();
+      expect(innerStep.parent_workflow_id).toBeNull();
     });
   });
 

@@ -68,7 +68,7 @@ All status changes go through `Base.log(event_name, message)`, which emits the e
 Event names follow the pattern `BASE_TYPE_ACTION` (e.g., `WORKFLOW_COMPLETE`, `STEP_FAILED`, `CONDITIONAL_TRUE_BRANCH_EXECUTED`).
 
 ### Flow Control
-`FlowControlStep` controls parent workflow execution by calling `this.setParentWorkflowValue(parentWorkflowId, 'should_break' | 'should_skip', true)`. The `Workflow.execute()` loop checks `this.getState('should_break')` and `this.getState('should_skip')` on each iteration.
+`FlowControlStep` controls parent workflow execution by calling `this.setParentWorkflowValue(parent_workflow_id, 'should_break' | 'should_skip', true)`. The `Workflow.execute()` loop checks `this.getState('should_break')` and `this.getState('should_skip')` on each iteration.
 
 ### Naming
 - Files and properties use `snake_case`.

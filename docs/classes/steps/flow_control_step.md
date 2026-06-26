@@ -42,7 +42,7 @@ All properties from [LogicStep](logic_step.md) are inherited.
 
 ### `async shouldFlowControl()` → `Promise<boolean>`
 
-Evaluates the condition. If it returns `true`, calls `setParentWorkflowValue(parentWorkflowId, 'should_break'|'should_skip', true)` on the parent workflow. If the condition is false, sets the flag back to `false`.
+Evaluates the condition. If it returns `true`, calls `setParentWorkflowValue(parent_workflow_id, 'should_break'|'should_skip', true)` on the parent workflow. If the condition is false, sets the flag back to `false`.
 
 **Returns:** `true` if flow control was activated, `false` otherwise.
 
@@ -62,7 +62,7 @@ const breakStep = new FlowControlStep({
   flow_control_type: flow_control_types.BREAK,
 });
 
-// In a workflow context, parentWorkflowId is set automatically.
+// In a workflow context, parent_workflow_id is set automatically.
 // shouldFlowControl() is called internally by execute().
 ```
 

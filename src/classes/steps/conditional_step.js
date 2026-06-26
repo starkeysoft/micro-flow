@@ -71,7 +71,7 @@ export default class ConditionalStep extends LogicStep {
       if (typeof true_callable === 'function') {
         result = await true_callable();
       } else {
-        true_callable.parentWorkflowId = this.parentWorkflowId;
+        true_callable.parent_workflow_id = this.parent_workflow_id;
         result = await true_callable.execute();
       }
     } else {
@@ -83,7 +83,7 @@ export default class ConditionalStep extends LogicStep {
       if (typeof false_callable === 'function') {
         result = await false_callable();
       } else {
-        false_callable.parentWorkflowId = this.parentWorkflowId;
+        false_callable.parent_workflow_id = this.parent_workflow_id;
         result = await false_callable.execute();
       }
     }

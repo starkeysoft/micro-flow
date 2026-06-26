@@ -46,7 +46,7 @@ Creates a new Step instance.
 | `retry_results` | `Array<{retry_count: number, result: any}>` | Result of each retry attempt. |
 | `status` | `string` | Current status (see [`step_statuses`](../../../enums/step_statuses.md)). |
 | `timing` | `Object` | `{ start_time, complete_time, execution_time_ms, cancel_time }` from `Base`. |
-| `parentWorkflowId` | `string\|null` | ID of the workflow this step belongs to (set by the workflow on add). |
+| `parent_workflow_id` | `string\|null` | ID of the workflow this step belongs to (set by the workflow on add). |
 
 ## Methods
 
