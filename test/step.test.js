@@ -41,9 +41,9 @@ describe('Step', () => {
     });
 
     it('should set sub_step_type when provided', () => {
-      const step = new Step({ sub_step_type: sub_step_types.ConditionalStep });
+      const step = new Step({ sub_step_type: sub_step_types.conditional_step });
 
-      expect(step.sub_step_type).toBe(sub_step_types.ConditionalStep);
+      expect(step.sub_step_type).toBe(sub_step_types.conditional_step);
     });
 
     it('should set callable when provided', () => {

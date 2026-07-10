@@ -64,7 +64,7 @@ export default class Step extends Base {
    * @returns {Promise<Step>} The step instance with execution results.
    */
   async execute() {
-    if (!this.timeout ) {
+    if (!this.timeout) {
       this.timeout = new Promise((_, reject) =>
         setTimeout(
           reject,
@@ -98,7 +98,7 @@ export default class Step extends Base {
 
     const { FAILED, COMPLETE } = this.getState('statuses')[this.base_type];
 
-    if (! [FAILED, COMPLETE].includes(this.status)) {
+    if (![FAILED, COMPLETE].includes(this.status)) {
       this.markAsComplete();
     }
 
@@ -128,67 +128,77 @@ export default class Step extends Base {
   }
 
   /**
-   * Deserializes a JSON string into a Step instance and hydrates it.
-   * @param {string} serializedStep - The JSON string representation of the step.
-   * @returns {Step} The hydrated Step instance.
-   * @throws {Error} Throws if the serialized step is not a string.
+   * Inserts safely serializable properties of the step into a new object for serialization.
+   * @returns {Object} An object containing the step's properties ready for serialization.
    */
-  static hydrateSerialized(serializedStep) {
-    if (typeof serializedStep !== 'string') {
-      throw new Error('Invalid serialized step. Must be a string.');
-    }
+  prepareForSerialization() {
+    const serialized_step = {
+      id: this.id,
+      name: this.name,
+      callable_type: this.callable_type,
+      step_type: this.step_type,
+      sub_step_type: this.sub_step_type,
+      max_retries: this.max_retries,
+      max_timeout_ms: this.max_timeout_ms,
+      retry_count: this.retry_count,
+      retry_results: this.retry_results,
+      errors: this.errors,
+      result: this.result,
+      timing: this.timing,
+      status: this.status,
+      parent_workflow_id: this.parent_workflow_id,
+    };
 
-    const parsed = JSON.parse(serializedStep);
-
-    return Step.hydrate(parsed);
-  }
-
-  /**
-   * Hydrates a parsed step object into a Step instance, resolving callables from the registry if necessary.
-   * @param {Object} parsedStep - The parsed step object.
-   * @param {Object} registry - An optional registry mapping keys to callables for hydration.
-   * @returns {Step} The hydrated Step instance.
-   * @throws {Error} Throws if a callable registry key is specified but not found in the registry.
-   */
-  static hydrate(parsedStep) {
-    if (typeof parsedStep.callable === 'string') {
-      const registryKey = parsedStep.callable.split(':')[1];
-
-      if (registryKey && this.registry && this.registry.has(registryKey)) {
-        parsedStep.callable = this.registry.get(registryKey);
-        parsedStep.callable_registry_key = registryKey;
+    if (this.callable_type === Step.callable_types.FUNCTION) {
+      if (this.callable_registry_key) {
+        serialized_step.callable = this.callable_registry_key;
       } else {
-        throw new Error(`Callable registry key "${registryKey}" not found in registry or registry not initialized.`);
+        serialized_step.callable = this._callable.name;
       }
-
-      return new Step(parsedStep);
     }
 
-    // If the callable is a Step or Workflow, hydrate it as well
-    try {
-      parsedStep.callable = parsedStep.callable.hydrate()
-      return new Step(parsedStep);
-    } catch (error) {
-      console.error(`Error hydrating callable for step "${parsedStep.name}": `, error);
-      // TODO: Throw with custom message
+    if (['step', 'workflow'].includes(this.callable_type)) {
+      if (this.callable_registry_key) {
+        serialized_step.callable = this.callable_registry_key;
+      } else {
+        serialized_step.callable = this.#callable_object.serialize();
+      }
     }
+
+    return serialized_step;
   }
 
   /**
    * Sets a value in the parent workflow's state.
-   * @param {string} workflowId - ID of the parent workflow.
+   * @param {string} workflow_id - ID of the parent workflow.
    * @param {string} path - Path in the workflow state to set.
    * @param {*} value - Value to set at the specified path.
    * @throws {Error} Throws if parent workflow is not found.
    */
-  setParentWorkflowValue(workflowId, path, value) {
-    const parentWorkflow = this.getState('workflows')[workflowId];
+  setParentWorkflowValue(workflow_id, path, value) {
+    const parent_workflow = this.getState('workflows')[workflow_id];
 
-    if (!parentWorkflow) {
-      throw new Error(`Parent workflow with ID ${workflowId} not found.`);
+    if (!parent_workflow) {
+      throw new Error(`Parent workflow with ID ${workflow_id} not found.`);
     }
 
-    parentWorkflow[path] = value;
+    parent_workflow[path] = value;
+  }
+
+  /**
+   * Serializes the step into a JSON string.
+   * @returns {string} The JSON string representation of the step.
+   */
+  serialize() {
+    return JSON.stringify(this.prepareForSerialization());
+  }
+
+  /**
+   * Custom JSON serializer
+   * @returns {Object} The JSON representation of the workflow.
+   */
+  toJSON() {
+    return this.serialize();
   }
 
   /**
@@ -210,59 +220,54 @@ export default class Step extends Base {
   }
 
   /**
-   * Inserts safely serializable properties of the step into a new object for serialization.
-   * @returns {Object} An object containing the step's properties ready for serialization.
+   * Deserializes a JSON string into a Step instance and hydrates it.
+  * @param {string} serialized_step - The JSON string representation of the step.
+   * @returns {Step} The hydrated Step instance.
+   * @throws {Error} Throws if the serialized step is not a string.
    */
-  prepareForSerialization() {
-    const serializedStep = {
-      id: this.id,
-      name: this.name,
-      callable_type: this.callable_type,
-      step_type: this.step_type,
-      sub_step_type: this.sub_step_type,
-      max_retries: this.max_retries,
-      max_timeout_ms: this.max_timeout_ms,
-      retry_count: this.retry_count,
-      retry_results: this.retry_results,
-      errors: this.errors,
-      result: this.result,
-      timing: this.timing,
-      status: this.status,
-      parent_workflow_id: this.parent_workflow_id,
-    };
-
-    if (this.callable_type === Step.callable_types.Function) {
-      if (this.callable_registry_key) {
-        serializedStep.callable = `registry:${this.callable_registry_key}`;
-      } else {
-        serializedStep.callable = this._callable.name;
-      }
+  static hydrateSerialized(serialized_step) {
+    if (typeof serialized_step !== 'string') {
+      throw new Error('Invalid serialized step. Must be a string.');
     }
 
-    if (['step', 'workflow'].includes(this.callable_type)) {
-      if (this.callable_registry_key) {
-        serializedStep.callable = `registry:${this.callable_registry_key}`;
-      } else {
-        serializedStep.callable = this.#callable_object.serialize();
-      }
-    }
+    const parsed_step = JSON.parse(serialized_step);
 
-    return serializedStep;
+    return Step.hydrate(parsed_step);
   }
 
   /**
-   * Serializes the step into a JSON string.
-   * @returns {string} The JSON string representation of the step.
+   * Hydrates a parsed step object into a Step instance, resolving callables from the registry if necessary.
+   * @param {Object} parsed_step - The parsed step object.
+   * @param {Object} registry - An optional registry mapping keys to callables for hydration.
+   * @returns {Step} The hydrated Step instance.
+   * @throws {Error} Throws if a callable registry key is specified but not found in the registry.
    */
-  serialize() {
-    return JSON.stringify(this.prepareForSerialization());
-  }
+  static hydrate(parsed_step) {
+    if (typeof parsed_step.callable === 'string') {
+      const registry_key = parsed_step.callable;
 
-  /**
-   * Custom JSON serializer
-   * @returns {Object} The JSON representation of the workflow.
-   */
-  toJSON() {
-    return this.prepareForSerialization();
+      if (
+        registry_key &&
+        this.parent_workflow
+        && this.parent_workflow.callable_registry
+        && this.parent_workflow.callable_registry.has(registry_key)
+      ) {
+        parsed_step.callable = this.parent_workflow.callable_registry.get(registry_key);
+        parsed_step.callable_registry_key = registry_key;
+      } else {
+        throw new Error(`Callable registry key "${registry_key}" not found in registry or registry not initialized.`);
+      }
+
+      return new Step(parsed_step);
+    }
+
+    // If the callable is a Step or Workflow, hydrate it as well
+    try {
+      parsed_step.callable = parsed_step.callable.hydrate()
+      return new Step(parsed_step);
+    } catch (error) {
+      console.error(`Error hydrating callable for step "${parsed_step.name}": `, error);
+      // TODO: Throw with custom message
+    }
   }
 }

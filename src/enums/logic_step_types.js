@@ -5,7 +5,7 @@
  * @enum {string}
  * @readonly
  */
-const LogicStepTypes = {
+const logic_step_types = {
   CONDITIONAL: 'conditional',
   LOOP: 'loop',
   FLOW_CONTROL: 'flow_control',
@@ -13,4 +13,4 @@ const LogicStepTypes = {
   SKIP: 'skip'
 };
 
-export default LogicStepTypes;
+export default logic_step_types;

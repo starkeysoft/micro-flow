@@ -12,7 +12,7 @@ import {
   workflow_statuses,
 } from '../enums/index.js';
 
-const defaultState = {
+const default_state = {
   messages: {
     errors,
     warnings,
@@ -40,7 +40,7 @@ const defaultState = {
   conditional_step_comparators
 };
 
-let state = { ...defaultState };
+let state = { ...default_state };
 
 // Module-level shortcuts for events and event_names
 const events = state.events;
@@ -118,9 +118,9 @@ class State {
    * @returns {void}
    */
   static freeze() {
-    const frozenState = Object.freeze(state);
+    const frozen_state = Object.freeze(state);
     events.state.emit(event_names.state.FROZEN, { state });
-    return frozenState;
+    return frozen_state;
   }
 
   /**
@@ -242,7 +242,7 @@ class State {
    */
   static reset() {
     state = { 
-      ...defaultState,
+      ...default_state,
       workflows: {},  // Always create fresh to avoid shared reference mutation
     };
     events.state.emit(event_names.state.RESET, { state });
@@ -283,12 +283,12 @@ class State {
     
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i];
-      const nextPart = parts[i + 1];
+      const next_part = parts[i + 1];
       
       if (!Object.prototype.hasOwnProperty.call(current, part) || typeof current[part] !== 'object') {
         // Determine if next part is an array index (numeric)
-        const isNextPartNumeric = /^\d+$/.test(nextPart);
-        current[part] = isNextPartNumeric ? [] : {};
+        const is_next_part_numeric = /^\d+$/.test(next_part);
+        current[part] = is_next_part_numeric ? [] : {};
       }
       current = current[part];
     }

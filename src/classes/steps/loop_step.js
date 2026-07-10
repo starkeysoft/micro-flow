@@ -47,8 +47,8 @@ export default class LoopStep extends LogicStep {
 
     // Store the user's callable separately so loop methods can invoke it.
     // this._callable will be set to the loop method by the setter below.
-    const userCallableType = this.getCallableType(callable);
-    this._loop_callable = userCallableType === 'function'
+    const user_callable_type = this.getCallableType(callable);
+    this._loop_callable = user_callable_type === 'function'
       ? callable.bind(this)
       : callable.execute.bind(callable);
 

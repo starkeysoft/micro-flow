@@ -3,18 +3,18 @@
  * @type {Object.<string, string>}
  * @readonly
  * @example
- * console.log(sub_step_types.Step); // "step"
- * console.log(sub_step_types.ConditionalStep); // "conditional"
+ * console.log(sub_step_types.step); // "step"
+ * console.log(sub_step_types.conditional_step); // "conditional"
  */
 const sub_step_types = {
-  Step: 'step',
-  LogicStep: 'logic',
-  ConditionalStep: 'conditional',
-  FlowControlStep: 'flow_control',
-  LoopStep: 'loop',
-  SwitchStep: 'switch',
-  Case: 'case',
-  DelayStep: 'delay',
+  step: 'step',
+  logic_step: 'logic',
+  conditional_step: 'conditional',
+  flow_control_step: 'flow_control',
+  loop_step: 'loop',
+  switch_step: 'switch',
+  case: 'case',
+  delay_step: 'delay',
 };
 
 export default sub_step_types;

@@ -46,10 +46,10 @@ export default class SwitchStep extends Step {
    */
   async switch() {
     // Resolve subject once - call it if it's a function
-    const resolvedSubject = typeof this.subject === 'function' ? this.subject() : this.subject;
+    const resolved_subject = typeof this.subject === 'function' ? this.subject() : this.subject;
     
     for (const switch_case of this.cases) {
-      switch_case.switch_subject = resolvedSubject;
+      switch_case.switch_subject = resolved_subject;
 
       const is_matched = await switch_case.checkCondition();
 
@@ -62,16 +62,16 @@ export default class SwitchStep extends Step {
         // Return the case's result value directly, not the Case object.
         // This keeps result structure consistent: switchStep.result contains the
         // callable's return value, matching how Step.result works.
-        const caseResult = await switch_case.execute();
-        return caseResult.result;
+        const case_result = await switch_case.execute();
+        return case_result.result;
       }
     }
 
     // Unwrap Step/Workflow results for consistency with case results
-    const defaultResult = await this.default_callable();
+    const default_result = await this.default_callable();
     if (this._default_callable_type !== 'function') {
-      return defaultResult.result;
+      return default_result.result;
     }
-    return defaultResult;
+    return default_result;
   }
 }

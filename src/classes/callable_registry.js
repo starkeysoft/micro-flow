@@ -9,7 +9,7 @@ export default class CallableRegistry {
    * Registry for callable functions to be used with persistence mode.
    */
   constructor() {
-    this.#registry = {};
+    this.clear();
   }
 
   /**

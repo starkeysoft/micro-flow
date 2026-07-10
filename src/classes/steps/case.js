@@ -52,14 +52,14 @@ export default class Case extends LogicStep {
    * @throws {Error} If the resulting conditional configuration is invalid.
    */
   set switch_subject(subject) {
-    const subjectProvided = subject !== null && subject !== undefined;
-    const hasExistingSubject = this.conditional_config.subject !== null && this.conditional_config.subject !== undefined;
+    const subject_provided = subject !== null && subject !== undefined;
+    const has_existing_subject = this.conditional_config.subject !== null && this.conditional_config.subject !== undefined;
 
-    if (!subjectProvided && !hasExistingSubject) {
+    if (!subject_provided && !has_existing_subject) {
       throw new Error(`No subject set for case step: ${this.name}, using default equality check`);
     }
 
-    if (subjectProvided && (!hasExistingSubject || this.force_subject_override)) {
+    if (subject_provided && (!has_existing_subject || this.force_subject_override)) {
       this.conditional_config.subject = subject;
     }
 

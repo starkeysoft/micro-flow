@@ -6,7 +6,7 @@
  * @example
  * import delay_types from 'micro-flow';
  * 
- * const delayStep = new DelayStep({
+ * const delay_step = new DelayStep({
  *   name: 'wait-5-seconds',
  *   delay_type: delay_types.RELATIVE,
  *   delay_duration: 5000

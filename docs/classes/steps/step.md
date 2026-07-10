@@ -23,6 +23,7 @@ Creates a new Step instance.
 |-----------|------|---------|-------------|
 | `options.name` | `string` | `'step-<uuid>'` | Human-readable identifier used in logs and events. |
 | `options.callable` | `Function\|Step\|Workflow` | `async () => {}` | The work to execute. Plain async functions are bound to the step instance, giving them access to `this.getState()` etc. |
+| `options.callable_registry_key` | `string\|null` | `null` | Optional key to reference a callable in the workflow's `CallableRegistry` for persistence/hydration. |
 | `options.max_retries` | `number` | `0` | Maximum number of additional attempts after a failure. |
 | `options.max_timeout_ms` | `number` | `30000` | Milliseconds before execution times out and is treated as a failure. |
 | `options.step_type` | `string` | `step_types.ACTION` | Semantic type from [`step_types`](../../../enums/step_types.md). |
@@ -36,6 +37,7 @@ Creates a new Step instance.
 | `name` | `string` | Human-readable step name. |
 | `base_type` | `string` | Always `'step'`. |
 | `callable_type` | `string` | `'function'`, `'step'`, or `'workflow'`, set when the callable is assigned. |
+| `callable_registry_key` | `string\|null` | Key referencing a callable in the workflow's `CallableRegistry` for persistence/hydration. |
 | `max_retries` | `number` | Maximum number of retry attempts. |
 | `retry_count` | `number` | Number of retries performed so far. |
 | `max_timeout_ms` | `number` | Timeout threshold in milliseconds. |
@@ -50,11 +52,11 @@ Creates a new Step instance.
 
 ## Methods
 
-### `async execute()` → `Promise<Step|Workflow|Step-subclass>`
+### `async execute()` → `Promise<Step|Workflow|Object>`
 
-Races the callable against the timeout. On failure, retries up to `max_retries` times. If the callable is a `Step` or `Workflow`, returns that object directly (not the wrapper `Step`). Plain function callables return the wrapper `Step` with `result` populated.
+Races the callable against the timeout. On failure, retries up to `max_retries` times. If the callable is a `Step` or `Workflow`, returns that object directly (not the wrapper `Step`). Plain function callables return a serialized plain object (via `prepareForSerialization()`) with `result`, `errors`, and `timing` populated.
 
-**Returns:** The step instance (or the inner Step/Workflow if callable is a step/workflow), with `result`, `errors`, and `timing` populated.
+**Returns:** The inner Step/Workflow if callable is a step/workflow, or a serialized plain object for function callables.
 
 **Throws:** The last caught error if all retry attempts are exhausted and the workflow has `exit_on_error` set.
 
@@ -93,7 +95,63 @@ Inspects the callable and returns its type string.
 
 ---
 
-### `setParentWorkflowValue(workflowId, path, value)`
+### `prepareForSerialization()` → `Object`
+
+Creates a plain object containing safely serializable properties of the step. For function callables with a `callable_registry_key`, the callable is stored as the registry key. For Step/Workflow callables, the callable is recursively serialized.
+
+**Returns:** An object with `id`, `name`, `callable_type`, `step_type`, `sub_step_type`, `max_retries`, `max_timeout_ms`, `retry_count`, `retry_results`, `errors`, `result`, `timing`, `status`, and `parent_workflow_id`.
+
+---
+
+### `serialize()` → `string`
+
+Serializes the step into a JSON string via `prepareForSerialization()`.
+
+**Returns:** JSON string representation of the step.
+
+---
+
+### `toJSON()` → `Object`
+
+Custom JSON serializer called by `JSON.stringify()`. Delegates to `prepareForSerialization()`.
+
+**Returns:** Plain object representation of the step.
+
+---
+
+### `static hydrateSerialized(serialized_step)` → `Step`
+
+Deserializes a JSON string into a `Step` instance.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `serialized_step` | `string` | JSON string representation of a step. |
+
+**Returns:** A hydrated `Step` instance.
+
+**Throws:** `Error` if `serialized_step` is not a string.
+
+---
+
+### `static hydrate(parsed_step)` → `Step`
+
+Hydrates a parsed step object into a `Step` instance, resolving callables from the parent workflow's `CallableRegistry` if the callable is a registry reference string.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `parsed_step` | `Object` | A parsed step object (e.g., from `JSON.parse()`). |
+
+**Returns:** A hydrated `Step` instance.
+
+**Throws:** `Error` if a callable registry key is specified but not found in the registry.
+
+---
+
+### `setParentWorkflowValue(workflow_id, path, value)`
 
 Sets a property on the parent workflow instance (retrieved from `State.workflows`). Used internally by `FlowControlStep` to set `should_break` or `should_skip`.
 
@@ -101,11 +159,11 @@ Sets a property on the parent workflow instance (retrieved from `State.workflows
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `workflowId` | `string` | UUID of the workflow in `State.workflows`. |
+| `workflow_id` | `string` | UUID of the workflow in `State.workflows`. |
 | `path` | `string` | Property path on the workflow object. |
 | `value` | `any` | Value to assign. |
 
-**Throws:** `Error` if the workflow with `workflowId` is not found in state.
+**Throws:** `Error` if the workflow with `workflow_id` is not found in state.
 
 ---
 

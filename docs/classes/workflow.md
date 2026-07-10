@@ -23,6 +23,7 @@ Creates a new Workflow instance and registers it in the global `State.workflows`
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `options.name` | `string` | `'workflow-<uuid>'` | Human-readable identifier used in logs and events. |
+| `options.callable_registry` | `CallableRegistry` | `null` | Instance of `CallableRegistry` to use for the instance's registry. If not passed, instantiates a new `CallableRegistry` instance. |
 | `options.exit_on_error` | `boolean` | `false` | When `true`, any step failure immediately halts execution and marks the workflow as failed. |
 | `options.steps` | `Step[]` | `[]` | Initial array of steps to add to the workflow. |
 | `options.throw_on_empty` | `boolean` | `false` | When `true`, calling `execute()` on a workflow with no steps throws an error. |
@@ -45,17 +46,18 @@ Creates a new Workflow instance and registers it in the global `State.workflows`
 | `should_continue` | `boolean` | Internal flag used during resume. |
 | `exit_on_error` | `boolean` | Whether step failures halt the workflow. |
 | `throw_on_empty` | `boolean` | Whether executing an empty workflow throws. |
+| `callable_registry` | `CallableRegistry` | Registry for storing named callables used in persistence mode for serialization and hydration. A new instance is created automatically per workflow. To share a registry across workflows, assign the same `CallableRegistry` instance to each workflow's `callable_registry` property. |
 | `timing` | `Object` | Timing data: `{ create_time, start_time, complete_time, pause_time, resume_time, execution_time_ms, cancel_time }`. |
 | `sessions` | `Object` | Keyed record of past execution sessions (UUID → session data). |
 | `current_session_id` | `string\|null` | UUID of the current execution session. |
 
 ## Methods
 
-### `async execute()` → `Promise<Workflow>`
+### `async execute()` → `Promise<Object>`
 
 Runs all steps in sequence. Respects `should_break` (stops after current step), `should_skip` (skips next step), and `should_pause` (suspends after current step). Emits `WORKFLOW_RUNNING` at start and `WORKFLOW_COMPLETE` or `WORKFLOW_FAILED` at end.
 
-**Returns:** The workflow instance with populated `results` and updated `timing`.
+**Returns:** A serialized plain object (via `prepareForSerialization()`) containing the workflow's properties and results.
 
 **Throws:** `Error` if `throw_on_empty` is `true` and the steps array is empty.
 
@@ -81,11 +83,11 @@ console.log(result.results[0]);               // { message: '...', data: { rows:
 
 ---
 
-### `async resume()` → `Promise<Workflow>`
+### `async resume()` → `Promise<Object>`
 
 Resumes a paused workflow from the step after the one that was executing when `pause()` was called. Emits `WORKFLOW_RESUMED`.
 
-**Returns:** The workflow instance.
+**Returns:** A serialized plain object (via `prepareForSerialization()`).
 
 **Throws:** Does nothing if the workflow is not in a paused state.
 
@@ -163,7 +165,7 @@ Appends multiple steps at once. Emits `WORKFLOW_STEPS_ADDED`.
 
 ### `clearSteps()`
 
-Empties the steps array. Emits `WORKFLOW_STEPS_CLEARED`.
+Empties the steps array and clears the `steps_by_id` lookup map. Emits `WORKFLOW_STEPS_CLEARED`.
 
 ---
 
@@ -280,6 +282,62 @@ Pushes `{ message, data }` onto the `results` array. Called internally after eac
 |-----------|------|-------------|
 | `message` | `string` | Descriptive message for the result entry. |
 | `data` | `any` | The step's return value. |
+
+---
+
+### `prepareForSerialization()` → `Object`
+
+Creates a plain object containing safely serializable properties of the workflow, including serialized representations of all steps.
+
+**Returns:** An object with `id`, `current_session_id`, `exit_on_error`, `name`, `throw_on_empty`, `status`, `steps`, `timing`, and `results`.
+
+---
+
+### `serialize()` → `string`
+
+Serializes the workflow into a JSON string via `prepareForSerialization()`.
+
+**Returns:** JSON string representation of the workflow.
+
+---
+
+### `toJSON()` → `Object`
+
+Custom JSON serializer called by `JSON.stringify()`. Delegates to `prepareForSerialization()`.
+
+**Returns:** Plain object representation of the workflow.
+
+---
+
+### `static hydrateSerialized(serializedWorkflow)` → `Workflow`
+
+Deserializes a JSON string into a `Workflow` instance.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `serializedWorkflow` | `string` | JSON string representation of a workflow. |
+
+**Returns:** A hydrated `Workflow` instance.
+
+**Throws:** `Error` if `serializedWorkflow` is not a string.
+
+---
+
+### `static hydrate(parsedWorkflow)` → `Workflow`
+
+Hydrates a parsed workflow object into a `Workflow` instance, including all of its steps.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `parsedWorkflow` | `Object` | A parsed workflow object (e.g., from `JSON.parse()`). |
+
+**Returns:** A hydrated `Workflow` instance with restored steps.
+
+**Throws:** `Error` if `parsedWorkflow` is not a valid object.
 
 ---
 
