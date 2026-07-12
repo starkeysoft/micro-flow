@@ -6,9 +6,9 @@ Micro-Flow is a simple, lightweight, cross platform (browser and runtime) logic 
 
 ## Why Micro-Flow?
 
-We've all been there: a 100-line async function that acts as a "black box" when it fails. You have to manually hard-code retries, timeouts, state logging, and progress tracking for every single task. It’s brittle, a nightmare to unit test, and impossible to pause or resume.
+Imperative async functions frequently turn into untraceable "black boxes" when they fail. Managing retries, timeouts, state logging, and progress tracking within complex logic chains usually requires writing brittle, custom boilerplate for every single task. This approach complicates unit testing and makes features like pausing or resuming execution nearly impossible to implement cleanly.
 
-**Micro-Flow** makes your logic a first-class object. Instead of one giant function, you build a **Workflow** where every step is automatically tracked, timed, and controlled. It replaces "Try-Catch" boilerplate with professional orchestration.
+Micro-Flow treats logic as a first-class object. Instead of managing one monolithic async function, you construct a structured Workflow where every individual step is automatically monitored, timed, and controlled. It replaces manual try-catch boilerplate with a resilient runtime framework designed for complete predictability and explicit execution tracking. 
 
 ## Features
 
