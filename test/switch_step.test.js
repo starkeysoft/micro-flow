@@ -3,6 +3,7 @@ import Case from '../src/classes/steps/case.js';
 import SwitchStep from '../src/classes/steps/switch_step.js';
 import Step from '../src/classes/steps/step.js';
 import Workflow from '../src/classes/workflow.js';
+import CallableRegistry from '../src/classes/callable_registry.js';
 import State from '../src/classes/state.js';
 import { conditional_step_comparators, step_types } from '../src/enums/index.js';
 
@@ -223,6 +224,81 @@ describe('Case', () => {
       const result = await caseStep.execute();
 
       expect(result.result).toBe(42);
+    });
+  });
+
+  describe('prepareForSerialization', () => {
+    it('should include class_name "case"', () => {
+      const caseStep = new Case({
+        conditional: { subject: 'a', operator: '===', value: 'a' },
+      });
+
+      expect(caseStep.prepareForSerialization().class_name).toBe('case');
+    });
+
+    it('should include force_subject_override and is_matched', () => {
+      const caseStep = new Case({
+        conditional: { subject: 'a', operator: '===', value: 'a' },
+        force_subject_override: true,
+      });
+
+      const serialized = caseStep.prepareForSerialization();
+
+      expect(serialized.force_subject_override).toBe(true);
+      expect(serialized.is_matched).toBe(false);
+    });
+  });
+
+  describe('hydrate / hydrateSerialized', () => {
+    it('should round-trip a Case, preserving force_subject_override and is_matched', () => {
+      const registry = new CallableRegistry();
+      registry.register('caseCallable', async function caseCallable() { return 'matched'; });
+
+      const original = new Case({
+        conditional: { subject: 'a', operator: '===', value: 'a' },
+        force_subject_override: true,
+        callable: registry.get('caseCallable'),
+      });
+      original.is_matched = true;
+
+      const hydrated = Case.hydrate(original.prepareForSerialization(), registry);
+
+      expect(hydrated).toBeInstanceOf(Case);
+      expect(hydrated.force_subject_override).toBe(true);
+      expect(hydrated.is_matched).toBe(true);
+    });
+
+    it('should dispatch through Step.hydrateAny to a Case instance, not a plain LogicStep', () => {
+      const registry = new CallableRegistry();
+      registry.register('caseCallable', async function caseCallable() {});
+
+      const original = new Case({
+        conditional: { subject: 'a', operator: '===', value: 'a' },
+        callable: registry.get('caseCallable'),
+      });
+
+      const hydrated = Step.hydrateAny(original.prepareForSerialization(), registry);
+
+      expect(hydrated.constructor).toBe(Case);
+    });
+
+    it('should serialize and hydrate by callable_registry_key when set, ignoring the callable\'s own name', async () => {
+      const registry = new CallableRegistry();
+      registry.register('caseKey', async function actualName() { return 'case ran'; });
+
+      const original = new Case({
+        conditional: { subject: 'a', operator: '===', value: 'a' },
+        callable: registry.get('caseKey'),
+        callable_registry_key: 'caseKey',
+      });
+
+      const serialized = original.prepareForSerialization();
+      expect(serialized.callable).toEqual({ type: 'function', value: 'caseKey' });
+
+      const hydrated = Case.hydrate(serialized, registry);
+      const result = await hydrated.execute();
+
+      expect(result.result).toBe('case ran');
     });
   });
 });
@@ -695,6 +771,137 @@ describe('SwitchStep', () => {
       const result = await switchStep.execute();
 
       expect(result.result).toBe('has delete permission');
+    });
+  });
+
+  describe('prepareForSerialization', () => {
+    it('should include class_name "switch"', () => {
+      const switchStep = new SwitchStep({});
+
+      expect(switchStep.prepareForSerialization().class_name).toBe('switch');
+    });
+
+    it('should serialize the base callable as null, since it is internal wiring', () => {
+      const switchStep = new SwitchStep({});
+
+      expect(switchStep.prepareForSerialization().callable).toBeNull();
+    });
+
+    it('should serialize each case via its own prepareForSerialization', () => {
+      const caseA = new Case({
+        conditional: { operator: '===', value: 'a' },
+        callable: async () => 'a-result',
+      });
+      const switchStep = new SwitchStep({ cases: [caseA] });
+
+      expect(switchStep.prepareForSerialization().cases).toEqual([caseA.prepareForSerialization()]);
+    });
+
+    it('should serialize default_callable by name when it is a plain function', () => {
+      async function defaultBranch() {}
+      const switchStep = new SwitchStep({ default_callable: defaultBranch });
+
+      expect(switchStep.prepareForSerialization().default_callable).toEqual({
+        type: 'function',
+        value: 'defaultBranch',
+      });
+    });
+
+    it('should serialize a plain subject value, but null out a function subject', () => {
+      const staticSwitch = new SwitchStep({ subject: 'static-value' });
+      const dynamicSwitch = new SwitchStep({ subject: () => 'dynamic-value' });
+
+      expect(staticSwitch.prepareForSerialization().subject).toBe('static-value');
+      expect(dynamicSwitch.prepareForSerialization().subject).toBeNull();
+    });
+  });
+
+  describe('hydrate / hydrateSerialized', () => {
+    it('should round-trip and execute the matching case after hydration', async () => {
+      const registry = new CallableRegistry();
+      registry.register('adminCase', async function adminCase() { return 'admin matched'; });
+      registry.register('defaultBranch', async function defaultBranch() { return 'default matched'; });
+
+      const original = new SwitchStep({
+        subject: 'admin',
+        cases: [
+          new Case({
+            conditional: { operator: 'array_includes', value: 'admin' },
+            callable: registry.get('adminCase'),
+          }),
+        ],
+        default_callable: registry.get('defaultBranch'),
+      });
+
+      const hydrated = SwitchStep.hydrate(original.prepareForSerialization(), registry);
+
+      expect(hydrated).toBeInstanceOf(SwitchStep);
+      expect(hydrated.id).toBe(original.id);
+      expect(hydrated.cases[0]).toBeInstanceOf(Case);
+
+      const result = await hydrated.execute();
+      expect(result.result).toBe('admin matched');
+    });
+
+    it('should fall through to the default_callable after hydration when no case matches', async () => {
+      const registry = new CallableRegistry();
+      registry.register('adminCase', async function adminCase() { return 'admin matched'; });
+      registry.register('defaultBranch', async function defaultBranch() { return 'default matched'; });
+
+      const original = new SwitchStep({
+        subject: 'guest',
+        cases: [
+          new Case({
+            conditional: { operator: 'array_includes', value: 'admin' },
+            callable: registry.get('adminCase'),
+          }),
+        ],
+        default_callable: registry.get('defaultBranch'),
+      });
+
+      const hydrated = SwitchStep.hydrate(original.prepareForSerialization(), registry);
+      const result = await hydrated.execute();
+
+      expect(result.result).toBe('default matched');
+    });
+
+    it('should dispatch through Step.hydrateAny to a SwitchStep instance, not a plain Step', () => {
+      const registry = new CallableRegistry();
+      registry.register('defaultBranch', async function defaultBranch() {});
+
+      const original = new SwitchStep({ default_callable: registry.get('defaultBranch') });
+
+      const hydrated = Step.hydrateAny(original.prepareForSerialization(), registry);
+
+      expect(hydrated.constructor).toBe(SwitchStep);
+    });
+
+    it('should throw when the default_callable function is missing from the registry', () => {
+      const original = new SwitchStep({
+        default_callable: async function unregisteredDefault() {},
+      });
+
+      expect(() => SwitchStep.hydrate(original.prepareForSerialization())).toThrow(
+        /not found in registry or registry not provided/
+      );
+    });
+
+    it('should serialize by default_callable_registry_key when set, ignoring the callable\'s own name', async () => {
+      const registry = new CallableRegistry();
+      registry.register('defaultKey', async function actualName() { return 'default ran'; });
+
+      const original = new SwitchStep({
+        default_callable: registry.get('defaultKey'),
+        default_callable_registry_key: 'defaultKey',
+      });
+
+      const serialized = original.prepareForSerialization();
+      expect(serialized.default_callable).toEqual({ type: 'function', value: 'defaultKey' });
+
+      const hydrated = SwitchStep.hydrate(serialized, registry);
+      const result = await hydrated.execute();
+
+      expect(result.result).toBe('default ran');
     });
   });
 });

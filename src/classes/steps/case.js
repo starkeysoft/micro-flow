@@ -20,6 +20,7 @@ export default class Case extends LogicStep {
    * @param {conditional_step_comparators|string} [options.conditional.operator=null] - Comparison operator.
    * @param {*|Function} [options.conditional.value=null] - Value to compare against. Can be a function that returns the value.
    * @param {Function|Step|Workflow} [options.callable=async () => {}] - Function, Step, or Workflow to execute when case matches.
+   * @param {string|null} [options.callable_registry_key=null] - Optional key to reference the callable to be rehydrated after serialization.
    * @param {boolean} [options.force_subject_override=false] - Force override of subject even if already set.
    */
   constructor({
@@ -30,12 +31,14 @@ export default class Case extends LogicStep {
       value: null,
     },
     callable = async () => {},
+    callable_registry_key = null,
     force_subject_override = false,
   }) {
     super({
       name,
       step_type: Case.step_name,
       callable,
+      callable_registry_key,
     });
 
     this.conditional_config = conditional;
@@ -67,4 +70,31 @@ export default class Case extends LogicStep {
       throw new Error(`Invalid conditional configuration for case step: ${this.name}`);
     }
   }
+
+  /**
+   * Inserts safely serializable properties of the step into a new object for serialization.
+   * @returns {Object} An object containing the step's properties ready for serialization.
+   */
+  prepareForSerialization() {
+    return {
+      ...super.prepareForSerialization(),
+      force_subject_override: this.force_subject_override,
+      is_matched: this.is_matched,
+    };
+  }
+
+  /**
+   * Hydrates a parsed step object into a Case instance, restoring match state.
+   * @param {Object} parsed_step - The parsed step object.
+   * @param {import('../callable_registry.js').default|null} [callable_registry] - Registry used to resolve function callables.
+   * @returns {Case} The hydrated Case instance.
+   */
+  static hydrate(parsed_step, callable_registry = null) {
+    const instance = super.hydrate(parsed_step, callable_registry);
+    instance.is_matched = parsed_step.is_matched ?? false;
+
+    return instance;
+  }
 }
+
+Case.registerStepClass(Case);

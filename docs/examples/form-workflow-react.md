@@ -395,3 +395,4 @@ Every `wfEvents.on()` call is matched with a `wfEvents.off()` in the `useEffect`
 - [Step Hopping — React](step-hopping-react.md) — Dynamic step manipulation in React
 - [Data Fetching — Vue](data-fetching-vue.md) — Reactive data loading
 - [Basic Workflow — Node.js](basic-workflow-node.md) — Core patterns
+- [Persisting a Checkout Wizard — React](persistence-react.md) — A similar wizard that survives a page reload

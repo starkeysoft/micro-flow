@@ -18,10 +18,12 @@ export default class LogicStep extends Step {
    * @param {conditional_step_comparators|string} [options.conditional.operator] - Comparison operator.
    * @param {*|Function, optional} [options.conditional.value] - Value to compare against. Can be a function that returns the value.
    * @param {Function} [options.callable=async () => {}] - Function to execute.
+   * @param {string|null} [options.callable_registry_key=null] - Optional key to reference the callable to be rehydrated after serialization.
    */
   constructor({
     name,
     callable = async () => {},
+    callable_registry_key = null,
     conditional = {
       operator: null,
       subject: null,
@@ -31,7 +33,8 @@ export default class LogicStep extends Step {
     super({
       name,
       step_type: step_types.LOGIC,
-      callable
+      callable,
+      callable_registry_key,
     });
 
     this.setConditional(conditional);
@@ -157,4 +160,19 @@ export default class LogicStep extends Step {
   setConditional(conditional) {
     this.conditional_config = { subject: conditional.subject, operator: conditional.operator, value: conditional.value };
   }
+
+  /**
+   * Inserts safely serializable properties of the step into a new object for serialization.
+   * Note: function-valued subject/value are not persisted - there's no registry for them,
+   * only the plain-callable field supports registry-based rehydration.
+   * @returns {Object} An object containing the step's properties ready for serialization.
+   */
+  prepareForSerialization() {
+    return {
+      ...super.prepareForSerialization(),
+      conditional: { ...this.conditional_config },
+    };
+  }
 }
+
+LogicStep.registerStepClass(LogicStep);

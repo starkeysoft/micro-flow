@@ -9,6 +9,7 @@ The fundamental unit of work in a logic flow. A `Step` wraps a callable (async f
 - [Properties](#properties)
 - [Methods](#methods)
 - [Examples](#examples)
+- [Persistence](#persistence)
 - [Related](#related)
 
 ## Constructor
@@ -49,6 +50,7 @@ Creates a new Step instance.
 | `status` | `string` | Current status (see [`step_statuses`](../../../enums/step_statuses.md)). |
 | `timing` | `Object` | `{ start_time, complete_time, execution_time_ms, cancel_time }` from `Base`. |
 | `parent_workflow_id` | `string\|null` | ID of the workflow this step belongs to (set by the workflow on add). |
+| `static step_name` | `string` | `'step'` on the base class; each subclass overrides it with its own name (e.g. `'conditional'`, `'loop'`). Stored as `class_name` on serialization so hydration can rebuild the correct subclass. See [Persistence](#persistence). |
 
 ## Methods
 
@@ -97,9 +99,32 @@ Inspects the callable and returns its type string.
 
 ### `prepareForSerialization()` → `Object`
 
-Creates a plain object containing safely serializable properties of the step. For function callables with a `callable_registry_key`, the callable is stored as the registry key. For Step/Workflow callables, the callable is recursively serialized.
+Creates a plain object containing safely serializable properties of the step. The `callable` field is stored as a `{ type, value }` descriptor: for function callables with a `callable_registry_key`, `value` is that key; for other function callables, `value` is `callable.name`; for `Step`/`Workflow` callables, `value` is the callable's own `prepareForSerialization()` output (recursive). Subclasses override this to add their own fields — see [Persistence](#persistence) and each subclass's docs.
 
-**Returns:** An object with `id`, `name`, `callable_type`, `step_type`, `sub_step_type`, `max_retries`, `max_timeout_ms`, `retry_count`, `retry_results`, `errors`, `result`, `timing`, `status`, and `parent_workflow_id`.
+**Returns:** An object with `id`, `class_name`, `name`, `callable_type`, `callable`, `step_type`, `sub_step_type`, `max_retries`, `max_timeout_ms`, `retry_count`, `retry_results`, `errors`, `result`, `timing`, `status`, and `parent_workflow_id`:
+
+```
+{
+  id: string,
+  class_name: string,       // static step_name of the concrete subclass, e.g. 'conditional'
+  name: string,
+  callable_type: 'function' | 'step' | 'workflow',
+  callable: { type: 'function', value: string } | { type: 'step' | 'workflow', value: {...} } | null,
+  step_type: string,
+  sub_step_type: string | null,
+  max_retries: number,
+  max_timeout_ms: number,
+  retry_count: number,
+  retry_results: [{ retry_count: number, result: any }, ...],
+  errors: [Error, ...],
+  result: any,
+  timing: { start_time, complete_time, execution_time_ms, cancel_time },
+  status: string,
+  parent_workflow_id: string | null
+}
+```
+
+Subclasses extend or override some of these keys — see each subclass's own `prepareForSerialization()` entry.
 
 ---
 
@@ -119,35 +144,129 @@ Custom JSON serializer called by `JSON.stringify()`. Delegates to `prepareForSer
 
 ---
 
-### `static hydrateSerialized(serialized_step)` → `Step`
+### `static getCallableType(callable)` → `'function'|'step'|'workflow'`
 
-Deserializes a JSON string into a `Step` instance.
+Static version of `getCallableType()` (the instance method delegates to this). Useful when you need to classify a callable without a `Step` instance on hand.
 
 **Parameters:**
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `serialized_step` | `string` | JSON string representation of a step. |
+| `callable` | `Function\|Step\|Workflow` | The callable to inspect. |
 
-**Returns:** A hydrated `Step` instance.
+**Returns:** `'function'`, `'step'`, or `'workflow'`.
 
-**Throws:** `Error` if `serialized_step` is not a string.
+**Throws:** `Error` if `callable` is not one of the accepted types.
 
 ---
 
-### `static hydrate(parsed_step)` → `Step`
+### `static registerStepClass(StepClass)`
 
-Hydrates a parsed step object into a `Step` instance, resolving callables from the parent workflow's `CallableRegistry` if the callable is a registry reference string.
+Registers a `Step` subclass, keyed by its static `step_name`, so that `hydrateAny()`/`hydrateSerialized()` can rebuild an instance of the correct class instead of a plain `Step`. Every built-in subclass calls this on itself at the bottom of its own file as a side effect of being imported (e.g. `ConditionalStep.registerStepClass(ConditionalStep)`), so registration happens automatically as long as the class has been imported somewhere — which it will be, if you're importing from the package's main entry point.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `StepClass` | `typeof Step` | The `Step` subclass to register. |
+
+**Note:** A custom `Step` subclass you define yourself must call `YourStep.registerStepClass(YourStep)` for its own instances to hydrate back into `YourStep` rather than a plain `Step`.
+
+---
+
+### `static resolveStepClass(step_name)` → `typeof Step`
+
+Looks up the class registered under `step_name` (see `registerStepClass`). Falls back to the base `Step` class if nothing is registered under that name.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `step_name` | `string` | A `step_name` value, as stored in `class_name` on a serialized step. |
+
+**Returns:** The resolved `Step` subclass (constructor function, not an instance).
+
+---
+
+### `static serializeCallableField(callable)` → `Object|null`
+
+Serializes a single callable-like value (a function, `Step`, or `Workflow`) into the same `{ type, value }` descriptor shape used for the step's own `callable` field. Subclasses with additional callable-like properties (e.g. `ConditionalStep.true_callable`) use this to serialize them consistently.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `callable` | `Function\|Step\|Workflow\|null` | The callable to serialize. |
+
+**Returns:** A `{ type, value }` descriptor, or `null` if `callable` is `null`/`undefined`.
+
+---
+
+### `static hydrateCallableField(serialized, callableRegistry?)` → `Function|Step|Workflow|undefined`
+
+Hydrates a `{ type, value }` descriptor (as produced by `serializeCallableField`) back into a live function, `Step`, or `Workflow`. A function is resolved from `callableRegistry` by name; a `Step`/`Workflow` descriptor is hydrated recursively via `hydrateAny()` / `Workflow.hydrate()`. Idempotent — passing an already-hydrated value through returns it unchanged, so a subclass `hydrate()` override can resolve a field and safely delegate to `super.hydrate()`.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `serialized` | `Object\|Function\|Step\|Workflow\|null` | The descriptor to hydrate, or an already-hydrated value. |
+| `callableRegistry` | `CallableRegistry\|null` | Registry used to resolve a function-type descriptor by name. |
+
+**Returns:** The hydrated callable, or `undefined` if `serialized` was `null`/`undefined`.
+
+**Throws:** `Error` if a function descriptor's name isn't found in `callableRegistry` (or none was provided), or if the descriptor's `type` is unrecognized.
+
+---
+
+### `static hydrateAny(parsed_step, callableRegistry?)` → `Step`
+
+The main entry point for hydrating a step of **unknown subclass** — used internally by `Workflow.hydrate()` and by any subclass whose own fields nest other steps (e.g. `SwitchStep.cases`). Resolves the correct class from `parsed_step.class_name` via `resolveStepClass()`, then delegates to that class's own `static hydrate()`.
 
 **Parameters:**
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `parsed_step` | `Object` | A parsed step object (e.g., from `JSON.parse()`). |
+| `callableRegistry` | `CallableRegistry\|null` | Registry used to resolve function callables. |
 
-**Returns:** A hydrated `Step` instance.
+**Returns:** A hydrated instance of the step's original subclass.
 
-**Throws:** `Error` if a callable registry key is specified but not found in the registry.
+---
+
+### `static hydrateSerialized(serialized_step, callableRegistry?)` → `Step`
+
+Deserializes a JSON string and hydrates it via `hydrateAny()`, dispatching to the correct `Step` subclass regardless of which class this is called on.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `serialized_step` | `string` | JSON string representation of a step. |
+| `callableRegistry` | `CallableRegistry\|null` | Optional. Registry used to resolve function callables. Required if the step's `callable` (or a subclass-specific callable field) is a plain function. |
+
+**Returns:** A hydrated `Step` (or subclass) instance.
+
+**Throws:** `Error` if `serialized_step` is not a string.
+
+---
+
+### `static hydrate(parsed_step, callableRegistry?)` → `Step`
+
+Hydrates a parsed step object into an instance of **`this`** class — so `ConditionalStep.hydrate(x)` builds a `ConditionalStep`, while `Step.hydrate(x)` builds a plain `Step`. Resolves the step's primary `callable` (from a registry key, function name, or nested `Step`/`Workflow`) and restores execution metadata (`id`, `retry_count`, `retry_results`, `errors`, `result`, `timing`, `status`, `parent_workflow_id`). Subclasses with extra callable-like fields (e.g. `ConditionalStep.true_callable`/`false_callable`) override this to resolve those fields with `hydrateCallableField()` before delegating to `super.hydrate()`.
+
+Prefer `hydrateAny()` / `hydrateSerialized()` unless you already know the concrete subclass — calling `hydrate()` directly on the wrong class will silently build the wrong type.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `parsed_step` | `Object` | A parsed step object (e.g., from `JSON.parse()`). |
+| `callableRegistry` | `CallableRegistry\|null` | Optional. Registry used to resolve function callables. |
+
+**Returns:** A hydrated instance of `this` class.
+
+**Throws:** `Error` if a function callable's registry key isn't found in `callableRegistry` (or none was provided).
 
 ---
 
@@ -271,11 +390,53 @@ console.log(result.name);    // 'sub-flow'
 console.log(result.results); // [{ message: '...', data: 'a' }, ...]
 ```
 
+## Persistence
+
+Any `Step` can be saved and reconstructed via `serialize()` → `Step.hydrateSerialized()`. Because a step can hold nested `Step`/`Workflow` callables of any subclass, hydration always needs to know which concrete class to rebuild — that's what `class_name` (from `static step_name`) and the `Step.registerStepClass()`/`resolveStepClass()` registry are for. **Always hydrate through `Step.hydrateSerialized()` or `Step.hydrateAny()`**, not a subclass's own `static hydrate()` directly, unless you already know the concrete type — calling `hydrate()` on the wrong class silently builds the wrong one.
+
+**Function callables need a `CallableRegistry`.** A plain function can't be serialized. If `callable` is a function, pass a `callable_registry_key` matching a name registered in a [`CallableRegistry`](../callable_registry.md) so it can be looked up again on hydration:
+
+```javascript
+import { Step, CallableRegistry } from '@ronaldroe/micro-flow';
+
+const registry = new CallableRegistry();
+registry.register('sendWelcomeEmail', async function sendWelcomeEmail() {
+  return { sent: true };
+});
+
+const step = new Step({
+  name: 'welcome-email',
+  callable: registry.get('sendWelcomeEmail'),
+  callable_registry_key: 'sendWelcomeEmail',
+});
+
+const saved = step.serialize();
+
+// Elsewhere (or later, after re-registering the same function under the same name):
+const hydrated = Step.hydrateSerialized(saved, registry);
+await hydrated.execute();
+```
+
+A `Step`/`Workflow` used as `callable` needs no registry — it's serialized and rehydrated recursively as its own object graph, with its own `class_name`:
+
+```javascript
+import { Step } from '@ronaldroe/micro-flow';
+
+const inner = new Step({ name: 'inner', callable: async () => 42 }); // needs a registry itself if this stays a plain function
+const outer = new Step({ name: 'outer', callable: inner });
+
+const hydrated = Step.hydrateSerialized(outer.serialize());
+console.log(hydrated.constructor.name); // 'Step' (the inner one, per execute()'s semantics)
+```
+
+See [`CallableRegistry`](../callable_registry.md) for the registry API and the naming convention it depends on, and each subclass's own docs (e.g. [ConditionalStep § Persistence](conditional_step.md), [LoopStep § Persistence](loop_step.md)) for the extra fields they persist.
+
 ## Related
 
 - [Workflow](../workflow.md) — Sequences steps and manages flow control.
 - [LogicStep](logic_step.md) — Extends `Step` with conditional logic.
 - [DelayStep](delay_step.md) — Extends `Step` with timed delays.
+- [CallableRegistry](../callable_registry.md) — Resolves function callables by name during hydration.
 - [step_types](../../../enums/step_types.md) — Semantic type enum.
 - [step_statuses](../../../enums/step_statuses.md) — Possible status values.
 - [step_event_names](../../../enums/step_event_names.md) — Events emitted during execution.

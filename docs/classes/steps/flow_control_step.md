@@ -66,6 +66,23 @@ const breakStep = new FlowControlStep({
 // shouldFlowControl() is called internally by execute().
 ```
 
+---
+
+### `prepareForSerialization()` → `Object`
+
+Extends [`LogicStep.prepareForSerialization()`](logic_step.md#prepareforserialization--object) with `flow_control_type`. The base `callable` field is reported as `null` — it's just the internal bound `shouldFlowControl` method, not real data, since `FlowControlStep`'s constructor doesn't accept a `callable` option.
+
+**Returns:** The `LogicStep` fields (with `callable: null`) plus `flow_control_type`.
+
+```
+{
+  ...,                          // Step/LogicStep fields — see Step § prepareForSerialization()
+  conditional: { subject, operator, value },
+  callable: null,
+  flow_control_type: 'break' | 'skip'
+}
+```
+
 ## Examples
 
 ### Break on validation failure
@@ -198,7 +215,7 @@ await wf.execute();
 
 ## Related
 
-- [LogicStep](logic_step.md) — Parent class.
+- [LogicStep](logic_step.md) — Parent class. See [Step § Persistence](step.md#persistence) for the general serialization/hydration model — `FlowControlStep` has no `static hydrate()` override since it has no extra callable-like fields to resolve.
 - [Workflow](../workflow.md) — The `should_break` and `should_skip` flags are on the workflow.
 - [flow_control_types](../../../enums/flow_control_types.md) — `BREAK` and `SKIP` enum values.
 - [conditional_step_comparators](../../../enums/conditional_step_comparators.md) — Available operators.

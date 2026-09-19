@@ -14,6 +14,7 @@ Master micro-flow, the lightweight logic orchestration engine for Node.js and mo
 #### Orchestration
 - [Workflow](classes/workflow.md) - Manage and execute complex logic sequences with precision.
 - [State](classes/state.md) - Coordinate global application state and cross-context events.
+- [CallableRegistry](classes/callable_registry.md) - Resolve function callables by name so workflows and steps survive serialization.
 
 #### Specialized Steps
 - [Step](classes/steps/step.md) - Orchestrate individual units of work with built-in resilience.
@@ -62,12 +63,15 @@ Master micro-flow, the lightweight logic orchestration engine for Node.js and mo
 - [Data Processing Pipeline](examples/data-pipeline-node.md) - ETL pipeline example
 - [API Integration](examples/api-integration-node.md) - External API integration
 - [Step Hopping](examples/step-hopping-node.md) - Jumping between steps in Node
+- [Persisting and Resuming a Workflow](examples/persistence-node.md) - Save to disk, reload, and resume mid-flow
 
 #### Frontend (Browser)
 - [React Form Workflow](examples/form-workflow-react.md) - Multi-step form with React
 - [Vue Data Fetching](examples/data-fetching-vue.md) - Data fetching with Vue
 - [Vanilla JS Animation](examples/animation-browser.md) - Animation sequencing
 - [React Step Hopping](examples/step-hopping-react.md) - Jumping between steps in React
+- [Persistent Checkout Wizard](examples/persistence-react.md) - Multi-page form that survives a page reload
+- [Phaser Game with Enemy AI](examples/phaser-game-browser.md) - Animation sequencing and behavior AI with Phaser
 
 ## Installation
 
@@ -207,6 +211,13 @@ Event-driven architecture for monitoring:
 - Custom event handlers
 - Broadcast support
 
+### Persistence
+Save a `Workflow` or `Step` — before it runs, or mid-flight (e.g. paused) — and reconstruct it later, in the same process or a different one:
+- `serialize()` / `Step.hydrateSerialized()` / `Workflow.hydrateSerialized()` for JSON round-tripping
+- Automatic dispatch to the correct `Step` subclass on hydration (`ConditionalStep`, `LoopStep`, `SwitchStep`, etc. all come back as themselves, not a plain `Step`)
+- [`CallableRegistry`](classes/callable_registry.md) to resolve function callables by name, since raw functions can't be serialized
+- `Step`/`Workflow` callables need no registry — they serialize and rehydrate recursively as their own object graph
+
 ## Common Patterns
 
 ### Conditional Execution
@@ -252,6 +263,32 @@ const workflowEvents = State.get('events.workflow');
 workflowEvents.on('workflow_complete', (data) => {
   console.log('Workflow completed:', data.name);
 });
+```
+
+### Persisting and Reloading a Workflow
+
+```javascript
+import { Workflow, Step, CallableRegistry } from 'micro-flow';
+
+const registry = new CallableRegistry();
+registry.register('fetchOrder', async function fetchOrder() {
+  return { id: 'ORD-1', total: 42 };
+});
+
+const workflow = new Workflow({
+  name: 'order-lookup',
+  callable_registry: registry,
+  steps: [
+    new Step({ name: 'fetch', callable: registry.get('fetchOrder'), callable_registry_key: 'fetchOrder' }),
+  ],
+});
+
+// Save the definition (e.g. to a database) before or after running it.
+const saved = workflow.serialize();
+
+// Reload later, in this process or a fresh one — after re-registering 'fetchOrder'.
+const reloaded = Workflow.hydrateSerialized(saved, registry);
+await reloaded.execute();
 ```
 
 ## API Reference

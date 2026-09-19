@@ -603,4 +603,82 @@ describe('FlowControlStep', () => {
       expect(executionOrder).toEqual(['runs']);
     });
   });
+
+  describe('prepareForSerialization', () => {
+    it('should include class_name "flow_control"', () => {
+      const step = new FlowControlStep({
+        conditional: { subject: true, operator: '===', value: true },
+      });
+
+      expect(step.prepareForSerialization().class_name).toBe('flow_control');
+    });
+
+    it('should serialize the base callable as null, since it is internal wiring', () => {
+      const step = new FlowControlStep({
+        conditional: { subject: true, operator: '===', value: true },
+      });
+
+      expect(step.prepareForSerialization().callable).toBeNull();
+    });
+
+    it('should include flow_control_type and the conditional configuration', () => {
+      const step = new FlowControlStep({
+        conditional: { subject: 1, operator: '===', value: 1 },
+        flow_control_type: flow_control_types.SKIP,
+      });
+
+      const serialized = step.prepareForSerialization();
+
+      expect(serialized.flow_control_type).toBe(flow_control_types.SKIP);
+      expect(serialized.conditional).toEqual({ subject: 1, operator: '===', value: 1 });
+    });
+  });
+
+  describe('hydrate / hydrateSerialized', () => {
+    it('should round-trip a flow control step without needing a callable registry', () => {
+      const original = new FlowControlStep({
+        conditional: { subject: true, operator: '===', value: true },
+        flow_control_type: flow_control_types.BREAK,
+      });
+
+      const hydrated = FlowControlStep.hydrate(original.prepareForSerialization());
+
+      expect(hydrated).toBeInstanceOf(FlowControlStep);
+      expect(hydrated.id).toBe(original.id);
+      expect(hydrated.flow_control_type).toBe(flow_control_types.BREAK);
+    });
+
+    it('should dispatch through Step.hydrateAny to a FlowControlStep instance, not a plain Step', () => {
+      const original = new FlowControlStep({
+        conditional: { subject: true, operator: '===', value: true },
+      });
+
+      const hydrated = Step.hydrateAny(original.prepareForSerialization());
+
+      expect(hydrated.constructor).toBe(FlowControlStep);
+    });
+
+    it('should behave correctly after a serialize/hydrate round trip inside a workflow', async () => {
+      const original = new FlowControlStep({
+        conditional: { subject: true, operator: '===', value: true },
+        flow_control_type: flow_control_types.BREAK,
+      });
+
+      const hydratedFlowControl = FlowControlStep.hydrateSerialized(original.serialize());
+
+      const executionOrder = [];
+      const workflow = new Workflow({
+        steps: [
+          new Step({ callable: async () => executionOrder.push('first') }),
+          hydratedFlowControl,
+          new Step({ callable: async () => executionOrder.push('should-not-run') }),
+        ],
+      });
+
+      await workflow.execute();
+
+      expect(executionOrder).toEqual(['first']);
+      expect(workflow.should_break).toBe(true);
+    });
+  });
 });

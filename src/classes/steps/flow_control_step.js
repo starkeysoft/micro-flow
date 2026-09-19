@@ -67,4 +67,20 @@ export default class FlowControlStep extends LogicStep {
       return false;
     }
   }
+
+  /**
+   * Inserts safely serializable properties of the step into a new object for serialization.
+   * @returns {Object} An object containing the step's properties ready for serialization.
+   */
+  prepareForSerialization() {
+    return {
+      ...super.prepareForSerialization(),
+      // The base `callable` is an internal wiring detail (the bound `shouldFlowControl` method) -
+      // FlowControlStep's constructor doesn't take a callable, so it isn't real data to persist.
+      callable: null,
+      flow_control_type: this.flow_control_type,
+    };
+  }
 }
+
+FlowControlStep.registerStepClass(FlowControlStep);

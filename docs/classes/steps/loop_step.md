@@ -98,6 +98,42 @@ Executes the generator loop. The callable is called as a generator, and each yie
 
 **Returns:** `{ message: 'Generator loop complete', result: yielded[] }`
 
+---
+
+### `prepareForSerialization()` → `Object`
+
+Extends [`LogicStep.prepareForSerialization()`](logic_step.md#prepareforserialization--object). The base `callable` field is overridden to hold the **per-iteration callable** you actually configured — at runtime, `this.callable` is reassigned internally to the loop-runner method (`for_loop`/`for_each_loop`/`while_loop`/`generator_loop`), so serializing it as-is would lose your real callable. `iterable` is only persisted when it's a plain array; a function-valued `iterable` is dropped, since there's no `CallableRegistry`-style mechanism for it.
+
+**Returns:** The `LogicStep` fields (with `callable` replaced) plus `loop_type`, `iterations`, `max_iterations`, `iterable` (or `null` if it's a function), and `results`.
+
+```
+{
+  ...,                          // Step/LogicStep fields — see Step § prepareForSerialization()
+  conditional: { subject, operator, value },
+  callable: { type: 'function', value: string } | { type: 'step' | 'workflow', value: {...} },
+  loop_type: 'for' | 'for_each' | 'while' | 'generator',
+  iterations: number,
+  max_iterations: number,
+  iterable: any[] | null,
+  results: [...]                // one entry per completed iteration
+}
+```
+
+---
+
+### `static hydrate(parsed_step, callableRegistry?)` → `LoopStep`
+
+Resolves the per-iteration `callable` via [`Step.hydrateCallableField()`](step.md#static-hydratecallablefieldserialized-callableregistry--functionstepworkflowundefined), delegates to `super.hydrate()`, then restores `results`.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `parsed_step` | `Object` | A parsed step object (e.g., from `JSON.parse()`). |
+| `callableRegistry` | `CallableRegistry\|null` | Registry used to resolve a function per-iteration callable. |
+
+**Returns:** A hydrated `LoopStep` instance.
+
 ## Events
 
 Emitted on `State.get('events.step')`:
@@ -290,6 +326,8 @@ await loop.execute();
 ## Related
 
 - [LogicStep](logic_step.md) — Parent class providing `checkCondition()` for `while` loops.
+- [Step § Persistence](step.md#persistence) — General serialization/hydration model.
+- [CallableRegistry](../callable_registry.md) — Resolves a function per-iteration callable by name.
 - [loop_types](../../../enums/loop_types.md) — `FOR`, `FOR_EACH`, `WHILE`, `GENERATOR` enum.
 - [conditional_step_comparators](../../../enums/conditional_step_comparators.md) — Operators for `while` conditions.
 - [step_event_names](../../../enums/step_event_names.md) — `LOOP_ITERATION_COMPLETE` and others.

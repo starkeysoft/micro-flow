@@ -16,12 +16,14 @@ export default class SwitchStep extends Step {
    * @param {Array<Case|LogicStep>} [options.cases=[]] - Array of Case or LogicStep instances to evaluate. LogicStep instances MUST have conditional.subject set.
    * @param {Function|Step|Workflow} [options.default_callable=async () => {}] - Function, Step, or Workflow to execute if no cases match.
    * @param {*|Function} [options.subject=null] - Subject value to evaluate against each case. Can be a function that returns the value.
+   * @param {string|null} [options.default_callable_registry_key=null] - Optional key to reference default_callable to be rehydrated after serialization.
    */
   constructor({
     name,
     cases = [],
     default_callable = async () => {},
-    subject = null
+    subject = null,
+    default_callable_registry_key = null,
   }) {
     super({
       name,
@@ -29,6 +31,7 @@ export default class SwitchStep extends Step {
     });
 
     this.cases = cases;
+    this.default_callable_registry_key = default_callable_registry_key;
     this._default_callable_type = this.getCallableType(default_callable);
     this._default_callable_raw = default_callable;
     this.default_callable = this._default_callable_type === 'function'
@@ -74,4 +77,44 @@ export default class SwitchStep extends Step {
     }
     return default_result;
   }
+
+  /**
+   * Inserts safely serializable properties of the step into a new object for serialization.
+   * Note: a function-valued `subject` is not persisted, since there's no registry for it.
+   * @returns {Object} An object containing the step's properties ready for serialization.
+   */
+  prepareForSerialization() {
+    return {
+      ...super.prepareForSerialization(),
+      // The base `callable` is an internal wiring detail (the bound `switch` method) -
+      // SwitchStep's constructor doesn't take a callable, so it isn't real data to persist.
+      callable: null,
+      cases: this.cases.map(switch_case => switch_case.prepareForSerialization()),
+      default_callable: this.default_callable_registry_key
+        ? { type: Step.callable_types.FUNCTION, value: this.default_callable_registry_key }
+        : Step.serializeCallableField(this._default_callable_raw),
+      subject: typeof this.subject === 'function' ? null : this.subject,
+    };
+  }
+
+  /**
+   * Hydrates a parsed step object into a SwitchStep instance, resolving its cases and default callable.
+   * @param {Object} parsed_step - The parsed step object.
+   * @param {import('../callable_registry.js').default|null} [callable_registry] - Registry used to resolve function callables.
+   * @returns {SwitchStep} The hydrated SwitchStep instance.
+   */
+  static hydrate(parsed_step, callable_registry = null) {
+    const default_descriptor = parsed_step.default_callable;
+
+    return super.hydrate({
+      ...parsed_step,
+      cases: (parsed_step.cases ?? []).map(switch_case => Step.hydrateAny(switch_case, callable_registry)),
+      default_callable: Step.hydrateCallableField(default_descriptor, callable_registry),
+      default_callable_registry_key: default_descriptor?.type === Step.callable_types.FUNCTION
+        ? default_descriptor.value
+        : null,
+    }, callable_registry);
+  }
 }
+
+SwitchStep.registerStepClass(SwitchStep);

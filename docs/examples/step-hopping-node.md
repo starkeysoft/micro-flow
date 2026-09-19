@@ -335,3 +335,4 @@ Building the steps array dynamically based on feature flags, environment variabl
 - [Basic Workflow — Node.js](basic-workflow-node.md) — Foundational patterns
 - [Step Hopping — React](step-hopping-react.md) — Same patterns in a React component
 - [API Integration — Node.js](api-integration-node.md) — HTTP calls with retries
+- [Persisting and Resuming a Workflow — Node.js](persistence-node.md) — Saving a paused workflow to disk and resuming it later

@@ -1,4 +1,5 @@
 import { loop_types, step_types } from '../../enums/index.js';
+import Step from './step.js';
 import LogicStep from './logic_step.js';
 import { conditional_step_comparators } from '../../enums/index.js';
 
@@ -23,6 +24,7 @@ export default class LoopStep extends LogicStep {
    * @param {string} [options.loop_type=loop_types.FOR_EACH] - Type of loop ('for', 'for_each', 'while', or 'generator').
    * @param {number} [options.iterations=0] - Number of iterations to execute. Only used for 'for' loops.
    * @param {number} [options.max_iterations=1000] - Maximum number of iterations to prevent infinite loops.
+   * @param {string|null} [options.loop_callable_registry_key=null] - Optional key to reference the per-iteration callable to be rehydrated after serialization.
    */
   constructor({
     name,
@@ -36,6 +38,7 @@ export default class LoopStep extends LogicStep {
     loop_type = loop_types.FOR_EACH,
     iterations = 0,
     max_iterations = 1000,
+    loop_callable_registry_key = null,
   }) {
     super({ name, conditional });
     this.iterable = iterable;
@@ -45,9 +48,15 @@ export default class LoopStep extends LogicStep {
     this.results = [];
     this.current_item = null;
 
+    // Optional key to reference the per-iteration callable to be rehydrated after serialization.
+    this.loop_callable_registry_key = loop_callable_registry_key;
+
     // Store the user's callable separately so loop methods can invoke it.
     // this._callable will be set to the loop method by the setter below.
+    // The raw object is kept too (distinct from the bound version) so serialization
+    // can recover the original function/Step/Workflow instead of the loop-runner method.
     const user_callable_type = this.getCallableType(callable);
+    this._loop_callable_object = callable;
     this._loop_callable = user_callable_type === 'function'
       ? callable.bind(this)
       : callable.execute.bind(callable);
@@ -75,6 +84,8 @@ export default class LoopStep extends LogicStep {
       }
     }
 
+    this.iterations = iterations;
+
     return {
       message: `Generator loop ${this.name} completed after ${iterations} iterations`,
       result: this.results
@@ -86,10 +97,13 @@ export default class LoopStep extends LogicStep {
    * @returns {Object} - An object containing a message and the results of the loop.
    */
   async for_loop() {
+    const target = this.iterations;
     let i = 0;
-    for (; i < this.iterations; i++) {
+    for (; i < target; i++) {
       this.results.push(await this._loop_callable());
     }
+
+    this.iterations = i;
 
     return {
       message: `For loop ${this.name} completed after ${i} iterations`,
@@ -118,6 +132,8 @@ export default class LoopStep extends LogicStep {
       this.results.push(await this._loop_callable());
     }
 
+    this.iterations = iterations;
+
     return {
       message: `For each loop ${this.name} completed after ${iterations} iterations`,
       result: this.results
@@ -140,9 +156,54 @@ export default class LoopStep extends LogicStep {
       this.results.push(await this._loop_callable());
     }
 
+    this.iterations = iterations;
+
     return {
       message: `While loop ${this.name} completed after ${iterations} iterations`,
       result: this.results
     };
   }
+
+  /**
+   * Inserts safely serializable properties of the step into a new object for serialization.
+   * Note: a function-valued `iterable` is not persisted, since there's no registry for it.
+   * @returns {Object} An object containing the step's properties ready for serialization.
+   */
+  prepareForSerialization() {
+    return {
+      ...super.prepareForSerialization(),
+      callable: this.loop_callable_registry_key
+        ? { type: Step.callable_types.FUNCTION, value: this.loop_callable_registry_key }
+        : Step.serializeCallableField(this._loop_callable_object),
+      loop_type: this.loop_type,
+      iterations: this.iterations,
+      max_iterations: this.max_iterations,
+      iterable: Array.isArray(this.iterable) ? this.iterable : null,
+      results: this.results,
+    };
+  }
+
+  /**
+   * Hydrates a parsed step object into a LoopStep instance, resolving the per-iteration callable.
+   * @param {Object} parsed_step - The parsed step object.
+   * @param {import('../callable_registry.js').default|null} [callable_registry] - Registry used to resolve function callables.
+   * @returns {LoopStep} The hydrated LoopStep instance.
+   */
+  static hydrate(parsed_step, callable_registry = null) {
+    const callable_descriptor = parsed_step.callable;
+
+    const instance = super.hydrate({
+      ...parsed_step,
+      callable: Step.hydrateCallableField(callable_descriptor, callable_registry),
+      loop_callable_registry_key: callable_descriptor?.type === Step.callable_types.FUNCTION
+        ? callable_descriptor.value
+        : null,
+    }, callable_registry);
+
+    instance.results = parsed_step.results ?? [];
+
+    return instance;
+  }
 }
+
+LoopStep.registerStepClass(LoopStep);
