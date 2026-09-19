@@ -412,10 +412,11 @@ export default class Workflow extends Base {
    * @param {*} data - Result data.
    */
   async prepareResult(message, data) {
-    const result = { message, data };
     if (this.result_per_step && typeof this.result_per_step_function === 'function') {
-      await this.result_per_step_function(result);
+      await this.result_per_step_function(this.prepareForSerialization());
     }
+
+    const result = { message, data };
     this.results.push(result);
   }
 
