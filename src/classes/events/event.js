@@ -40,7 +40,7 @@ class Event extends EventTarget {
    */
   emit(event_name, data, bubbles = false, cancelable = true) {
     const seen = new WeakSet();
-    const workingData = JSON.parse(JSON.stringify(data, (key, value) => {
+    const working_data = JSON.parse(JSON.stringify(data, (key, value) => {
       if (typeof value === 'object' && value !== null) {
         if (seen.has(value)) return undefined;
         seen.add(value);
@@ -49,7 +49,7 @@ class Event extends EventTarget {
     }));
 
     const custom_event = new CustomEvent(event_name, {
-      detail: workingData,
+      detail: working_data,
       bubbles,
       cancelable
     });
@@ -57,7 +57,7 @@ class Event extends EventTarget {
 
     try {
       const channel = new BroadcastChannel(event_name);
-      channel.postMessage(workingData);
+      channel.postMessage(working_data);
       channel.close();
     } catch (e) {
       console.warn(warnings.BROADCAST_FAILED, e);

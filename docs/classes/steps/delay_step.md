@@ -72,6 +72,24 @@ Internal scheduler. Creates a `node-schedule` job at `delay_until`, stores it in
 |-----------|------|-------------|
 | `delay_until` | `Date` | The `Date` at which execution should resume. |
 
+---
+
+### `prepareForSerialization()` → `Object`
+
+Extends [`Step.prepareForSerialization()`](step.md#prepareforserialization--object) with `delay_type`, `absolute_timestamp`, and `relative_delay_ms`. The base `callable` field is reported as `null` — it's just the internal bound `absolute`/`relative` method, not real data, since `DelayStep`'s constructor doesn't accept a `callable` option.
+
+**Returns:** The `Step` fields (with `callable: null`) plus `delay_type`, `absolute_timestamp`, and `relative_delay_ms`.
+
+```
+{
+  ...,                          // Step fields — see Step § prepareForSerialization()
+  callable: null,
+  delay_type: 'absolute' | 'relative',
+  absolute_timestamp: Date,
+  relative_delay_ms: number
+}
+```
+
 ## Events
 
 Emitted on `State.get('events.step')`:
@@ -220,7 +238,7 @@ await wf.execute();
 
 ## Related
 
-- [Step](step.md) — Parent class.
+- [Step](step.md) — Parent class. See [Step § Persistence](step.md#persistence) for the general serialization/hydration model — `DelayStep` has no `static hydrate()` override since it has no extra callable-like fields to resolve.
 - [delay_types](../../../enums/delay_types.md) — `RELATIVE` and `ABSOLUTE` enum.
 - [step_event_names](../../../enums/step_event_names.md) — Delay-specific event names.
 - [Workflow](../workflow.md) — Sequences `DelayStep` along with other steps.

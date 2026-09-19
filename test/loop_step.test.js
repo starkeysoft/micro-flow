@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import LoopStep from '../src/classes/steps/loop_step.js';
 import Step from '../src/classes/steps/step.js';
 import Workflow from '../src/classes/workflow.js';
+import CallableRegistry from '../src/classes/callable_registry.js';
 import State from '../src/classes/state.js';
 import { loop_types, step_types } from '../src/enums/index.js';
 
@@ -552,6 +553,173 @@ describe('LoopStep', () => {
       const result = await step.execute();
 
       expect(result.result.result).toEqual([97, 98, 99]);
+    });
+  });
+
+  describe('prepareForSerialization', () => {
+    it('should include class_name "loop"', () => {
+      const step = new LoopStep({ loop_type: loop_types.FOR, iterations: 1 });
+
+      expect(step.prepareForSerialization().class_name).toBe('loop');
+    });
+
+    it('should serialize the per-iteration callable by name, not the internal loop-runner method', () => {
+      async function perIteration() {}
+      const step = new LoopStep({
+        loop_type: loop_types.FOR,
+        iterations: 1,
+        callable: perIteration,
+      });
+
+      expect(step.prepareForSerialization().callable).toEqual({
+        type: 'function',
+        value: 'perIteration',
+      });
+    });
+
+    it('should include loop_type, iterations, max_iterations, and results', async () => {
+      const step = new LoopStep({
+        loop_type: loop_types.FOR,
+        iterations: 3,
+        max_iterations: 10,
+        callable: async () => 'x',
+      });
+
+      await step.execute();
+      const serialized = step.prepareForSerialization();
+
+      expect(serialized.loop_type).toBe(loop_types.FOR);
+      expect(serialized.iterations).toBe(3);
+      expect(serialized.max_iterations).toBe(10);
+      expect(serialized.results).toEqual(['x', 'x', 'x']);
+    });
+
+    it('should serialize an array iterable as-is', () => {
+      const step = new LoopStep({
+        loop_type: loop_types.FOR_EACH,
+        iterable: [1, 2, 3],
+        callable: async function() { return this.current_item; },
+      });
+
+      expect(step.prepareForSerialization().iterable).toEqual([1, 2, 3]);
+    });
+
+    it('should serialize a function iterable as null, since there is no registry for it', () => {
+      const step = new LoopStep({
+        loop_type: loop_types.FOR_EACH,
+        iterable: () => [1, 2, 3],
+        callable: async function() { return this.current_item; },
+      });
+
+      expect(step.prepareForSerialization().iterable).toBeNull();
+    });
+  });
+
+  describe('hydrate / hydrateSerialized', () => {
+    it('should round-trip a FOR loop, preserving iterations and results', async () => {
+      const registry = new CallableRegistry();
+      registry.register('perIteration', async function perIteration() { return 'iter'; });
+
+      const original = new LoopStep({
+        loop_type: loop_types.FOR,
+        iterations: 3,
+        callable: registry.get('perIteration'),
+      });
+      await original.execute();
+
+      const hydrated = LoopStep.hydrate(original.prepareForSerialization(), registry);
+
+      expect(hydrated).toBeInstanceOf(LoopStep);
+      expect(hydrated.id).toBe(original.id);
+      expect(hydrated.iterations).toBe(3);
+      expect(hydrated.results).toEqual(['iter', 'iter', 'iter']);
+    });
+
+    it('should round-trip a FOR_EACH loop with an array iterable and execute correctly after hydration', async () => {
+      const registry = new CallableRegistry();
+      registry.register('perIteration', async function perIteration() {
+        return this.current_item * 2;
+      });
+
+      const original = new LoopStep({
+        loop_type: loop_types.FOR_EACH,
+        iterable: [1, 2, 3],
+        callable: registry.get('perIteration'),
+      });
+
+      const hydrated = LoopStep.hydrate(original.prepareForSerialization(), registry);
+      const result = await hydrated.execute();
+
+      expect(result.result.result).toEqual([2, 4, 6]);
+    });
+
+    it('should dispatch through Step.hydrateAny to a LoopStep instance, not a plain Step', () => {
+      const registry = new CallableRegistry();
+      registry.register('perIteration', async function perIteration() {});
+
+      const original = new LoopStep({
+        loop_type: loop_types.FOR,
+        iterations: 1,
+        callable: registry.get('perIteration'),
+      });
+
+      const hydrated = Step.hydrateAny(original.prepareForSerialization(), registry);
+
+      expect(hydrated.constructor).toBe(LoopStep);
+    });
+
+    it('should throw when the per-iteration callable is missing from the registry', () => {
+      const original = new LoopStep({
+        loop_type: loop_types.FOR,
+        iterations: 1,
+        callable: async function unregisteredIteration() {},
+      });
+
+      expect(() => LoopStep.hydrate(original.prepareForSerialization())).toThrow(
+        /not found in registry or registry not provided/
+      );
+    });
+
+    it('should serialize by loop_callable_registry_key when set, ignoring the callable\'s own name', async () => {
+      const registry = new CallableRegistry();
+      registry.register('iterKey', async function actualName() { return 'ran'; });
+
+      const original = new LoopStep({
+        loop_type: loop_types.FOR,
+        iterations: 1,
+        callable: registry.get('iterKey'),
+        loop_callable_registry_key: 'iterKey',
+      });
+
+      const serialized = original.prepareForSerialization();
+      expect(serialized.callable).toEqual({ type: 'function', value: 'iterKey' });
+
+      const hydrated = LoopStep.hydrate(serialized, registry);
+      const result = await hydrated.execute();
+
+      expect(result.result.result).toEqual(['ran']);
+    });
+
+    it('should round-trip a WHILE loop through hydrateSerialized (JSON string)', async () => {
+      let count = 0;
+      const registry = new CallableRegistry();
+      registry.register('perIteration', async function perIteration() {
+        count++;
+        return 'ran';
+      });
+
+      const original = new LoopStep({
+        loop_type: loop_types.WHILE,
+        conditional: { subject: () => count, operator: '<', value: 2 },
+        callable: registry.get('perIteration'),
+      });
+      // Run once so there's real state to preserve across the round trip.
+      await original.execute();
+
+      const hydrated = LoopStep.hydrateSerialized(original.serialize(), registry);
+
+      expect(hydrated).toBeInstanceOf(LoopStep);
+      expect(hydrated.results).toEqual(original.results);
     });
   });
 });

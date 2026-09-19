@@ -52,10 +52,10 @@ export default class Base {
       return;
     }
 
-    const logMessage = message ? `\n[${this.base_type.toUpperCase()} - ${this.name}] ${message}` : `\n[${this.base_type.toUpperCase()} - ${this.name}] Event: ${event_name}`;
-    const logType = event_name.endsWith('_failed') ? 'error' : 'log';
+    const log_message = message ? `\n[${this.base_type.toUpperCase()} - ${this.name}] ${message}` : `\n[${this.base_type.toUpperCase()} - ${this.name}] Event: ${event_name}`;
+    const log_type = event_name.endsWith('_failed') ? 'error' : 'log';
 
-    console[logType](logMessage);
+    console[log_type](log_message);
   }
 
   /**

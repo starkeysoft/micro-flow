@@ -419,3 +419,4 @@ All listeners registered with `wfEvents.on()` and `stepEvents.on()` inside the `
 - [Step Hopping — Node.js](step-hopping-node.md) — Same patterns outside React
 - [Form Workflow — React](form-workflow-react.md) — Multi-step form
 - [Basic Workflow — Node.js](basic-workflow-node.md) — Core patterns
+- [Persisting a Checkout Wizard — React](persistence-react.md) — A multi-step form that survives a page reload

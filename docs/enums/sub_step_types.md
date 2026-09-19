@@ -11,24 +11,24 @@ Granular type identifiers for each step subclass. Maps the class name to its `st
 
 | Key (class name) | Value (`step_name`) | Description |
 |-----------------|---------------------|-------------|
-| `Step` | `'step'` | Base `Step` class. |
-| `LogicStep` | `'logic'` | Base conditional logic class. |
-| `ConditionalStep` | `'conditional'` | Two-branch conditional step. |
-| `FlowControlStep` | `'flow_control'` | Break/skip flow control step. |
-| `LoopStep` | `'loop'` | Iteration step. |
-| `SwitchStep` | `'switch'` | Multi-case switch step. |
-| `Case` | `'case'` | Single case for a `SwitchStep`. |
-| `DelayStep` | `'delay'` | Timed delay step. |
+| `step` | `'step'` | Base `Step` class. |
+| `logic_step` | `'logic'` | Base conditional logic class. |
+| `conditional_step` | `'conditional'` | Two-branch conditional step. |
+| `flow_control_step` | `'flow_control'` | Break/skip flow control step. |
+| `loop_step` | `'loop'` | Iteration step. |
+| `switch_step` | `'switch'` | Multi-case switch step. |
+| `case` | `'case'` | Single case for a `SwitchStep`. |
+| `delay_step` | `'delay'` | Timed delay step. |
 
 ## Usage
 
 ```javascript
 import { sub_step_types } from '@ronaldroe/micro-flow';
 
-console.log(sub_step_types.ConditionalStep); // 'conditional'
-console.log(sub_step_types.LoopStep);        // 'loop'
-console.log(sub_step_types.DelayStep);       // 'delay'
-console.log(sub_step_types.FlowControlStep); // 'flow_control'
+console.log(sub_step_types.conditional_step); // 'conditional'
+console.log(sub_step_types.loop_step);        // 'loop'
+console.log(sub_step_types.delay_step);       // 'delay'
+console.log(sub_step_types.flow_control_step); // 'flow_control'
 ```
 
 Each step class exposes a static `step_name` property that matches the corresponding enum value:
@@ -54,13 +54,13 @@ const step = new ConditionalStep({
 });
 
 console.log(step.sub_step_type);  // 'conditional'
-console.log(step.sub_step_type === sub_step_types.ConditionalStep); // true
+console.log(step.sub_step_type === sub_step_types.conditional_step); // true
 
 // Filter steps in a workflow by sub-type
 import { Workflow, Step } from '@ronaldroe/micro-flow';
 const wf = new Workflow({ name: 'mixed' });
 // ...add steps...
-const conditionals = wf.steps.filter(s => s.sub_step_type === sub_step_types.ConditionalStep);
+const conditionals = wf.steps.filter(s => s.sub_step_type === sub_step_types.conditional_step);
 ```
 
 ## Related

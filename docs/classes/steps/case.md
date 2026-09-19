@@ -8,6 +8,7 @@ A single case in a `SwitchStep`. `Case` extends `LogicStep` and is designed to w
 - [Constructor](#constructor)
 - [Properties](#properties)
 - [Setters](#setters)
+- [Methods](#methods)
 - [Examples](#examples)
 - [Related](#related)
 
@@ -63,6 +64,38 @@ const myCase = new Case({
 myCase.switch_subject = 200;
 console.log(myCase.checkCondition()); // true
 ```
+
+## Methods
+
+### `prepareForSerialization()` → `Object`
+
+Extends [`LogicStep.prepareForSerialization()`](logic_step.md#prepareforserialization--object) with `force_subject_override` and `is_matched`.
+
+**Returns:** The `LogicStep` fields plus `force_subject_override` and `is_matched`:
+
+```
+{
+  ...,                          // Step/LogicStep fields — see Step § prepareForSerialization()
+  conditional: { subject, operator, value },
+  force_subject_override: boolean,
+  is_matched: boolean
+}
+```
+
+---
+
+### `static hydrate(parsed_step, callableRegistry?)` → `Case`
+
+Delegates to `super.hydrate()`, then restores `is_matched`.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `parsed_step` | `Object` | A parsed step object (e.g., from `JSON.parse()`). |
+| `callableRegistry` | `CallableRegistry\|null` | Registry used to resolve a function `callable`, if any. |
+
+**Returns:** A hydrated `Case` instance.
 
 ## Examples
 
@@ -174,6 +207,7 @@ console.log(result.result); // 'adult'
 
 ## Related
 
-- [SwitchStep](switch_step.md) — The parent container that manages and evaluates cases.
+- [SwitchStep](switch_step.md) — The parent container that manages and evaluates cases. `SwitchStep` hydrates its `cases` array by dispatching each entry through [`Step.hydrateAny()`](step.md#static-hydrateanyparsed_step-callableregistry--step), which is how a serialized case comes back as a `Case` (not a plain `Step`).
 - [LogicStep](logic_step.md) — Parent class providing `checkCondition()` and `conditional_config`.
+- [Step § Persistence](step.md#persistence) — General serialization/hydration model.
 - [conditional_step_comparators](../../../enums/conditional_step_comparators.md) — Full operator reference.

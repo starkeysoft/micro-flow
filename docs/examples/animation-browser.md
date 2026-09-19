@@ -364,3 +364,4 @@ The `buildAnimationFlow()` function creates a fresh `Workflow` and step instance
 - [Basic Workflow — Node.js](basic-workflow-node.md) — Core patterns
 - [Data Fetching — Vue](data-fetching-vue.md) — Reactive UI with Workflow
 - [Form Workflow — React](form-workflow-react.md) — Multi-step form management
+- [Phaser Game with Enemy AI — Browser](phaser-game-browser.md) — Animation sequencing and continuous AI behavior in a game engine

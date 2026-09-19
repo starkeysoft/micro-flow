@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Workflow from '../src/classes/workflow.js';
 import Step from '../src/classes/steps/step.js';
+import LoopStep from '../src/classes/steps/loop_step.js';
+import ConditionalStep from '../src/classes/steps/conditional_step.js';
+import CallableRegistry from '../src/classes/callable_registry.js';
 import State from '../src/classes/state.js';
+import { loop_types } from '../src/enums/index.js';
 
 describe('Workflow', () => {
   beforeEach(() => {
@@ -153,7 +157,7 @@ describe('Workflow', () => {
       const step = new Step({
         name: 'check-status',
         callable: async function() {
-          const workflow = State.get('workflows')[this.parentWorkflowId];
+          const workflow = State.get('workflows')[this.parent_workflow_id];
           statusDuringExecution = workflow.status;
         }
       });
@@ -229,7 +233,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         name: 'set-break',
         callable: async function() {
-          const workflow = State.get('workflows')[this.parentWorkflowId];
+          const workflow = State.get('workflows')[this.parent_workflow_id];
           workflow.should_break = true;
           return 'set break';
         }
@@ -254,7 +258,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         name: 'set-skip',
         callable: async function() {
-          const workflow = State.get('workflows')[this.parentWorkflowId];
+          const workflow = State.get('workflows')[this.parent_workflow_id];
           workflow.should_skip = true;
           results.push('step1');
           return 'set skip';
@@ -289,7 +293,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         name: 'set-pause',
         callable: async function() {
-          const workflow = State.get('workflows')[this.parentWorkflowId];
+          const workflow = State.get('workflows')[this.parent_workflow_id];
           workflow.should_pause = true;
           return 'set pause';
         }
@@ -310,12 +314,12 @@ describe('Workflow', () => {
       expect(workflow.results).toHaveLength(1);
     });
 
-    it('should set parentWorkflowId on steps during execution', async () => {
+    it('should set parent_workflow_id on steps during execution', async () => {
       let capturedParentId;
       const step = new Step({
         name: 'capture-parent',
         callable: async function() {
-          capturedParentId = this.parentWorkflowId;
+          capturedParentId = this.parent_workflow_id;
         }
       });
       
@@ -335,7 +339,7 @@ describe('Workflow', () => {
           step1Count++;
           // Only pause on first execution
           if (step1Count === 1) {
-            const workflow = State.get('workflows')[this.parentWorkflowId];
+            const workflow = State.get('workflows')[this.parent_workflow_id];
             workflow.should_pause = true;
           }
           return 'step1 done';
@@ -383,6 +387,72 @@ describe('Workflow', () => {
       expect(workflow.timing.resume_time).toBeDefined();
       expect(workflow.timing.resume_time >= before).toBe(true);
       expect(workflow.timing.resume_time <= after).toBe(true);
+    });
+
+    it('should not re-run steps that already completed before the pause', async () => {
+      let step1Calls = 0;
+      let step2Calls = 0;
+      const step1 = new Step({
+        name: 'step-1',
+        callable: async () => {
+          step1Calls++;
+          return 'step1 done';
+        }
+      });
+      const step2 = new Step({
+        name: 'step-2',
+        callable: async function() {
+          step2Calls++;
+          const workflow = State.get('workflows')[this.parent_workflow_id];
+          workflow.should_pause = true;
+          return 'step2 done';
+        }
+      });
+      const step3 = new Step({
+        name: 'step-3',
+        callable: async () => 'step3 done'
+      });
+
+      const workflow = new Workflow({ steps: [step1, step2, step3] });
+
+      await workflow.execute();
+      expect(workflow.status).toBe(State.get('statuses.workflow').PAUSED);
+      expect(workflow.current_step).toBe(step2.id);
+
+      await workflow.resume();
+
+      expect(step1Calls).toBe(1);
+      expect(step2Calls).toBe(1);
+      expect(workflow.status).toBe(State.get('statuses.workflow').COMPLETE);
+      expect(workflow.results).toHaveLength(3);
+    });
+
+    it('should resume from the step after current_step when execute() is called directly on a paused workflow', async () => {
+      const executed = [];
+      const step1 = new Step({
+        name: 'step-1',
+        callable: async function() {
+          executed.push('step-1');
+          const workflow = State.get('workflows')[this.parent_workflow_id];
+          workflow.should_pause = true;
+        }
+      });
+      const step2 = new Step({
+        name: 'step-2',
+        callable: async () => executed.push('step-2')
+      });
+
+      const workflow = new Workflow({ steps: [step1, step2] });
+
+      await workflow.execute();
+      expect(workflow.status).toBe(State.get('statuses.workflow').PAUSED);
+
+      // Calling execute() directly (not resume()) on a paused workflow should still
+      // continue from where it left off, not restart from index 0.
+      await workflow.execute();
+
+      expect(executed).toEqual(['step-1', 'step-2']);
+      expect(workflow.status).toBe(State.get('statuses.workflow').COMPLETE);
     });
   });
 
@@ -437,20 +507,20 @@ describe('Workflow', () => {
       expect(workflow.steps_by_id[step.id]).toBe(step);
     });
 
-    it('should set parentWorkflowId on the step', () => {
+    it('should set parent_workflow_id on the step', () => {
       const workflow = new Workflow({});
       const step = new Step({ name: 'new-step' });
       
       workflow.addStep(step);
       
-      expect(step.parentWorkflowId).toBe(workflow.id);
+      expect(step.parent_workflow_id).toBe(workflow.id);
     });
 
     it('should throw error for invalid step', () => {
       const workflow = new Workflow({});
       const invalidStep = { name: 'not-a-step' };
       
-      expect(() => workflow.addStep(invalidStep)).toThrow('Invalid step type');
+      expect(() => workflow.addStep(invalidStep)).toThrow('Invalid input. Must be an instance of Step.');
     });
 
     it('should initialize _steps array if undefined', () => {
@@ -499,13 +569,13 @@ describe('Workflow', () => {
       expect(workflow.steps_by_id[step.id]).toBe(step);
     });
 
-    it('should set parentWorkflowId on the step', () => {
+    it('should set parent_workflow_id on the step', () => {
       const workflow = new Workflow({});
       const step = new Step({ name: 'inserted-step' });
       
       workflow.addStepAtIndex(step, 0);
       
-      expect(step.parentWorkflowId).toBe(workflow.id);
+      expect(step.parent_workflow_id).toBe(workflow.id);
     });
 
     it('should initialize steps_by_id if undefined', () => {
@@ -745,12 +815,155 @@ describe('Workflow', () => {
   describe('prepareResult', () => {
     it('should add result to results array', () => {
       const workflow = new Workflow({});
-      
+
       workflow.prepareResult('Test message', { data: 'test' });
-      
+
       expect(workflow.results).toHaveLength(1);
       expect(workflow.results[0].message).toBe('Test message');
       expect(workflow.results[0].data).toEqual({ data: 'test' });
+    });
+
+    it('should not invoke result_per_step_function when result_per_step is false', async () => {
+      let callCount = 0;
+      const workflow = new Workflow({
+        result_per_step_function: async () => { callCount++; },
+        steps: [new Step({ name: 'step-1', callable: async () => 'result' })],
+      });
+
+      await workflow.execute();
+
+      expect(callCount).toBe(0);
+    });
+
+    it('should not invoke result_per_step_function when it is not a function', async () => {
+      const workflow = new Workflow({
+        result_per_step: true,
+        result_per_step_function: 'not-a-function',
+        steps: [new Step({ name: 'step-1', callable: async () => 'result' })],
+      });
+
+      await expect(workflow.execute()).resolves.toBeDefined();
+      expect(workflow.results).toHaveLength(1);
+    });
+
+    it('should await result_per_step_function once per step, in order, with the workflow\'s own serialized snapshot', async () => {
+      let callCount = 0;
+      const workflow = new Workflow({
+        result_per_step: true,
+        result_per_step_function: async (snapshot) => {
+          callCount++;
+          expect(snapshot.id).toBe(workflow.id);
+          expect(snapshot.name).toBe(workflow.name);
+          expect(snapshot.steps).toHaveLength(2);
+        },
+        steps: [
+          new Step({ name: 'step-1', callable: async () => 'a' }),
+          new Step({ name: 'step-2', callable: async () => 'b' }),
+        ],
+      });
+
+      await workflow.execute();
+
+      expect(callCount).toBe(2);
+    });
+
+    it('should pass a plain object shaped like prepareForSerialization(), not { message, data }', async () => {
+      let snapshot;
+      const workflow = new Workflow({
+        result_per_step: true,
+        result_per_step_function: async (arg) => { snapshot = arg; },
+        steps: [new Step({ name: 'step-1', callable: async () => 'a' })],
+      });
+
+      await workflow.execute();
+
+      expect(snapshot).not.toHaveProperty('message');
+      expect(snapshot).not.toHaveProperty('data');
+      expect(Object.keys(snapshot)).toEqual(Object.keys(workflow.prepareForSerialization()));
+    });
+
+    it('should invoke result_per_step_function before the current step\'s result is pushed onto results', async () => {
+      // Checked synchronously inside the callback, not by holding onto the snapshot -
+      // `snapshot.results` is the same array reference as `workflow.results` (not a
+      // copy), so it keeps mutating after the callback returns; only a read taken
+      // during the callback's own synchronous execution reflects the count at call time.
+      const lengthsAtCallTime = [];
+      const workflow = new Workflow({
+        result_per_step: true,
+        result_per_step_function: async (snapshot) => {
+          lengthsAtCallTime.push(snapshot.results.length);
+        },
+        steps: [
+          new Step({ name: 'step-1', callable: async () => 'a' }),
+          new Step({ name: 'step-2', callable: async () => 'b' }),
+        ],
+      });
+
+      await workflow.execute();
+
+      expect(lengthsAtCallTime).toEqual([0, 1]);
+      expect(workflow.results).toHaveLength(2);
+    });
+
+    it('should invoke result_per_step_function for a failed step, with status already "failed" in the snapshot', async () => {
+      let snapshot;
+      const workflow = new Workflow({
+        result_per_step: true,
+        result_per_step_function: async (arg) => { snapshot = arg; },
+        steps: [
+          new Step({ name: 'failing-step', callable: async () => { throw new Error('boom'); } }),
+        ],
+      });
+
+      await workflow.execute();
+
+      expect(snapshot).toBeDefined();
+      // markAsFailed() runs before prepareResult() on the failure path, so the
+      // snapshot already reflects the failed status - unlike the success path,
+      // where the workflow is still "running" at snapshot time.
+      expect(snapshot.status).toBe(State.get('statuses.workflow').FAILED);
+    });
+
+    it('should share live object/array references (results, sessions, timing) rather than deep-cloning them', async () => {
+      const snapshots = [];
+      const workflow = new Workflow({
+        result_per_step: true,
+        result_per_step_function: async (snapshot) => { snapshots.push(snapshot); },
+        steps: [
+          new Step({ name: 'step-1', callable: async () => 'a' }),
+          new Step({ name: 'step-2', callable: async () => 'b' }),
+        ],
+      });
+
+      await workflow.execute();
+
+      // Both snapshots' `results` point at the same live array, so inspecting them
+      // after the fact shows the final state for both, not what existed at call time.
+      expect(snapshots[0].results).toBe(snapshots[1].results);
+      expect(snapshots[0].results).toBe(workflow.results);
+      expect(snapshots[0].results).toHaveLength(2);
+    });
+
+    it('should propagate a rejection from result_per_step_function', async () => {
+      const workflow = new Workflow({
+        result_per_step: true,
+        result_per_step_function: async () => { throw new Error('callback failed'); },
+        steps: [new Step({ name: 'step-1', callable: async () => 'a' })],
+      });
+
+      await expect(workflow.execute()).rejects.toThrow('callback failed');
+    });
+
+    it('should not persist result_per_step/result_per_step_function through prepareForSerialization', () => {
+      const workflow = new Workflow({
+        result_per_step: true,
+        result_per_step_function: async () => {},
+      });
+
+      const serialized = workflow.prepareForSerialization();
+
+      expect(serialized.result_per_step).toBeUndefined();
+      expect(serialized.result_per_step_function).toBeUndefined();
     });
   });
 
@@ -822,13 +1035,13 @@ describe('Workflow', () => {
       expect(workflow.steps_by_id[step.id]).toBe(step);
     });
 
-    it('should set parentWorkflowId on the step', () => {
+    it('should set parent_workflow_id on the step', () => {
       const workflow = new Workflow({});
       const step = new Step({ name: 'new-step' });
       
       workflow.unshiftStep(step);
       
-      expect(step.parentWorkflowId).toBe(workflow.id);
+      expect(step.parent_workflow_id).toBe(workflow.id);
     });
 
     it('should throw error for invalid step', () => {
@@ -876,7 +1089,7 @@ describe('Workflow', () => {
       
       expect(() => {
         workflow.steps = [validStep, invalidStep];
-      }).toThrow('Invalid step type. Step at index 1 is not an instance of Step.');
+      }).toThrow('Invalid input. Must be an instance of Step.');
     });
   });
 
@@ -954,7 +1167,7 @@ describe('Workflow', () => {
         name: 'step-1',
         callable: async function() {
           results.push('step1');
-          const workflow = State.get('workflows')[this.parentWorkflowId];
+          const workflow = State.get('workflows')[this.parent_workflow_id];
           const dynamicStep = new Step({
             name: 'dynamic-step',
             callable: async () => {
@@ -1034,7 +1247,7 @@ describe('Workflow', () => {
         name: 'step-1',
         callable: async function() {
           if (pauseOnFirst) {
-            const wf = State.get('workflows')[this.parentWorkflowId];
+            const wf = State.get('workflows')[this.parent_workflow_id];
             wf.pause();
             pauseOnFirst = false;
           }
@@ -1061,7 +1274,7 @@ describe('Workflow', () => {
       const step = new Step({
         name: 'step-1',
         callable: async function() {
-          const wf = State.get('workflows')[this.parentWorkflowId];
+          const wf = State.get('workflows')[this.parent_workflow_id];
           wf.pause();
           return 'result';
         }
@@ -1119,6 +1332,247 @@ describe('Workflow', () => {
 
       expect(session.sessions).toBeUndefined();
       expect(() => JSON.stringify(session)).not.toThrow();
+    });
+  });
+
+  describe('prepareForSerialization / serialize / toJSON', () => {
+    it('should include core workflow metadata', async () => {
+      const step = new Step({ name: 'step-1', callable: async () => 'result' });
+      const workflow = new Workflow({ name: 'meta-workflow', steps: [step] });
+
+      const serialized = workflow.prepareForSerialization();
+
+      expect(serialized).toMatchObject({
+        id: workflow.id,
+        current_session_id: workflow.current_session_id,
+        current_step: workflow.current_step,
+        exit_on_error: false,
+        name: 'meta-workflow',
+        status: State.get('statuses.workflow').CREATED,
+        throw_on_empty: false,
+      });
+      expect(serialized.steps).toEqual([step.prepareForSerialization()]);
+    });
+
+    it('should include current_step so a resume can be reconstructed after reload', async () => {
+      const step1 = new Step({
+        name: 'step-1',
+        callable: async function() {
+          const workflow = State.get('workflows')[this.parent_workflow_id];
+          workflow.should_pause = true;
+        }
+      });
+      const step2 = new Step({ name: 'step-2', callable: async () => 'done' });
+      const workflow = new Workflow({ steps: [step1, step2] });
+
+      await workflow.execute();
+
+      expect(workflow.prepareForSerialization().current_step).toBe(step1.id);
+    });
+
+    it('toJSON should return the same shape as prepareForSerialization', () => {
+      const workflow = new Workflow({ name: 'json-workflow' });
+
+      expect(workflow.toJSON()).toEqual(workflow.prepareForSerialization());
+    });
+
+    it('should be used automatically by JSON.stringify', () => {
+      const workflow = new Workflow({ name: 'auto-json-workflow' });
+
+      // Round-trip both sides through JSON so Date fields compare as strings on both.
+      expect(JSON.parse(JSON.stringify(workflow))).toEqual(
+        JSON.parse(JSON.stringify(workflow.prepareForSerialization()))
+      );
+    });
+
+    it('serialize() should return a JSON string matching prepareForSerialization', () => {
+      const step = new Step({ name: 'step-1', callable: async function namedCallable() {} });
+      const workflow = new Workflow({ name: 'serialize-workflow', steps: [step] });
+
+      expect(JSON.parse(workflow.serialize())).toEqual(
+        JSON.parse(JSON.stringify(workflow.prepareForSerialization()))
+      );
+    });
+  });
+
+  describe('hydrate / hydrateSerialized', () => {
+    it('should throw when hydrateSerialized is given a non-string', () => {
+      expect(() => Workflow.hydrateSerialized({ not: 'a string' })).toThrow(
+        'Invalid serialized workflow. Must be a string.'
+      );
+    });
+
+    it('should throw when hydrate is given null', () => {
+      expect(() => Workflow.hydrate(null)).toThrow('Invalid parsed workflow. Must be a valid object.');
+    });
+
+    it('should throw when hydrate is given a non-object', () => {
+      expect(() => Workflow.hydrate('not an object')).toThrow('Invalid parsed workflow. Must be a valid object.');
+    });
+
+    it('should preserve the original workflow id, not generate a new one', () => {
+      const original = new Workflow({ name: 'id-preserving-workflow' });
+
+      const hydrated = Workflow.hydrate(original.prepareForSerialization());
+
+      expect(hydrated.id).toBe(original.id);
+    });
+
+    it('should register the hydrated workflow under its real id in the workflows registry', () => {
+      const original = new Workflow({ name: 'registry-workflow' });
+
+      const hydrated = Workflow.hydrate(original.prepareForSerialization());
+
+      const workflows = State.get('workflows');
+      expect(workflows[hydrated.id]).toBe(hydrated);
+    });
+
+    it('should not leave a stale entry for the constructor-generated id', () => {
+      const original = new Workflow({ name: 'no-stale-entry-workflow' });
+
+      const hydrated = Workflow.hydrate(original.prepareForSerialization());
+
+      const workflows = State.get('workflows');
+      const staleEntries = Object.keys(workflows).filter(
+        (id) => id !== hydrated.id && workflows[id] === hydrated
+      );
+      expect(staleEntries).toHaveLength(0);
+    });
+
+    it('should set each step\'s parent_workflow_id to the real (restored) workflow id', () => {
+      const registry = new CallableRegistry();
+      registry.register('callable', async () => 'result');
+
+      const step = new Step({ name: 'step-1', callable: async () => 'result' });
+      const original = new Workflow({ name: 'parent-id-workflow', steps: [step] });
+
+      const hydrated = Workflow.hydrate(original.prepareForSerialization(), registry);
+
+      hydrated.steps.forEach((hydratedStep) => {
+        expect(hydratedStep.parent_workflow_id).toBe(hydrated.id);
+      });
+    });
+
+    it('should restore current_step, status, timing, and results', async () => {
+      const registry = new CallableRegistry();
+      registry.register('callable', async () => 'done');
+
+      const step1 = new Step({
+        name: 'step-1',
+        // Note: this callable's inferred name would collide with step2's below
+        // ("callable", from being assigned to the `callable:` object key) - give
+        // it an explicit name so hydration resolves each independently.
+        callable: async function pauseStep() {
+          const workflow = State.get('workflows')[this.parent_workflow_id];
+          workflow.should_pause = true;
+        }
+      });
+      const step2 = new Step({ name: 'step-2', callable: async () => 'done' });
+      const original = new Workflow({ steps: [step1, step2] });
+
+      registry.register('pauseStep', step1._callable);
+
+      await original.execute();
+
+      const hydrated = Workflow.hydrate(original.prepareForSerialization(), registry);
+
+      expect(hydrated.current_step).toBe(step1.id);
+      expect(hydrated.status).toBe(State.get('statuses.workflow').PAUSED);
+      expect(hydrated.results).toEqual(original.results);
+      expect(hydrated.timing).toEqual(original.timing);
+    });
+
+    it('should restore sessions', async () => {
+      const registry = new CallableRegistry();
+      registry.register('callable', async () => 'result');
+
+      const step = new Step({ name: 'step-1', callable: async () => 'result' });
+      const original = new Workflow({ steps: [step] });
+
+      await original.execute();
+
+      const hydrated = Workflow.hydrate(original.prepareForSerialization(), registry);
+
+      expect(hydrated.sessions).toEqual(original.sessions);
+    });
+
+    it('should rebuild steps as their original subclass, not plain Step', () => {
+      const registry = new CallableRegistry();
+      registry.register('perIteration', async function perIteration() {});
+      registry.register('true_callable', async () => {});
+      registry.register('false_callable', async () => {});
+      registry.register('callable', async () => 'x');
+
+      const original = new Workflow({
+        steps: [
+          new LoopStep({ loop_type: loop_types.FOR, iterations: 1, callable: registry.get('perIteration') }),
+          new ConditionalStep({ conditional: { subject: true, operator: '===', value: true } }),
+          new Step({ name: 'plain-step', callable: async () => 'x' }),
+        ],
+      });
+
+      const hydrated = Workflow.hydrate(original.prepareForSerialization(), registry);
+
+      expect(hydrated.steps.map((s) => s.constructor)).toEqual([LoopStep, ConditionalStep, Step]);
+    });
+
+    it('should round-trip a paused workflow through hydrateSerialized and resume() without re-running completed steps', async () => {
+      const registry = new CallableRegistry();
+      let step1Calls = 0;
+      let step2Calls = 0;
+      let step3Calls = 0;
+
+      registry.register('step1Fn', async function step1Fn() {
+        step1Calls++;
+        return 'step1 done';
+      });
+      registry.register('step2Fn', async function step2Fn() {
+        step2Calls++;
+        const workflow = State.get('workflows')[this.parent_workflow_id];
+        workflow.should_pause = true;
+        return 'step2 done';
+      });
+      registry.register('step3Fn', async function step3Fn() {
+        step3Calls++;
+        return 'step3 done';
+      });
+
+      const original = new Workflow({
+        name: 'persisted-workflow',
+        callable_registry: registry,
+        steps: [
+          new Step({ name: 'step-1', callable: registry.get('step1Fn'), callable_registry_key: 'step1Fn' }),
+          new Step({ name: 'step-2', callable: registry.get('step2Fn'), callable_registry_key: 'step2Fn' }),
+          new Step({ name: 'step-3', callable: registry.get('step3Fn'), callable_registry_key: 'step3Fn' }),
+        ],
+      });
+
+      await original.execute();
+      expect(original.status).toBe(State.get('statuses.workflow').PAUSED);
+
+      const serialized = original.serialize();
+
+      // Simulate a fresh process: rebuild the registry, reload from the JSON string.
+      const freshRegistry = new CallableRegistry();
+      freshRegistry.register('step1Fn', async function step1Fn() { step1Calls++; return 'step1 done'; });
+      freshRegistry.register('step2Fn', async function step2Fn() {
+        step2Calls++;
+        const workflow = State.get('workflows')[this.parent_workflow_id];
+        workflow.should_pause = true;
+        return 'step2 done';
+      });
+      freshRegistry.register('step3Fn', async function step3Fn() { step3Calls++; return 'step3 done'; });
+
+      const reloaded = Workflow.hydrateSerialized(serialized, freshRegistry);
+      expect(reloaded.status).toBe(State.get('statuses.workflow').PAUSED);
+
+      await reloaded.resume();
+
+      expect(reloaded.status).toBe(State.get('statuses.workflow').COMPLETE);
+      expect(reloaded.results).toHaveLength(3);
+      expect(step1Calls).toBe(1);
+      expect(step2Calls).toBe(1);
+      expect(step3Calls).toBe(1);
     });
   });
 });

@@ -51,6 +51,39 @@ Resolves the subject (calling it if it is a function), assigns it to each case v
 
 **Returns:** The return value of the matched case's callable, or the `default_callable`'s return value.
 
+---
+
+### `prepareForSerialization()` → `Object`
+
+Extends [`Step.prepareForSerialization()`](step.md#prepareforserialization--object) with `cases` (each case serialized via its own `prepareForSerialization()`) and `default_callable`. The base `callable` field is reported as `null` — it's just the internal bound `switch` method, not real data, since `SwitchStep`'s constructor doesn't accept a `callable` option.
+
+**Returns:** The `Step` fields (with `callable: null`) plus `cases`, `default_callable` (via [`Step.serializeCallableField()`](step.md#static-serializecallablefieldcallable--objectnull)), and `subject` (or `null` if it's a function — there's no `CallableRegistry`-style mechanism for a function-valued subject).
+
+```
+{
+  ...,                          // Step fields — see Step § prepareForSerialization()
+  callable: null,
+  cases: [...],                  // each a Case's own prepareForSerialization() — see Case § prepareForSerialization()
+  default_callable: { type: 'function', value: string } | { type: 'step' | 'workflow', value: {...} },
+  subject: any | null
+}
+```
+
+---
+
+### `static hydrate(parsed_step, callableRegistry?)` → `SwitchStep`
+
+Hydrates each entry in `cases` via [`Step.hydrateAny()`](step.md#static-hydrateanyparsed_step-callableregistry--step) (so a `Case` comes back as a `Case`, not a plain `Step`), resolves `default_callable` via `Step.hydrateCallableField()`, then delegates to `super.hydrate()`.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `parsed_step` | `Object` | A parsed step object (e.g., from `JSON.parse()`). |
+| `callableRegistry` | `CallableRegistry\|null` | Registry used to resolve function callables (the default callable, and any case's own function `callable`). |
+
+**Returns:** A hydrated `SwitchStep` instance.
+
 ## Events
 
 Emitted on `State.get('events.step')`:
@@ -231,6 +264,7 @@ console.log(result.result); // { ui: 'green', label: 'Active' }
 - [Case](case.md) — The preferred way to define cases in a `SwitchStep`.
 - [LogicStep](logic_step.md) — Can be used as a case; requires `conditional.subject` to be set.
 - [ConditionalStep](conditional_step.md) — Simpler two-branch alternative.
-- [Step](step.md) — Parent class.
+- [Step § Persistence](step.md#persistence) — General serialization/hydration model.
+- [CallableRegistry](../callable_registry.md) — Resolves function callables (default and case callables) by name.
 - [conditional_step_comparators](../../../enums/conditional_step_comparators.md) — Available operators.
 - [step_event_names](../../../enums/step_event_names.md) — `SWITCH_CASE_MATCHED`.

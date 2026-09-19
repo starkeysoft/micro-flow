@@ -3,6 +3,7 @@ import ConditionalStep from '../src/classes/steps/conditional_step.js';
 import LogicStep from '../src/classes/steps/logic_step.js';
 import Step from '../src/classes/steps/step.js';
 import Workflow from '../src/classes/workflow.js';
+import CallableRegistry from '../src/classes/callable_registry.js';
 import State from '../src/classes/state.js';
 import { conditional_step_comparators, step_types } from '../src/enums/index.js';
 
@@ -1009,12 +1010,12 @@ describe('ConditionalStep', () => {
     });
   });
 
-  describe('parentWorkflowId propagation', () => {
-    it('should propagate parentWorkflowId to nested steps', async () => {
+  describe('parent_workflow_id propagation', () => {
+    it('should propagate parent_workflow_id to nested steps', async () => {
       const innerStep = new Step({
         name: 'inner',
         callable: async function() {
-          return this.parentWorkflowId;
+          return this.parent_workflow_id;
         }
       });
 
@@ -1036,6 +1037,202 @@ describe('ConditionalStep', () => {
 
       // Path: workflow result -> conditional step data -> conditional result -> inner step -> step result
       expect(result.results[0].data.result.result.result).toBe(workflow.id);
+    });
+  });
+
+  describe('prepareForSerialization', () => {
+    it('should include class_name "conditional"', () => {
+      const step = new ConditionalStep({
+        conditional: { subject: true, operator: '===', value: true },
+      });
+
+      expect(step.prepareForSerialization().class_name).toBe('conditional');
+    });
+
+    it('should serialize the base callable as null, since it is internal wiring', () => {
+      const step = new ConditionalStep({
+        conditional: { subject: true, operator: '===', value: true },
+      });
+
+      expect(step.prepareForSerialization().callable).toBeNull();
+    });
+
+    it('should serialize true_callable/false_callable functions by name, not their bound wrappers', () => {
+      async function trueBranch() {}
+      async function falseBranch() {}
+
+      const step = new ConditionalStep({
+        conditional: { subject: true, operator: '===', value: true },
+        true_callable: trueBranch,
+        false_callable: falseBranch,
+      });
+
+      const serialized = step.prepareForSerialization();
+
+      expect(serialized.true_callable).toEqual({ type: 'function', value: 'trueBranch' });
+      expect(serialized.false_callable).toEqual({ type: 'function', value: 'falseBranch' });
+    });
+
+    it('should serialize a Step true_callable as a nested step descriptor', () => {
+      const innerStep = new Step({ name: 'inner-true', callable: async () => 'inner' });
+      const step = new ConditionalStep({
+        conditional: { subject: true, operator: '===', value: true },
+        true_callable: innerStep,
+      });
+
+      expect(step.prepareForSerialization().true_callable).toEqual({
+        type: 'step',
+        value: innerStep.prepareForSerialization(),
+      });
+    });
+
+    it('should include the conditional configuration', () => {
+      const step = new ConditionalStep({
+        conditional: { subject: 5, operator: '>', value: 3 },
+      });
+
+      expect(step.prepareForSerialization().conditional).toEqual({
+        subject: 5,
+        operator: '>',
+        value: 3,
+      });
+    });
+  });
+
+  describe('hydrate / hydrateSerialized', () => {
+    it('should round-trip and execute the true branch when the condition is met', async () => {
+      const registry = new CallableRegistry();
+      registry.register('trueBranch', async function trueBranch() {
+        return 'true-branch-ran';
+      });
+      registry.register('falseBranch', async function falseBranch() {
+        return 'false-branch-ran';
+      });
+
+      const original = new ConditionalStep({
+        name: 'cond-step',
+        conditional: { subject: true, operator: '===', value: true },
+        true_callable: registry.get('trueBranch'),
+        false_callable: registry.get('falseBranch'),
+      });
+
+      const hydrated = ConditionalStep.hydrate(original.prepareForSerialization(), registry);
+
+      expect(hydrated).toBeInstanceOf(ConditionalStep);
+      expect(hydrated.id).toBe(original.id);
+
+      const result = await hydrated.execute();
+
+      expect(result.result.result).toBe('true-branch-ran');
+    });
+
+    it('should round-trip and execute the false branch when the condition is not met', async () => {
+      const registry = new CallableRegistry();
+      registry.register('trueBranch', async function trueBranch() { return 'true-branch-ran'; });
+      registry.register('falseBranch', async function falseBranch() { return 'false-branch-ran'; });
+
+      const original = new ConditionalStep({
+        name: 'cond-step',
+        conditional: { subject: false, operator: '===', value: true },
+        true_callable: registry.get('trueBranch'),
+        false_callable: registry.get('falseBranch'),
+      });
+
+      const hydrated = ConditionalStep.hydrate(original.prepareForSerialization(), registry);
+      const result = await hydrated.execute();
+
+      expect(result.result.result).toBe('false-branch-ran');
+    });
+
+    it('should dispatch through Step.hydrateAny to a ConditionalStep instance, not a plain Step', () => {
+      const registry = new CallableRegistry();
+      registry.register('trueBranch', async function trueBranch() { return 'x'; });
+      registry.register('falseBranch', async function falseBranch() { return 'y'; });
+
+      const original = new ConditionalStep({
+        conditional: { subject: true, operator: '===', value: true },
+        true_callable: registry.get('trueBranch'),
+        false_callable: registry.get('falseBranch'),
+      });
+
+      const hydrated = Step.hydrateAny(original.prepareForSerialization(), registry);
+
+      expect(hydrated).toBeInstanceOf(ConditionalStep);
+      expect(hydrated.constructor).toBe(ConditionalStep);
+    });
+
+    it('should hydrate a nested Step true_callable back into a working Step', async () => {
+      const innerStep = new Step({ name: 'inner-true', callable: async function innerCallable() { return 'inner-ran'; } });
+      const original = new ConditionalStep({
+        conditional: { subject: true, operator: '===', value: true },
+        true_callable: innerStep,
+      });
+
+      const registry = new CallableRegistry();
+      registry.register('innerCallable', async function innerCallable() { return 'inner-ran'; });
+      registry.register('false_callable', async () => {});
+
+      const hydrated = ConditionalStep.hydrate(original.prepareForSerialization(), registry);
+      const result = await hydrated.execute();
+
+      // result -> conditional() output -> executed inner Step's own serialized result
+      expect(result.result.result.result).toBe('inner-ran');
+    });
+
+    it('should throw when the true_callable function is missing from the registry', () => {
+      const original = new ConditionalStep({
+        conditional: { subject: true, operator: '===', value: true },
+        true_callable: async function unregisteredBranch() {},
+      });
+
+      expect(() => ConditionalStep.hydrate(original.prepareForSerialization())).toThrow(
+        /not found in registry or registry not provided/
+      );
+    });
+
+    it('should serialize by true_callable_registry_key/false_callable_registry_key when set, ignoring the callables\' own names', async () => {
+      const registry = new CallableRegistry();
+      registry.register('trueKey', async function actualTrueName() { return 'true'; });
+      registry.register('falseKey', async function actualFalseName() { return 'false'; });
+
+      const original = new ConditionalStep({
+        conditional: { subject: true, operator: '===', value: true },
+        true_callable: registry.get('trueKey'),
+        false_callable: registry.get('falseKey'),
+        true_callable_registry_key: 'trueKey',
+        false_callable_registry_key: 'falseKey',
+      });
+
+      const serialized = original.prepareForSerialization();
+      expect(serialized.true_callable).toEqual({ type: 'function', value: 'trueKey' });
+      expect(serialized.false_callable).toEqual({ type: 'function', value: 'falseKey' });
+
+      const hydrated = ConditionalStep.hydrate(serialized, registry);
+      const result = await hydrated.execute();
+
+      expect(result.result.result).toBe('true');
+    });
+
+    it('should preserve true_callable_registry_key/false_callable_registry_key across repeated hydrate/serialize cycles', () => {
+      const registry = new CallableRegistry();
+      registry.register('trueKey', async function actualTrueName() {});
+      registry.register('falseKey', async function actualFalseName() {});
+
+      const original = new ConditionalStep({
+        conditional: { subject: true, operator: '===', value: true },
+        true_callable: registry.get('trueKey'),
+        false_callable: registry.get('falseKey'),
+        true_callable_registry_key: 'trueKey',
+        false_callable_registry_key: 'falseKey',
+      });
+
+      const roundTwice = ConditionalStep.hydrate(
+        ConditionalStep.hydrate(original.prepareForSerialization(), registry).prepareForSerialization(),
+        registry
+      );
+
+      expect(roundTwice.prepareForSerialization().true_callable).toEqual({ type: 'function', value: 'trueKey' });
+      expect(roundTwice.prepareForSerialization().false_callable).toEqual({ type: 'function', value: 'falseKey' });
     });
   });
 });

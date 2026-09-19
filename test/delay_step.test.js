@@ -383,4 +383,91 @@ describe('DelayStep', () => {
       expect(State.get('delay.completed')).toBe(true);
     });
   });
+
+  describe('prepareForSerialization', () => {
+    it('should include class_name "delay"', () => {
+      const step = new DelayStep({});
+
+      expect(step.prepareForSerialization().class_name).toBe('delay');
+    });
+
+    it('should serialize the base callable as null, since it is internal wiring', () => {
+      const step = new DelayStep({});
+
+      expect(step.prepareForSerialization().callable).toBeNull();
+    });
+
+    it('should include delay_type, absolute_timestamp, and relative_delay_ms', () => {
+      const timestamp = new Date('2030-01-01T00:00:00.000Z');
+      const step = new DelayStep({
+        delay_type: delay_types.ABSOLUTE,
+        absolute_timestamp: timestamp,
+        relative_delay_ms: 5000,
+      });
+
+      const serialized = step.prepareForSerialization();
+
+      expect(serialized.delay_type).toBe(delay_types.ABSOLUTE);
+      expect(serialized.absolute_timestamp).toEqual(timestamp);
+      expect(serialized.relative_delay_ms).toBe(5000);
+    });
+
+    it('should be JSON-safe', () => {
+      const step = new DelayStep({ delay_type: delay_types.RELATIVE, relative_delay_ms: 100 });
+
+      expect(() => JSON.parse(JSON.stringify(step.prepareForSerialization()))).not.toThrow();
+    });
+  });
+
+  describe('hydrate / hydrateSerialized', () => {
+    it('should round-trip a relative delay step without needing a callable registry', async () => {
+      const original = new DelayStep({
+        name: 'relative-delay',
+        delay_type: delay_types.RELATIVE,
+        relative_delay_ms: 0,
+      });
+
+      const hydrated = DelayStep.hydrate(original.prepareForSerialization());
+
+      expect(hydrated).toBeInstanceOf(DelayStep);
+      expect(hydrated.id).toBe(original.id);
+      expect(hydrated.delay_type).toBe(delay_types.RELATIVE);
+
+      const result = await hydrated.execute();
+      expect(result.result.delayed).toBe(false);
+    });
+
+    it('should round-trip an absolute delay step, preserving the timestamp', () => {
+      const timestamp = new Date('2030-01-01T00:00:00.000Z');
+      const original = new DelayStep({
+        delay_type: delay_types.ABSOLUTE,
+        absolute_timestamp: timestamp,
+      });
+
+      const hydrated = DelayStep.hydrate(original.prepareForSerialization());
+
+      expect(hydrated.absolute_timestamp.toISOString()).toBe(timestamp.toISOString());
+    });
+
+    it('should dispatch through Step.hydrateAny to a DelayStep instance, not a plain Step', () => {
+      const original = new DelayStep({ delay_type: delay_types.RELATIVE, relative_delay_ms: 0 });
+
+      const hydrated = Step.hydrateAny(original.prepareForSerialization());
+
+      expect(hydrated.constructor).toBe(DelayStep);
+    });
+
+    it('should round-trip through hydrateSerialized (JSON string) and preserve the absolute timestamp', () => {
+      const timestamp = new Date('2031-06-15T12:00:00.000Z');
+      const original = new DelayStep({
+        delay_type: delay_types.ABSOLUTE,
+        absolute_timestamp: timestamp,
+      });
+
+      const hydrated = DelayStep.hydrateSerialized(original.serialize());
+
+      expect(hydrated).toBeInstanceOf(DelayStep);
+      expect(hydrated.absolute_timestamp.toISOString()).toBe(timestamp.toISOString());
+    });
+  });
 });

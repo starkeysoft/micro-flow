@@ -55,6 +55,41 @@ Core conditional logic. Calls `checkCondition()`, then executes either `true_cal
 
 **Returns:** `{ message: 'True branch executed' | 'False branch executed', result: <branch return value> }`
 
+---
+
+### `prepareForSerialization()` → `Object`
+
+Extends [`LogicStep.prepareForSerialization()`](logic_step.md#prepareforserialization--object) with the resolved `true_callable`/`false_callable`. The base `callable` field is reported as `null` — it's just the internal bound `conditional` method, not real data, since `ConditionalStep`'s constructor doesn't accept a `callable` option.
+
+**Returns:** The `LogicStep` fields (with `callable: null`) plus `true_callable`/`false_callable`, each serialized via [`Step.serializeCallableField()`](step.md#static-serializecallablefieldcallable--objectnull):
+
+```
+{
+  ...,                          // Step/LogicStep fields — see Step § prepareForSerialization()
+  conditional: { subject, operator, value },
+  callable: null,
+  true_callable: { type: 'function', value: string } | { type: 'step' | 'workflow', value: {...} },
+  false_callable: { type: 'function', value: string } | { type: 'step' | 'workflow', value: {...} }
+}
+```
+
+**Note:** Branches are serialized from the *unbound* originals, not `this.true_callable`/`this.false_callable` — binding a function renames it (e.g. `approvedBranch` → `bound approvedBranch`), which would break the by-name lookup used to resolve a function branch from a `CallableRegistry` on hydration.
+
+---
+
+### `static hydrate(parsed_step, callableRegistry?)` → `ConditionalStep`
+
+Resolves `true_callable`/`false_callable` via [`Step.hydrateCallableField()`](step.md#static-hydratecallablefieldserialized-callableregistry--functionstepworkflowundefined), then delegates to `super.hydrate()`.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `parsed_step` | `Object` | A parsed step object (e.g., from `JSON.parse()`). |
+| `callableRegistry` | `CallableRegistry\|null` | Registry used to resolve function branch callables. |
+
+**Returns:** A hydrated `ConditionalStep` instance.
+
 ## Events
 
 Emitted on `State.get('events.step')`:
@@ -198,10 +233,36 @@ const alert = new ConditionalStep({
 await alert.execute(); // Error rate within acceptable range
 ```
 
+### Serializing and reloading a branch
+
+```javascript
+import { ConditionalStep, Step, CallableRegistry } from '@ronaldroe/micro-flow';
+
+const registry = new CallableRegistry();
+registry.register('approvedBranch', async function approvedBranch() { return { approved: true }; });
+registry.register('rejectedBranch', async function rejectedBranch() { return { approved: false }; });
+
+const step = new ConditionalStep({
+  name: 'approval-check',
+  conditional: { subject: 100, operator: '>', value: 50 },
+  true_callable: registry.get('approvedBranch'),
+  false_callable: registry.get('rejectedBranch'),
+});
+
+const saved = step.serialize();
+const hydrated = Step.hydrateSerialized(saved, registry); // dispatches back to ConditionalStep
+console.log(hydrated instanceof ConditionalStep); // true
+
+const result = await hydrated.execute();
+console.log(result.result.result); // { approved: true }
+```
+
 ## Related
 
 - [LogicStep](logic_step.md) — Parent class providing `checkCondition()`.
 - [FlowControlStep](flow_control_step.md) — Alters workflow flow instead of branching.
 - [SwitchStep](switch_step.md) — Multi-branch alternative for more than two outcomes.
+- [Step § Persistence](step.md#persistence) — General serialization/hydration model.
+- [CallableRegistry](../callable_registry.md) — Resolves function branch callables by name.
 - [conditional_step_comparators](../../../enums/conditional_step_comparators.md) — Available operators.
 - [step_event_names](../../../enums/step_event_names.md) — Event names.

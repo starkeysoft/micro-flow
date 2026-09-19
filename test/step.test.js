@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Step from '../src/classes/steps/step.js';
 import Workflow from '../src/classes/workflow.js';
+import CallableRegistry from '../src/classes/callable_registry.js';
 import State from '../src/classes/state.js';
 import { step_types, sub_step_types, base_types } from '../src/enums/index.js';
 
@@ -41,9 +42,9 @@ describe('Step', () => {
     });
 
     it('should set sub_step_type when provided', () => {
-      const step = new Step({ sub_step_type: sub_step_types.ConditionalStep });
+      const step = new Step({ sub_step_type: sub_step_types.conditional_step });
 
-      expect(step.sub_step_type).toBe(sub_step_types.ConditionalStep);
+      expect(step.sub_step_type).toBe(sub_step_types.conditional_step);
     });
 
     it('should set callable when provided', () => {
@@ -108,7 +109,7 @@ describe('Step', () => {
       expect(result.result).toBe('test result');
     });
 
-    it('should return the step instance', async () => {
+    it('should return the serialized step', async () => {
       const step = new Step({
         name: 'test-step',
         callable: async () => 'result'
@@ -116,7 +117,7 @@ describe('Step', () => {
 
       const result = await step.execute();
 
-      expect(result).toBe(step);
+      expect(result).toEqual(step.prepareForSerialization());
     });
 
     it('should set status to RUNNING during execution', async () => {
@@ -217,7 +218,7 @@ describe('Step', () => {
 
       const result = await step.execute();
 
-      expect(result).toBe(step);
+      expect(result).toEqual(step.prepareForSerialization());
       expect(step.errors).toHaveLength(1);
     });
 
@@ -584,7 +585,7 @@ describe('Step', () => {
     it('should set a value on the parent workflow', () => {
       const workflow = new Workflow({ name: 'parent-workflow' });
       const step = new Step({ name: 'child-step' });
-      step.parentWorkflowId = workflow.id;
+      step.parent_workflow_id = workflow.id;
 
       step.setParentWorkflowValue(workflow.id, 'customProperty', 'customValue');
 
@@ -677,22 +678,22 @@ describe('Step', () => {
       expect(result.status).toBe(State.get('statuses.workflow').COMPLETE);
     });
 
-    it('should set parentWorkflowId on nested Step', () => {
+    it('should set parent_workflow_id on nested Step', () => {
       const outerStep = new Step({ name: 'outer' });
-      outerStep.parentWorkflowId = 'test-workflow-id';
+      outerStep.parent_workflow_id = 'test-workflow-id';
 
       const innerStep = new Step({ name: 'inner' });
       outerStep.callable = innerStep;
 
-      expect(innerStep.parentWorkflowId).toBe('test-workflow-id');
+      expect(innerStep.parent_workflow_id).toBe('test-workflow-id');
     });
 
-    it('should set parentWorkflowId to null on nested Step when outer has no parent', () => {
+    it('should set parent_workflow_id to null on nested Step when outer has no parent', () => {
       const outerStep = new Step({ name: 'outer' });
       const innerStep = new Step({ name: 'inner' });
       outerStep.callable = innerStep;
 
-      expect(innerStep.parentWorkflowId).toBeNull();
+      expect(innerStep.parent_workflow_id).toBeNull();
     });
   });
 
@@ -958,6 +959,358 @@ describe('Step', () => {
 
       expect(result).toBe(emptyWorkflow);
       expect(emptyWorkflow.status).toBe(State.get('statuses.workflow').COMPLETE);
+    });
+  });
+
+  describe('static getCallableType', () => {
+    it('should return "function" for a function', () => {
+      expect(Step.getCallableType(async () => {})).toBe('function');
+    });
+
+    it('should return "step" for a Step instance', () => {
+      expect(Step.getCallableType(new Step({ name: 'inner' }))).toBe('step');
+    });
+
+    it('should return "workflow" for a Workflow instance', () => {
+      expect(Step.getCallableType(new Workflow({ name: 'wf' }))).toBe('workflow');
+    });
+
+    it('should throw for an invalid callable', () => {
+      expect(() => Step.getCallableType({ foo: 'bar' })).toThrow('Invalid callable type');
+    });
+  });
+
+  describe('step class registry', () => {
+    it('should register Step under its step_name', () => {
+      expect(Step.resolveStepClass('step')).toBe(Step);
+    });
+
+    it('should fall back to Step for an unknown class_name', () => {
+      expect(Step.resolveStepClass('totally-unknown-step-type')).toBe(Step);
+    });
+
+    it('should fall back to Step for an undefined class_name', () => {
+      expect(Step.resolveStepClass(undefined)).toBe(Step);
+    });
+
+    it('hydrateAny should dispatch to the resolved class\'s hydrate method', () => {
+      const step = new Step({ name: 'to-hydrate', callable: async function fn() {} });
+      const registry = new CallableRegistry();
+      registry.register('fn', step._callable);
+
+      const hydrated = Step.hydrateAny(step.prepareForSerialization(), registry);
+
+      expect(hydrated).toBeInstanceOf(Step);
+      expect(hydrated.id).toBe(step.id);
+    });
+  });
+
+  describe('serializeCallableField / hydrateCallableField', () => {
+    it('should serialize null/undefined callables to null', () => {
+      expect(Step.serializeCallableField(null)).toBeNull();
+      expect(Step.serializeCallableField(undefined)).toBeNull();
+    });
+
+    it('should serialize a function to a { type, value } descriptor keyed by name', () => {
+      async function namedFn() {}
+
+      expect(Step.serializeCallableField(namedFn)).toEqual({
+        type: 'function',
+        value: 'namedFn',
+      });
+    });
+
+    it('should serialize a Step to a { type, value } descriptor with the nested serialized step', () => {
+      const inner = new Step({ name: 'inner-step' });
+
+      expect(Step.serializeCallableField(inner)).toEqual({
+        type: 'step',
+        value: inner.prepareForSerialization(),
+      });
+    });
+
+    it('should serialize a Workflow to a { type, value } descriptor with the nested serialized workflow', () => {
+      const workflow = new Workflow({ name: 'inner-workflow' });
+
+      expect(Step.serializeCallableField(workflow)).toEqual({
+        type: 'workflow',
+        value: workflow.prepareForSerialization(),
+      });
+    });
+
+    it('should hydrate a null/undefined descriptor to undefined', () => {
+      expect(Step.hydrateCallableField(null)).toBeUndefined();
+      expect(Step.hydrateCallableField(undefined)).toBeUndefined();
+    });
+
+    it('should hydrate a function descriptor by looking it up in the registry', () => {
+      const fn = async () => 'value';
+      const registry = new CallableRegistry();
+      registry.register('myFn', fn);
+
+      const hydrated = Step.hydrateCallableField({ type: 'function', value: 'myFn' }, registry);
+
+      expect(hydrated).toBe(fn);
+    });
+
+    it('should throw when hydrating a function descriptor with no registry provided', () => {
+      expect(() => Step.hydrateCallableField({ type: 'function', value: 'myFn' })).toThrow(
+        'Callable registry key "myFn" not found in registry or registry not provided.'
+      );
+    });
+
+    it('should throw when hydrating a function descriptor missing from the registry', () => {
+      const registry = new CallableRegistry();
+
+      expect(() => Step.hydrateCallableField({ type: 'function', value: 'missingFn' }, registry)).toThrow(
+        'Callable registry key "missingFn" not found in registry or registry not provided.'
+      );
+    });
+
+    it('should hydrate a step descriptor back into a Step instance', () => {
+      const registry = new CallableRegistry();
+      registry.register('innerCallable', async function innerCallable() {});
+      const inner = new Step({ name: 'inner-step', callable: async function innerCallable() {} });
+      const descriptor = Step.serializeCallableField(inner);
+
+      const hydrated = Step.hydrateCallableField(descriptor, registry);
+
+      expect(hydrated).toBeInstanceOf(Step);
+      expect(hydrated.id).toBe(inner.id);
+      expect(hydrated.name).toBe('inner-step');
+    });
+
+    it('should hydrate a workflow descriptor back into a Workflow instance', () => {
+      const workflow = new Workflow({ name: 'inner-workflow' });
+      const descriptor = Step.serializeCallableField(workflow);
+
+      const hydrated = Step.hydrateCallableField(descriptor);
+
+      expect(hydrated).toBeInstanceOf(Workflow);
+      expect(hydrated.id).toBe(workflow.id);
+    });
+
+    it('should pass through an already-hydrated function unchanged', () => {
+      const fn = async () => {};
+
+      expect(Step.hydrateCallableField(fn)).toBe(fn);
+    });
+
+    it('should pass through an already-hydrated Step unchanged', () => {
+      const step = new Step({ name: 'already-hydrated' });
+
+      expect(Step.hydrateCallableField(step)).toBe(step);
+    });
+
+    it('should pass through an already-hydrated Workflow unchanged', () => {
+      const workflow = new Workflow({ name: 'already-hydrated' });
+
+      expect(Step.hydrateCallableField(workflow)).toBe(workflow);
+    });
+
+    it('should throw for a descriptor with an unknown type', () => {
+      expect(() => Step.hydrateCallableField({ type: 'bogus', value: 'x' })).toThrow(
+        'Unknown callable type "bogus" encountered during hydration.'
+      );
+    });
+  });
+
+  describe('prepareForSerialization', () => {
+    it('should include class_name matching the constructor\'s step_name', () => {
+      const step = new Step({ name: 'test-step' });
+
+      expect(step.prepareForSerialization().class_name).toBe('step');
+    });
+
+    it('should serialize a function callable by name when no registry key is set', () => {
+      async function myCallable() {}
+      const step = new Step({ name: 'fn-step', callable: myCallable });
+
+      expect(step.prepareForSerialization().callable).toEqual({
+        type: 'function',
+        value: 'myCallable',
+      });
+    });
+
+    it('should serialize the callable_registry_key when one is set, ignoring the callable\'s own name', () => {
+      async function myCallable() {}
+      const step = new Step({
+        name: 'fn-step',
+        callable: myCallable,
+        callable_registry_key: 'registeredName',
+      });
+
+      expect(step.prepareForSerialization().callable).toEqual({
+        type: 'function',
+        value: 'registeredName',
+      });
+    });
+
+    it('should serialize a Step callable as a nested step descriptor', () => {
+      const inner = new Step({ name: 'inner' });
+      const outer = new Step({ name: 'outer', callable: inner });
+
+      expect(outer.prepareForSerialization().callable).toEqual({
+        type: 'step',
+        value: inner.prepareForSerialization(),
+      });
+    });
+
+    it('should serialize a Workflow callable as a nested workflow descriptor', () => {
+      const innerWorkflow = new Workflow({ name: 'inner-wf' });
+      const outer = new Step({ name: 'outer', callable: innerWorkflow });
+
+      expect(outer.prepareForSerialization().callable).toEqual({
+        type: 'workflow',
+        value: innerWorkflow.prepareForSerialization(),
+      });
+    });
+
+    it('should include core metadata fields', () => {
+      const step = new Step({ name: 'meta-step', max_retries: 2, max_timeout_ms: 1000 });
+      const serialized = step.prepareForSerialization();
+
+      expect(serialized).toMatchObject({
+        id: step.id,
+        name: 'meta-step',
+        callable_type: 'function',
+        step_type: step_types.ACTION,
+        sub_step_type: null,
+        max_retries: 2,
+        max_timeout_ms: 1000,
+        retry_count: 0,
+        retry_results: [],
+        errors: [],
+        result: null,
+        parent_workflow_id: undefined,
+      });
+    });
+
+    it('should be JSON-safe (round-trippable through JSON.stringify/parse)', () => {
+      const step = new Step({ name: 'json-step', callable: async function namedFn() {} });
+
+      expect(() => JSON.parse(JSON.stringify(step.prepareForSerialization()))).not.toThrow();
+    });
+  });
+
+  describe('serialize / toJSON', () => {
+    it('should return a JSON string matching prepareForSerialization', () => {
+      const step = new Step({ name: 'serialize-step' });
+
+      expect(JSON.parse(step.serialize())).toEqual(step.prepareForSerialization());
+    });
+
+    it('toJSON should return the same shape as prepareForSerialization', () => {
+      const step = new Step({ name: 'json-step' });
+
+      expect(step.toJSON()).toEqual(step.prepareForSerialization());
+    });
+
+    it('should be used automatically by JSON.stringify', () => {
+      const step = new Step({ name: 'auto-json-step' });
+
+      expect(JSON.parse(JSON.stringify(step))).toEqual(step.prepareForSerialization());
+    });
+  });
+
+  describe('hydrate / hydrateSerialized', () => {
+    it('should round-trip a step with a registered function callable', async () => {
+      const registry = new CallableRegistry();
+      registry.register('greet', async function greet() {
+        return `hello, ${this.name}`;
+      });
+
+      const original = new Step({ name: 'greeter', callable: registry.get('greet'), callable_registry_key: 'greet' });
+      const serialized = original.serialize();
+
+      const hydrated = Step.hydrateSerialized(serialized, registry);
+
+      expect(hydrated).toBeInstanceOf(Step);
+      expect(hydrated.id).toBe(original.id);
+      expect(hydrated.name).toBe('greeter');
+
+      const result = await hydrated.execute();
+      expect(result.result).toBe('hello, greeter');
+    });
+
+    it('should preserve execution metadata across hydration', () => {
+      const registry = new CallableRegistry();
+      registry.register('callable', async () => {});
+
+      const original = new Step({ name: 'meta-step' });
+      original.retry_count = 2;
+      original.retry_results = [{ retry_count: 1, result: 'x' }];
+      original.errors = [new Error('boom')];
+      original.result = 'final-result';
+      original.status = State.get('statuses.step').FAILED;
+      original.parent_workflow_id = 'workflow-123';
+
+      const hydrated = Step.hydrate(original.prepareForSerialization(), registry);
+
+      expect(hydrated.retry_count).toBe(2);
+      expect(hydrated.retry_results).toEqual([{ retry_count: 1, result: 'x' }]);
+      expect(hydrated.errors).toHaveLength(1);
+      expect(hydrated.result).toBe('final-result');
+      expect(hydrated.status).toBe(State.get('statuses.step').FAILED);
+      expect(hydrated.parent_workflow_id).toBe('workflow-123');
+    });
+
+    it('should throw when a function callable\'s registry key cannot be resolved', () => {
+      const original = new Step({
+        name: 'unregistered-fn-step',
+        callable: async function myFn() {},
+      });
+
+      expect(() => Step.hydrate(original.prepareForSerialization())).toThrow(
+        /not found in registry or registry not provided/
+      );
+    });
+
+    it('should hydrate a Step callable back into a nested Step instance', async () => {
+      const registry = new CallableRegistry();
+      registry.register('callable', async () => 'inner-result');
+
+      const inner = new Step({ name: 'inner', callable: async () => 'inner-result' });
+      const outer = new Step({ name: 'outer', callable: inner });
+
+      const hydrated = Step.hydrate(outer.prepareForSerialization(), registry);
+      const result = await hydrated.execute();
+
+      expect(result).toBeInstanceOf(Step);
+      expect(result.result).toBe('inner-result');
+    });
+
+    it('should hydrate a Workflow callable back into a nested Workflow instance', async () => {
+      const registry = new CallableRegistry();
+      registry.register('callable', async () => 'wf-result');
+
+      const innerWorkflow = new Workflow({
+        name: 'inner-wf',
+        steps: [new Step({ name: 'wf-step', callable: async () => 'wf-result' })],
+      });
+      const outer = new Step({ name: 'outer', callable: innerWorkflow });
+
+      const hydrated = Step.hydrate(outer.prepareForSerialization(), registry);
+      const result = await hydrated.execute();
+
+      expect(result.status).toBe(State.get('statuses.workflow').COMPLETE);
+    });
+
+    it('should throw when hydrateSerialized is given a non-string', () => {
+      expect(() => Step.hydrateSerialized({ not: 'a string' })).toThrow(
+        'Invalid serialized step. Must be a string.'
+      );
+    });
+
+    it('hydrateSerialized should dispatch through hydrateAny using class_name', () => {
+      const registry = new CallableRegistry();
+      registry.register('callable', async () => {});
+
+      const step = new Step({ name: 'dispatch-step' });
+
+      const hydrated = Step.hydrateSerialized(step.serialize(), registry);
+
+      expect(hydrated.constructor).toBe(Step);
     });
   });
 });

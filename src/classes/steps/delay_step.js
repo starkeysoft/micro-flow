@@ -100,4 +100,22 @@ export default class DelayStep extends Step {
 
     return this.delay(delay_until);
   }
+
+  /**
+   * Inserts safely serializable properties of the step into a new object for serialization.
+   * @returns {Object} An object containing the step's properties ready for serialization.
+   */
+  prepareForSerialization() {
+    return {
+      ...super.prepareForSerialization(),
+      // The base `callable` is an internal wiring detail (the bound absolute/relative method) -
+      // DelayStep's constructor doesn't take a callable, so it isn't real data to persist.
+      callable: null,
+      delay_type: this.delay_type,
+      absolute_timestamp: this.absolute_timestamp,
+      relative_delay_ms: this.relative_delay_ms,
+    };
+  }
 }
+
+DelayStep.registerStepClass(DelayStep);

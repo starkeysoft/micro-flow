@@ -117,6 +117,23 @@ step.setConditional({ subject: 10, operator: '>=', value: 5 });
 console.log(step.checkCondition()); // true
 ```
 
+---
+
+### `prepareForSerialization()` → `Object`
+
+Extends [`Step.prepareForSerialization()`](step.md#prepareforserialization--object) with the step's `conditional` configuration.
+
+**Returns:** The base `Step` fields plus `conditional: { subject, operator, value }`.
+
+```
+{
+  ...,                          // Step fields — see Step § prepareForSerialization()
+  conditional: { subject, operator, value }
+}
+```
+
+**Note:** A function-valued `subject`/`value` (e.g. `subject: () => State.get('x')`) is **not** persisted — there's no `CallableRegistry`-style mechanism for conditional subjects/values, only for the plain `callable` field. `JSON.stringify` silently drops function-valued properties, so a hydrated step's conditional will be missing that value.
+
 ## Supported Operators
 
 | Enum Key | String Value | Description |
@@ -238,7 +255,7 @@ console.log(phoneCheck.checkCondition()); // true
 
 ## Related
 
-- [Step](step.md) — Parent class.
+- [Step](step.md) — Parent class. See [Step § Persistence](step.md#persistence) for how serialization/hydration works.
 - [ConditionalStep](conditional_step.md) — Branches based on `checkCondition()`.
 - [FlowControlStep](flow_control_step.md) — Breaks or skips the parent workflow.
 - [LoopStep](loop_step.md) — Loops while `checkCondition()` is true.

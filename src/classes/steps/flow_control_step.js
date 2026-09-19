@@ -54,7 +54,7 @@ export default class FlowControlStep extends LogicStep {
         this.getState('events.step.event_names.CONDITIONAL_TRUE_BRANCH_EXECUTED'),
         `Break condition met for step: ${this.name}`
       );
-      this.setParentWorkflowValue(this.parentWorkflowId, `should_${this.flow_control_type}`, true);
+      this.setParentWorkflowValue(this.parent_workflow_id, `should_${this.flow_control_type}`, true);
 
       return true;
     } else {
@@ -62,9 +62,25 @@ export default class FlowControlStep extends LogicStep {
         this.getState('events.step.event_names.CONDITIONAL_FALSE_BRANCH_EXECUTED'),
         `Break condition not met for step: ${this.name}`
       );
-      this.setParentWorkflowValue(this.parentWorkflowId, `should_${this.flow_control_type}`, false);
+      this.setParentWorkflowValue(this.parent_workflow_id, `should_${this.flow_control_type}`, false);
 
       return false;
     }
   }
+
+  /**
+   * Inserts safely serializable properties of the step into a new object for serialization.
+   * @returns {Object} An object containing the step's properties ready for serialization.
+   */
+  prepareForSerialization() {
+    return {
+      ...super.prepareForSerialization(),
+      // The base `callable` is an internal wiring detail (the bound `shouldFlowControl` method) -
+      // FlowControlStep's constructor doesn't take a callable, so it isn't real data to persist.
+      callable: null,
+      flow_control_type: this.flow_control_type,
+    };
+  }
 }
+
+FlowControlStep.registerStepClass(FlowControlStep);

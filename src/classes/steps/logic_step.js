@@ -18,10 +18,12 @@ export default class LogicStep extends Step {
    * @param {conditional_step_comparators|string} [options.conditional.operator] - Comparison operator.
    * @param {*|Function, optional} [options.conditional.value] - Value to compare against. Can be a function that returns the value.
    * @param {Function} [options.callable=async () => {}] - Function to execute.
+   * @param {string|null} [options.callable_registry_key=null] - Optional key to reference the callable to be rehydrated after serialization.
    */
   constructor({
     name,
     callable = async () => {},
+    callable_registry_key = null,
     conditional = {
       operator: null,
       subject: null,
@@ -31,7 +33,8 @@ export default class LogicStep extends Step {
     super({
       name,
       step_type: step_types.LOGIC,
-      callable
+      callable,
+      callable_registry_key,
     });
 
     this.setConditional(conditional);
@@ -44,16 +47,16 @@ export default class LogicStep extends Step {
    * @throws {Error} Throws if operator is unknown.
    */
   checkCondition() {
-    const rawSubject = this.conditional_config.subject;
-    const rawValue = this.conditional_config.value;
+    const raw_subject = this.conditional_config.subject;
+    const raw_value = this.conditional_config.value;
     const operator = this.conditional_config.operator;
     
     // Resolve subject - call it if it's a function
-    const subject = typeof rawSubject === 'function' ? rawSubject() : rawSubject;
+    const subject = typeof raw_subject === 'function' ? raw_subject() : raw_subject;
     
     // Don't resolve value for CUSTOM_FUNCTION - the value IS the function to call
-    const isCustomFunction = operator === this.getState('conditional_step_comparators.CUSTOM_FUNCTION');
-    const value = (!isCustomFunction && typeof rawValue === 'function') ? rawValue() : rawValue;
+    const is_custom_function = operator === this.getState('conditional_step_comparators.CUSTOM_FUNCTION');
+    const value = (!is_custom_function && typeof raw_value === 'function') ? raw_value() : raw_value;
 
     switch (operator) {
       case this.getState('conditional_step_comparators.STRICT_EQUALS'):
@@ -108,8 +111,8 @@ export default class LogicStep extends Step {
         if (typeof value !== 'string') {
           throw new Error(`Regex input must be a string.`);
         }
-        const notMatchRegex = new RegExp(value);
-        return !notMatchRegex.test(subject);
+        const not_match_regex = new RegExp(value);
+        return !not_match_regex.test(subject);
       case this.getState('conditional_step_comparators.STRING_STARTS_WITH'):
         return typeof subject === 'string' && typeof value === 'string' && subject.startsWith(value);
       case this.getState('conditional_step_comparators.STRING_ENDS_WITH'):
@@ -157,4 +160,19 @@ export default class LogicStep extends Step {
   setConditional(conditional) {
     this.conditional_config = { subject: conditional.subject, operator: conditional.operator, value: conditional.value };
   }
+
+  /**
+   * Inserts safely serializable properties of the step into a new object for serialization.
+   * Note: function-valued subject/value are not persisted - there's no registry for them,
+   * only the plain-callable field supports registry-based rehydration.
+   * @returns {Object} An object containing the step's properties ready for serialization.
+   */
+  prepareForSerialization() {
+    return {
+      ...super.prepareForSerialization(),
+      conditional: { ...this.conditional_config },
+    };
+  }
 }
+
+LogicStep.registerStepClass(LogicStep);

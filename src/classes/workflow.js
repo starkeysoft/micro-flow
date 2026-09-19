@@ -1,5 +1,7 @@
 import crypto from 'crypto';
 import Base from './base.js';
+import CallableRegistry from './callable_registry.js';
+import Step from './steps/step.js';
 import { base_types } from '../enums/index.js';
 
 /**
@@ -12,30 +14,44 @@ export default class Workflow extends Base {
    * Creates a new Workflow instance.
    * @param {Object} options - Configuration options.
    * @param {string} [options.name] - Name of the workflow.
+   * @param {CallableRegistry|null} [options.callable_registry=null] - Registry for callable objects.
    * @param {boolean} [options.exit_on_error=false] - Whether to exit on error.
    * @param {Array<Step>} [options.steps=[]] - Array of steps to add to the workflow.
    * @param {boolean} [options.throw_on_empty=false] - Whether to throw error if workflow is empty.
    */
   constructor({
     name,
+    callable_registry = null,
     exit_on_error = false,
+    result_per_step = false,
+    result_per_step_function = null,
     steps = [],
-    throw_on_empty = false
+    throw_on_empty = false,
   }) {
     super({ name, base_type: base_types.WORKFLOW });
-
-    this.initializeWorkflowState();
-
-    this.addSteps(steps);
-
-    this.exit_on_error = exit_on_error;
-    this.throw_on_empty = throw_on_empty;
-    this.sessions = {};
+    
+    this.callable_registry = callable_registry ?? new CallableRegistry();
     this.current_session_id = null;
+    this.exit_on_error = exit_on_error;
+    this.result_per_step = result_per_step;
+    this.sessions = {};
+    this.throw_on_empty = throw_on_empty;
+    this.result_per_step_function = result_per_step_function;
+
+    // _steps/steps_by_id must exist before initializeWorkflowState(): it reads this._steps
+    // (to set current_step) and logs, which serializes `this` - both need this._steps to
+    // already be an array, even when no steps are passed (addSteps([]) never calls addStep,
+    // so it wouldn't otherwise get initialized).
+    this._steps = [];
+    this.steps_by_id = {};
+    this.addSteps(steps);
+    this.initializeWorkflowState();
   }
 
   /**
    * Executes the workflow by running all steps in sequence.
+   * If the workflow is currently `paused`, resumes from the step after the one
+   * that was running when it paused, rather than starting over from the beginning.
    * @async
    * @returns {Promise<Workflow>} The workflow instance with execution results.
    * @throws {Error} Throws if workflow is empty and throw_on_empty is true.
@@ -51,13 +67,17 @@ export default class Workflow extends Base {
       }
 
       this.markAsComplete();
-      this.prepareResult('Workflow is empty', null);
+      await this.prepareResult('Workflow is empty', null);
       return this;
     }
-  
+
+    const is_resuming = this.status === this.getState('statuses.workflow').PAUSED;
+    const paused_at_index = this._steps.findIndex(step => step.id === this.current_step);
+    const start_index = is_resuming ? paused_at_index + 1 : 0;
+
     this.markAsRunning();
 
-    for (let i = 0; i < this._steps.length; i++) {
+    for (let i = start_index; i < this._steps.length; i++) {
       if (this.should_break) {
         this.log(this.getState('event_names.workflow').WORKFLOW_BREAK_EXECUTED, `Workflow "${this.name}" execution broken at step ${this._steps[i].name} - ${this._steps[i].id}.`);
         break;
@@ -76,10 +96,10 @@ export default class Workflow extends Base {
 
       try {
         const step_result = await this.step();
-        this.prepareResult('Success', step_result);
+        await this.prepareResult('Success', step_result);
       } catch (error) {
         this.markAsFailed();
-        this.prepareResult(`Workflow execution failed at step ${this.steps_by_id[this.current_step].name} - ${this.current_step}`, { error });
+        await this.prepareResult(`Workflow execution failed at step ${this.steps_by_id[this.current_step].name} - ${this.current_step}`, { error });
   
         if (this.exit_on_error) {
           return this;
@@ -94,7 +114,7 @@ export default class Workflow extends Base {
     }
 
     this.markAsComplete();
-    return this;
+    return this.prepareForSerialization();
   }
 
   /**
@@ -121,7 +141,6 @@ export default class Workflow extends Base {
   async step() {
     const step = this.steps_by_id[this.current_step];
 
-    step.parentWorkflowId = this.id;
     const result = await step.execute();
 
     if (step.status === this.getState('statuses.step.FAILED')) {
@@ -137,8 +156,10 @@ export default class Workflow extends Base {
    * @throws {Error} Throws if step is not a valid Step instance.
    */
   addStep(step) {
+    // This check only ensures that the getCallableType method exists,
+    // which is a characteristic of Step instances
     if (typeof step.getCallableType !== 'function') {
-      throw new Error('Invalid step type. Must be an instance of Step.');
+      throw new Error('Invalid input. Must be an instance of Step.');
     }
 
     if (!Array.isArray(this._steps)) {
@@ -151,7 +172,8 @@ export default class Workflow extends Base {
 
     this.steps_by_id[step.id] = step;
 
-    step.parentWorkflowId = this.id;
+    step.parent_workflow_id = this.id;
+    step.parent_workflow = this.prepareForSerialization();
     this._steps.push(step);
   }
 
@@ -166,7 +188,8 @@ export default class Workflow extends Base {
     }
 
     this.steps_by_id[step.id] = step;
-    step.parentWorkflowId = this.id;
+    step.parent_workflow_id = this.id;
+    step.parent_workflow = this.prepareForSerialization();
     this._steps.splice(index, 0, step);
   }
 
@@ -175,6 +198,10 @@ export default class Workflow extends Base {
    * @param {Step[]} steps - Array of steps to add.
    */
   addSteps(steps) {
+    if (!Array.isArray(steps)) {
+      throw new Error('Invalid input. Must be an array of Step instances.');
+    }
+
     steps.forEach(step => this.addStep(step));
   }
 
@@ -183,6 +210,7 @@ export default class Workflow extends Base {
    */
   clearSteps() {
     this._steps = [];
+    this.steps_by_id = {};
   }
 
   /**
@@ -207,6 +235,10 @@ export default class Workflow extends Base {
    * @param {string} stepId - The ID of the step to delete.
    */
   deleteStep(stepId) {
+    if (!Array.isArray(this._steps)) {
+      this._steps = [];
+    }
+
     this._steps = this._steps.filter(step => step.id !== stepId);
   }
 
@@ -215,6 +247,10 @@ export default class Workflow extends Base {
    * @param {number} index - The index of the step to delete.
    */
   deleteStepByIndex(index) {
+    if (!Array.isArray(this._steps)) {
+      this._steps = [];
+    }
+
     this._steps.splice(index, 1);
   }
 
@@ -222,21 +258,19 @@ export default class Workflow extends Base {
    * Initializes the workflow state with default values.
    */
   initializeWorkflowState() {
-    this.results = [];
-    this.exit_on_error = false;
-    this.current_step = null;
-    this.should_break = false;
-    this.should_continue = false;
-    this.should_pause = false;
-    this.should_skip = false;
-    this.status = this.getState('statuses.workflow').CREATED;
-    this._steps = [];
-    this.throw_on_empty = this.throw_on_empty;
+    this.current_step = ! this.isEmpty() ? this._steps[0].id : null;
+    this.results = this.results ?? [];
+    this.sessions = this.sessions ?? {};
+    this.should_break = this.should_break ?? false;
+    this.should_continue = this.should_continue ?? false;
+    this.should_pause = this.should_pause ?? false;
+    this.should_skip = this.should_skip ?? false;
+    this.status = this.status ?? this.getState('statuses.workflow').CREATED;
     this.timing = {
       ...this.timing,
-      create_time: new Date(),
-      pause_time: null,
-      resume_time: null,
+      create_time: this.timing?.create_time ?? new Date(),
+      pause_time: this.timing?.pause_time ?? null,
+      resume_time: this.timing?.resume_time ?? null,
     }
 
     const workflows = this.getState('workflows');
@@ -254,7 +288,7 @@ export default class Workflow extends Base {
    * @returns {boolean} True if the workflow is empty.
    */
   isEmpty() {
-    return !this._steps || !this._steps.length
+    return !Array.isArray(this._steps) || !this._steps.length;
   }
 
   /**
@@ -351,12 +385,39 @@ export default class Workflow extends Base {
   }
 
   /**
+   * Inserts safely serializable properties of the workflow into a new object for serialization.
+   * @returns {Object} An object containing the workflow's properties ready for serialization.
+  */
+  prepareForSerialization() {
+    const serialized_workflow = {
+      id: this.id,
+      current_session_id: this.current_session_id,
+      current_step: this.current_step,
+      exit_on_error: this.exit_on_error,
+      name: this.name,
+      sessions: this.sessions,
+      status: this.status,
+      steps: this._steps.map(step => step.prepareForSerialization()),
+      throw_on_empty: this.throw_on_empty,
+      timing: this.timing,
+      results: this.results,
+    };
+
+    return serialized_workflow;
+  }
+
+  /**
    * Prepares a result object and adds it to the results array.
    * @param {string} message - Result message.
    * @param {*} data - Result data.
    */
-  prepareResult(message, data) {
-    this.results.push({ message, data });
+  async prepareResult(message, data) {
+    if (this.result_per_step && typeof this.result_per_step_function === 'function') {
+      await this.result_per_step_function(this.prepareForSerialization());
+    }
+
+    const result = { message, data };
+    this.results.push(result);
   }
 
   /**
@@ -373,6 +434,14 @@ export default class Workflow extends Base {
    */
   pushSteps(steps) {
     steps.forEach(step => this.addStep(step));
+  }
+
+  /**
+   * Serializes the workflow into a JSON string.
+   * @returns {string} The JSON string representation of the workflow.
+   */
+  serialize() {
+    return JSON.stringify(this.prepareForSerialization());
   }
 
   /**
@@ -399,8 +468,16 @@ export default class Workflow extends Base {
 
     this.steps_by_id[step.id] = step;
 
-    step.parentWorkflowId = this.id;
+    step.parent_workflow_id = this.id;
     this._steps.unshift(step);
+  }
+
+  /**
+   * Custom JSON serializer
+   * @returns {Object} The JSON representation of the workflow.
+   */
+  toJSON() {
+    return this.prepareForSerialization();
   }
 
   /**
@@ -416,12 +493,72 @@ export default class Workflow extends Base {
    * @param {Step[]} steps - Array of steps to add.
    */
   set steps(steps) {
-    steps.forEach((step, index) => {
-      if (typeof step.getCallableType !== 'function') {
-        throw new Error(`Invalid step type. Step at index ${index} is not an instance of Step.`);
-      }
+    this.addSteps(steps);
+  }
+
+  /**
+   * Deserializes a JSON string into a Workflow instance and hydrates it.
+   * @param {string} serialized_workflow - The JSON string representation of the workflow.
+   * @param {CallableRegistry|null} [callable_registry] - Registry used to resolve function callables in the workflow's steps.
+   * @returns {Workflow} The hydrated Workflow instance.
+   * @throws {Error} Throws if the serialized workflow is not a string.
+   */
+  static hydrateSerialized(serialized_workflow, callable_registry = null) {
+    // TODO: Validate structure of serialized workflow
+    if (typeof serialized_workflow !== 'string') {
+      throw new Error('Invalid serialized workflow. Must be a string.');
+    }
+
+    const parsed = JSON.parse(serialized_workflow);
+
+    return Workflow.hydrate(parsed, callable_registry);
+  }
+
+  /**
+   * Hydrates a parsed workflow object into a Workflow instance.
+   * @param {Object} parsed_workflow - The parsed workflow object.
+   * @param {CallableRegistry|null} [callable_registry] - Registry used to resolve function callables in the workflow's steps.
+   * @returns {Workflow} The hydrated Workflow instance.
+   * @throws {Error} Throws if the parsed workflow is not a valid object.
+   */
+  static hydrate(parsed_workflow, callable_registry = null) {
+    // TODO: Validate structure of serialized workflow
+    // TODO: Use event system to handle errors?
+    if (typeof parsed_workflow !== 'object' || parsed_workflow === null) {
+      throw new Error('Invalid parsed workflow. Must be a valid object.');
+    }
+
+    const hydrated_workflow = new Workflow({
+      name: parsed_workflow.name,
+      callable_registry,
+      exit_on_error: parsed_workflow.exit_on_error,
+      steps: parsed_workflow.steps.map(step => Step.hydrateAny(step, callable_registry)),
+      throw_on_empty: parsed_workflow.throw_on_empty,
     });
 
-    this.addSteps(steps);
+    // The constructor above (via Base) always generates a fresh id, and addStep() has
+    // already stamped that fresh id onto each step's parent_workflow_id and registered
+    // the workflow under it in State.get('workflows'). Restoring the real id below would
+    // otherwise leave both of those referencing a discarded id, so fix them up here too.
+    const stale_id = hydrated_workflow.id;
+    hydrated_workflow.id = parsed_workflow.id;
+
+    const workflows = hydrated_workflow.getState('workflows');
+    delete workflows[stale_id];
+    workflows[hydrated_workflow.id] = hydrated_workflow;
+    hydrated_workflow.setState('workflows', workflows);
+
+    hydrated_workflow.steps.forEach(step => {
+      step.parent_workflow_id = hydrated_workflow.id;
+    });
+
+    hydrated_workflow.current_session_id = parsed_workflow.current_session_id;
+    hydrated_workflow.current_step = parsed_workflow.current_step ?? hydrated_workflow.current_step;
+    hydrated_workflow.sessions = parsed_workflow.sessions ?? {};
+    hydrated_workflow.status = parsed_workflow.status;
+    hydrated_workflow.timing = parsed_workflow.timing;
+    hydrated_workflow.results = parsed_workflow.results;
+
+    return hydrated_workflow;
   }
 }

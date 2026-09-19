@@ -14,6 +14,7 @@ Micro-Flow treats logic as a first-class object. Instead of managing one monolit
 
 - 🔍 **Zero-Effort Observability** - Lifecycle events (`STEP_FAILED`, `WORKFLOW_COMPLETE`) emit automatically — eliminate manual log-sprinkling.
 - ⏸️ **Pause, Resume, & Rewind** - Suspend any logic flow mid-pipeline and resume it later without losing local state.
+- 🗄️ **Durable Persistence** - Serialize any `Workflow` or `Step` to JSON — even mid-pause — and hydrate it back later, in the same process or a different one.
 - 🌿 **Declarative Branching** - Use `ConditionalStep` and `SwitchStep` to keep complex branching logic out of your callables and in the workflow structure.
 - 🎯 **Dynamic Flow Control** - Break out of or skip steps dynamically at runtime.
 - 💾 **Namespaced State Management** - Access global state through a namespaced singleton with dot-notation support — eliminate data-threading through arguments.
@@ -73,6 +74,32 @@ State.get('events.workflow').on('sync-event', (data) => {
 
 // Broadcast to all other contexts
 State.get('events.workflow').emit('sync-event', { status: 'updated' });
+```
+
+### 🗄️ Feature Spotlight: Persistence
+Save a workflow definition — or a paused, in-progress one — and reload it later. Function callables round-trip through a `CallableRegistry` (raw functions can't be serialized), while `Step`/`Workflow` callables serialize recursively as their own object graph:
+
+```javascript
+import { Workflow, Step, CallableRegistry } from 'micro-flow';
+
+const registry = new CallableRegistry();
+registry.register('chargeCard', async function chargeCard() {
+  return { charged: true };
+});
+
+const workflow = new Workflow({
+  name: 'checkout',
+  callable_registry: registry,
+  steps: [
+    new Step({ name: 'charge', callable: registry.get('chargeCard'), callable_registry_key: 'chargeCard' }),
+  ],
+});
+
+const saved = workflow.serialize(); // -> store this JSON string anywhere
+
+// Later, in this process or a fresh one (after re-registering 'chargeCard'):
+const reloaded = Workflow.hydrateSerialized(saved, registry);
+await reloaded.execute();
 ```
 
 ### Browser: Coordinating UI Logic
@@ -223,6 +250,9 @@ State.each('users', (user) => console.log(user.name));
 ### Events
 Monitor lifecycle events for workflows, steps, and state. Use Node's EventEmitter syntax or the browser's CustomEvent syntax—both support all environments.
 
+### Persistence
+Turn a `Workflow` (or `Step`) into a JSON string with `serialize()`, and rebuild it with `Workflow.hydrateSerialized()` / `Step.hydrateSerialized()` — including which subclass each step actually is (`ConditionalStep`, `LoopStep`, `SwitchStep`, etc. all come back as themselves). Function callables need a `CallableRegistry` to resolve by name after hydration; `Step`/`Workflow` callables need nothing extra, since they serialize recursively as their own object graph.
+
 ## Use Cases
 
 ### Power Backend Processes (Node.js)
@@ -236,6 +266,7 @@ Monitor lifecycle events for workflows, steps, and state. Use Node's EventEmitte
 - **Data Fetching** - Coordinate sequential API calls with caching.
 - **Animations** - Sequence complex UI animations.
 - **State Sync** - Sync auth state and shopping carts across tabs instantly.
+- **Game Logic and Behaviors** - Manage NPC behavior states or enemy actions, such as idle behavior vs attack behavior.
 
 ## Documentation
 Explore the full documentation in the [docs](docs/) directory:
@@ -243,3 +274,4 @@ Explore the full documentation in the [docs](docs/) directory:
 - [Workflow API](docs/classes/workflow.md)
 - [Step API](docs/classes/steps/step.md)
 - [State Management](docs/classes/state.md)
+- [CallableRegistry API (Persistence)](docs/classes/callable_registry.md)
