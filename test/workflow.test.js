@@ -846,11 +846,16 @@ describe('Workflow', () => {
       expect(workflow.results).toHaveLength(1);
     });
 
-    it('should await result_per_step_function once per step, in order, when result_per_step is true', async () => {
-      const seen = [];
+    it('should await result_per_step_function once per step, in order, with the workflow\'s own serialized snapshot', async () => {
+      let callCount = 0;
       const workflow = new Workflow({
         result_per_step: true,
-        result_per_step_function: async (result) => { seen.push(result); },
+        result_per_step_function: async (snapshot) => {
+          callCount++;
+          expect(snapshot.id).toBe(workflow.id);
+          expect(snapshot.name).toBe(workflow.name);
+          expect(snapshot.steps).toHaveLength(2);
+        },
         steps: [
           new Step({ name: 'step-1', callable: async () => 'a' }),
           new Step({ name: 'step-2', callable: async () => 'b' }),
@@ -859,19 +864,34 @@ describe('Workflow', () => {
 
       await workflow.execute();
 
-      expect(seen).toHaveLength(2);
-      expect(seen[0].message).toBe('Success');
-      expect(seen[0].data.result).toBe('a');
-      expect(seen[1].message).toBe('Success');
-      expect(seen[1].data.result).toBe('b');
+      expect(callCount).toBe(2);
     });
 
-    it('should invoke result_per_step_function before the result is pushed onto results', async () => {
+    it('should pass a plain object shaped like prepareForSerialization(), not { message, data }', async () => {
+      let snapshot;
+      const workflow = new Workflow({
+        result_per_step: true,
+        result_per_step_function: async (arg) => { snapshot = arg; },
+        steps: [new Step({ name: 'step-1', callable: async () => 'a' })],
+      });
+
+      await workflow.execute();
+
+      expect(snapshot).not.toHaveProperty('message');
+      expect(snapshot).not.toHaveProperty('data');
+      expect(Object.keys(snapshot)).toEqual(Object.keys(workflow.prepareForSerialization()));
+    });
+
+    it('should invoke result_per_step_function before the current step\'s result is pushed onto results', async () => {
+      // Checked synchronously inside the callback, not by holding onto the snapshot -
+      // `snapshot.results` is the same array reference as `workflow.results` (not a
+      // copy), so it keeps mutating after the callback returns; only a read taken
+      // during the callback's own synchronous execution reflects the count at call time.
       const lengthsAtCallTime = [];
       const workflow = new Workflow({
         result_per_step: true,
-        result_per_step_function: async () => {
-          lengthsAtCallTime.push(workflow.results.length);
+        result_per_step_function: async (snapshot) => {
+          lengthsAtCallTime.push(snapshot.results.length);
         },
         steps: [
           new Step({ name: 'step-1', callable: async () => 'a' }),
@@ -882,13 +902,14 @@ describe('Workflow', () => {
       await workflow.execute();
 
       expect(lengthsAtCallTime).toEqual([0, 1]);
+      expect(workflow.results).toHaveLength(2);
     });
 
-    it('should invoke result_per_step_function for a failed step, with the error in data', async () => {
-      const seen = [];
+    it('should invoke result_per_step_function for a failed step, with status already "failed" in the snapshot', async () => {
+      let snapshot;
       const workflow = new Workflow({
         result_per_step: true,
-        result_per_step_function: async (result) => { seen.push(result); },
+        result_per_step_function: async (arg) => { snapshot = arg; },
         steps: [
           new Step({ name: 'failing-step', callable: async () => { throw new Error('boom'); } }),
         ],
@@ -896,9 +917,31 @@ describe('Workflow', () => {
 
       await workflow.execute();
 
-      expect(seen).toHaveLength(1);
-      expect(seen[0].data.error).toBeInstanceOf(Error);
-      expect(seen[0].data.error.message).toBe('boom');
+      expect(snapshot).toBeDefined();
+      // markAsFailed() runs before prepareResult() on the failure path, so the
+      // snapshot already reflects the failed status - unlike the success path,
+      // where the workflow is still "running" at snapshot time.
+      expect(snapshot.status).toBe(State.get('statuses.workflow').FAILED);
+    });
+
+    it('should share live object/array references (results, sessions, timing) rather than deep-cloning them', async () => {
+      const snapshots = [];
+      const workflow = new Workflow({
+        result_per_step: true,
+        result_per_step_function: async (snapshot) => { snapshots.push(snapshot); },
+        steps: [
+          new Step({ name: 'step-1', callable: async () => 'a' }),
+          new Step({ name: 'step-2', callable: async () => 'b' }),
+        ],
+      });
+
+      await workflow.execute();
+
+      // Both snapshots' `results` point at the same live array, so inspecting them
+      // after the fact shows the final state for both, not what existed at call time.
+      expect(snapshots[0].results).toBe(snapshots[1].results);
+      expect(snapshots[0].results).toBe(workflow.results);
+      expect(snapshots[0].results).toHaveLength(2);
     });
 
     it('should propagate a rejection from result_per_step_function', async () => {

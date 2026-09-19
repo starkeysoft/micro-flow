@@ -26,8 +26,8 @@ Creates a new Workflow instance and registers it in the global `State.workflows`
 | `options.name` | `string` | `'workflow-<uuid>'` | Human-readable identifier used in logs and events. |
 | `options.callable_registry` | `CallableRegistry` | `null` | Instance of `CallableRegistry` to use for the instance's registry. If not passed, instantiates a new `CallableRegistry` instance. |
 | `options.exit_on_error` | `boolean` | `false` | When `true`, any step failure immediately halts execution and marks the workflow as failed. |
-| `options.result_per_step` | `boolean` | `false` | When `true`, `result_per_step_function` is awaited with each step's result as it's produced, before it's pushed onto `results`. |
-| `options.result_per_step_function` | `Function\|null` | `null` | Callback invoked as `await result_per_step_function({ message, data })` for each step result, when `result_per_step` is `true`. Ignored otherwise. |
+| `options.result_per_step` | `boolean` | `false` | When `true`, `result_per_step_function` is awaited after each step completes, before that step's result is pushed onto `results`. |
+| `options.result_per_step_function` | `Function\|null` | `null` | Callback invoked as `await result_per_step_function(workflow.prepareForSerialization())` after each step completes, when `result_per_step` is `true`. Ignored otherwise. |
 | `options.steps` | `Step[]` | `[]` | Initial array of steps to add to the workflow. |
 | `options.throw_on_empty` | `boolean` | `false` | When `true`, calling `execute()` on a workflow with no steps throws an error. |
 
@@ -48,8 +48,8 @@ Creates a new Workflow instance and registers it in the global `State.workflows`
 | `should_pause` | `boolean` | When set to `true` (via `pause()`), suspends execution after the current step completes. |
 | `should_continue` | `boolean` | Internal flag used during resume. |
 | `exit_on_error` | `boolean` | Whether step failures halt the workflow. |
-| `result_per_step` | `boolean` | Whether `result_per_step_function` is invoked for each step result as it's produced. |
-| `result_per_step_function` | `Function\|null` | Callback invoked with each `{ message, data }` result when `result_per_step` is `true`. |
+| `result_per_step` | `boolean` | Whether `result_per_step_function` is invoked after each step completes. |
+| `result_per_step_function` | `Function\|null` | Callback invoked with the workflow's own `prepareForSerialization()` snapshot after each step, when `result_per_step` is `true`. |
 | `throw_on_empty` | `boolean` | Whether executing an empty workflow throws. |
 | `callable_registry` | `CallableRegistry` | Registry for storing named callables used in persistence mode for serialization and hydration. A new instance is created automatically per workflow. To share a registry across workflows, assign the same `CallableRegistry` instance to each workflow's `callable_registry` property. |
 | `timing` | `Object` | Timing data: `{ create_time, start_time, complete_time, pause_time, resume_time, execution_time_ms, cancel_time }`. |
@@ -279,7 +279,7 @@ Prepends a step to the beginning of the steps array. Emits `WORKFLOW_STEP_ADDED`
 
 ### `async prepareResult(message, data)`
 
-Builds a `{ message, data }` result entry, and — if `result_per_step` is `true` and `result_per_step_function` is a function — `await`s that callback with the entry *before* pushing it onto `results`. Called internally after each step completes (including a failed one). Use `result_per_step` to react to progress as it happens (e.g. streaming to a UI or log) instead of waiting for `execute()`/`resume()` to resolve and reading `results` at the end.
+Builds a `{ message, data }` result entry for the step that just ran. Before pushing that entry onto `results` — if `result_per_step` is `true` and `result_per_step_function` is a function — it `await`s that callback with **the workflow's own `prepareForSerialization()` snapshot** (not the `{ message, data }` entry itself). Called internally after each step completes, including a failed one. Use `result_per_step` to react to progress as it happens (e.g. streaming workflow state to a UI or log) instead of waiting for `execute()`/`resume()` to resolve and reading `results` at the end.
 
 **Parameters:**
 
@@ -288,6 +288,8 @@ Builds a `{ message, data }` result entry, and — if `result_per_step` is `true
 | `message` | `string` | Descriptive message for the result entry. |
 | `data` | `any` | The step's return value, or `{ error }` when the step failed. |
 
+**Note:** Because the callback fires *before* this call's own entry is pushed, the snapshot's `results` array reflects every step before the one that just finished — not the one that triggered the callback. That step's own up-to-date state (status, result, timing, etc.) is still visible in the snapshot's `steps` array, since each step re-serializes itself live. On a failed step, `markAsFailed()` runs first, so the snapshot's `status` is already `'failed'`.
+
 **Example:**
 ```javascript
 import { Workflow, Step } from '@ronaldroe/micro-flow';
@@ -295,8 +297,8 @@ import { Workflow, Step } from '@ronaldroe/micro-flow';
 const workflow = new Workflow({
   name: 'streamed-progress',
   result_per_step: true,
-  result_per_step_function: async ({ message, data }) => {
-    console.log(`[progress] ${message}`, data);
+  result_per_step_function: async (snapshot) => {
+    console.log(`[progress] status=${snapshot.status}, steps completed so far=${snapshot.results.length}`);
   },
   steps: [
     new Step({ name: 'step-a', callable: async () => 'a' }),
@@ -305,7 +307,8 @@ const workflow = new Workflow({
 });
 
 await workflow.execute();
-// Logs progress for step-a, then step-b, as each one finishes — not after the fact.
+// Logs a workflow snapshot after step-a finishes, then again after step-b finishes —
+// not after the fact.
 ```
 
 **Note:** `result_per_step`/`result_per_step_function` are runtime-only — like `callable_registry`, they aren't part of `prepareForSerialization()`'s output and don't survive `hydrate()`/`hydrateSerialized()`. Reassign them on the hydrated workflow if you need the callback to keep firing after a reload.
