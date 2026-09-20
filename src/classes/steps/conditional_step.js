@@ -1,6 +1,7 @@
 import Step from './step.js';
 import LogicStep from './logic_step.js';
 import { conditional_step_comparators } from '../../enums/index.js';
+import { event_names } from '../instance_state.js';
 
 /**
  * ConditionalStep class for branching logic based on conditions.
@@ -82,7 +83,7 @@ export default class ConditionalStep extends LogicStep {
 
     if (this.checkCondition()) {
       this.log(
-        this.getState('events.step.event_names.CONDITIONAL_TRUE_BRANCH_EXECUTED'),
+        event_names.step.CONDITIONAL_TRUE_BRANCH_EXECUTED,
         `Condition met for step: ${this.name}, executing true branch`
       );
 
@@ -96,7 +97,7 @@ export default class ConditionalStep extends LogicStep {
       }
     } else {
       this.log(
-        this.getState('events.step.event_names.CONDITIONAL_FALSE_BRANCH_EXECUTED'),
+        event_names.step.CONDITIONAL_FALSE_BRANCH_EXECUTED,
         `Condition not met for step: ${this.name}, executing false branch`
       );
 

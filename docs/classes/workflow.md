@@ -17,7 +17,7 @@ The primary orchestration engine in micro-flow. A `Workflow` sequences an ordere
 
 ### `new Workflow(options)`
 
-Creates a new Workflow instance and registers it in its own state's `workflows` registry (see `options.use_state_singleton` below).
+Creates a new Workflow instance and registers itself under the `workflow` key of its own state, so `getState('workflow')` resolves to the live instance (see `options.use_state_singleton` below).
 
 #### Parameters
 
@@ -417,7 +417,7 @@ Deserializes a JSON string into a `Workflow` instance.
 
 ### `static hydrate(parsedWorkflow, callableRegistry?)` → `Workflow`
 
-Hydrates a parsed workflow object into a `Workflow` instance, including all of its steps — each rehydrated as the correct `Step` subclass via [`Step.hydrateAny()`](steps/step.md#static-hydrateanyparsed_step-callable_registry--step). The returned workflow is constructed with `callableRegistry` as its own `callable_registry`, so it can continue to resolve the same named callables after hydration (e.g. on subsequent `resume()` calls). Each step's `parent_workflow_id` and the workflow's entry in its own state's `workflows` registry (`this.getState('workflows')`, or the deprecated `State.get('workflows')` singleton when `use_state_singleton` is `true`) are corrected to the restored `id` (not the fresh one generated during construction), so calls like `setParentWorkflowValue()` from inside a hydrated step's callable — including the `should_pause` pattern used to pause a workflow — resolve to the right workflow instance.
+Hydrates a parsed workflow object into a `Workflow` instance, including all of its steps — each rehydrated as the correct `Step` subclass via [`Step.hydrateAny()`](steps/step.md#static-hydrateanyparsed_step-callable_registry--step). The returned workflow is constructed with `callableRegistry` as its own `callable_registry`, so it can continue to resolve the same named callables after hydration (e.g. on subsequent `resume()` calls). Each step's `parent_workflow_id` is corrected to the restored `id` (not the fresh one generated during construction), so calls like `setParentWorkflowValue()` from inside a hydrated step's callable — including the `should_pause` pattern used to pause a workflow — resolve to the right workflow instance. `getState('workflow')` needs no such fixup: it's a live reference to the same workflow object, so it already reflects the corrected `id`.
 
 **Parameters:**
 

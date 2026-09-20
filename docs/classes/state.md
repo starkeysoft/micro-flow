@@ -9,6 +9,7 @@ The global singleton that historically acted as the shared data store, event hub
 ## Table of Contents
 - [Deprecation: continuing to use `State`](#deprecation-continuing-to-use-state)
 - [Default Structure](#default-structure)
+- [Instance state shape](#instance-state-shape)
 - [Path Syntax](#path-syntax)
 - [Methods](#methods)
 - [Examples](#examples)
@@ -18,7 +19,7 @@ The global singleton that historically acted as the shared data store, event hub
 
 As of this version, `Base` (the shared parent of `Workflow` and `Step`) defaults to `use_state_singleton: false`. This gives every `Workflow` its own `InstanceState` object, shared with every `Step` it owns (steps get it automatically when added via `addStep`/`addStepAtIndex`/`unshiftStep`, or passed via the constructor's `steps` option). `this.getState(path)` / `this.setState(path, value)` / `this.deleteState(path)` work exactly as before, but now read and write that workflow-scoped state instead of the process-wide singleton — so two unrelated `Workflow`s no longer see each other's custom data.
 
-Framework internals that used to live on `State` — `statuses`, `event_names`, `events`, `types`, `conditional_step_comparators` — are still reachable the same way (`this.getState('statuses.workflow')`, etc.), and the `events.*` entries are the *same* `Event` instances as `State`'s, so listeners registered via `State.get('events.workflow')` keep receiving events regardless of `use_state_singleton`.
+Unlike `State`, per-instance state doesn't hold framework constants — it holds the workflow's own actual state. `getState('workflow')` resolves to the live owning `Workflow` instance itself (see [Instance state shape](#instance-state-shape) below); everything else is arbitrary data your own code sets via `setState()`. Framework internals that used to live on `State` — `statuses`, `event_names`, `events`, `types`, `conditional_step_comparators`, `messages` — are now static members of the `Workflow` class instead (`Workflow.statuses`, etc.), not part of any instance's state. The `events.*` members are still the *same* `Event` instances as `State`'s, so listeners registered via `State.get('events.workflow')` keep receiving events regardless of `use_state_singleton`.
 
 If you still need one global store shared by every `Workflow`/`Step` in the process (the old default), pass `use_state_singleton: true` when constructing a `Workflow` — it propagates to every `Step` the workflow owns:
 
@@ -42,6 +43,8 @@ Calling `getState`/`setState`/`deleteState` with `use_state_singleton: true` log
 
 ## Default Structure
 
+This is the `State` singleton's own shape (used only when `use_state_singleton: true`). Per-instance state has a different, much smaller shape — see [Instance state shape](#instance-state-shape).
+
 ```javascript
 {
   messages: { errors: {}, warnings: {} },
@@ -64,10 +67,36 @@ Calling `getState`/`setState`/`deleteState` with `use_state_singleton: true` log
     step_types,
     sub_step_types,
   },
-  workflows: {},              // keyed by workflow UUID
+  workflows: {},              // keyed by workflow UUID - singleton-only, never part of instance state
   conditional_step_comparators,
 }
 ```
+
+## Instance state shape
+
+A `Workflow`'s own `InstanceState` (the default, non-singleton case) starts empty and only ever holds:
+
+```javascript
+{
+  workflow: workflowInstance,  // the live owning Workflow - getState('workflow') === wf
+  // ...plus whatever paths your own code sets via setState()
+}
+```
+
+`getState('workflow')` (or `getState('workflow').someProperty`) always reflects the workflow's *current* live state — it's a reference to the actual `Workflow` instance, not a snapshot, so `getState('workflow').status`/`.results`/`.current_step` are always up to date.
+
+The framework constants once seeded onto every `InstanceState` (`statuses`, `event_names`, `events`, `types`, `conditional_step_comparators`, `messages`) are now static members of the `Workflow` class:
+
+```javascript
+import { Workflow } from '@ronaldroe/micro-flow';
+
+Workflow.statuses.workflow.COMPLETE;
+Workflow.event_names.step.STEP_FAILED;
+Workflow.events.workflow.on(Workflow.event_names.workflow.WORKFLOW_COMPLETE, (wf) => { /* ... */ });
+Workflow.conditional_step_comparators.STRICT_EQUALS;
+```
+
+`Workflow.events.*` are the same `Event` instances as `State.get('events.*')` — a listener registered on one is reached by the other.
 
 ## Path Syntax
 

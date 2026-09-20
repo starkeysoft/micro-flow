@@ -3,6 +3,7 @@ import Base from './base.js';
 import CallableRegistry from './callable_registry.js';
 import Step from './steps/step.js';
 import State from './state.js';
+import { statuses, event_names, events, types, conditional_step_comparators, messages } from './instance_state.js';
 import { base_types } from '../enums/index.js';
 
 /**
@@ -76,7 +77,7 @@ export default class Workflow extends Base {
       return this;
     }
 
-    const is_resuming = this.status === this.getState('statuses.workflow').PAUSED;
+    const is_resuming = this.status === statuses.workflow.PAUSED;
     const paused_at_index = this._steps.findIndex(step => step.id === this.current_step);
     const start_index = is_resuming ? paused_at_index + 1 : 0;
 
@@ -84,13 +85,13 @@ export default class Workflow extends Base {
 
     for (let i = start_index; i < this._steps.length; i++) {
       if (this.should_break) {
-        this.log(this.getState('event_names.workflow').WORKFLOW_BREAK_EXECUTED, `Workflow "${this.name}" execution broken at step ${this._steps[i].name} - ${this._steps[i].id}.`);
+        this.log(event_names.workflow.WORKFLOW_BREAK_EXECUTED, `Workflow "${this.name}" execution broken at step ${this._steps[i].name} - ${this._steps[i].id}.`);
         break;
       }
 
       if (this.should_skip) {
         this.log(
-          this.getState('events.workflow.event_names.WORKFLOW_STEP_SKIPPED'),
+          event_names.workflow.WORKFLOW_STEP_SKIPPED,
           `Workflow "${this.name}" skipping step ${this._steps[i].name} - ${this._steps[i].id}.`
         );
         this.should_skip = false;
@@ -131,8 +132,8 @@ export default class Workflow extends Base {
     this.should_pause = false;
     this.timing.resume_time = new Date();
 
-    this.getState('events.workflow').emit(
-      this.getState('event_names.workflow').WORKFLOW_RESUMED,
+    events.workflow.emit(
+      event_names.workflow.WORKFLOW_RESUMED,
       this.getState()
     );
     return this.execute();
@@ -148,7 +149,7 @@ export default class Workflow extends Base {
 
     const result = await step.execute();
 
-    if (step.status === this.getState('statuses.step.FAILED')) {
+    if (step.status === statuses.step.FAILED) {
       throw step.errors[step.errors.length - 1] ?? new Error(`Step "${step.name}" failed`);
     }
 
@@ -292,7 +293,7 @@ export default class Workflow extends Base {
     this.should_continue = this.should_continue ?? false;
     this.should_pause = this.should_pause ?? false;
     this.should_skip = this.should_skip ?? false;
-    this.status = this.status ?? this.getState('statuses.workflow').CREATED;
+    this.status = this.status ?? statuses.workflow.CREATED;
     this.timing = {
       ...this.timing,
       create_time: this.timing?.create_time ?? new Date(),
@@ -300,12 +301,19 @@ export default class Workflow extends Base {
       resume_time: this.timing?.resume_time ?? null,
     }
 
-    const workflows = this.getState('workflows');
-    workflows[this.id] = this;
-    this.setState('workflows', workflows);
+    if (this.use_state_singleton) {
+      // The deprecated `State` singleton is shared by every workflow that opts into it, so it
+      // still needs an id-keyed registry (unlike per-instance state, which only ever has one
+      // workflow to represent and can just reference it directly - see the else branch).
+      const workflows = this.getState('workflows');
+      workflows[this.id] = this;
+      this.setState('workflows', workflows);
+    } else {
+      this.setState('workflow', this);
+    }
 
     this.log(
-      this.getState('event_names.workflow').WORKFLOW_CREATED,
+      event_names.workflow.WORKFLOW_CREATED,
       `Workflow "${this.name}" initialized.`
     );
   }
@@ -334,11 +342,11 @@ export default class Workflow extends Base {
     this.timing.create_time = new Date();
     
     this.log(
-      this.getState('event_names.workflow').WORKFLOW_CREATED,
+      event_names.workflow.WORKFLOW_CREATED,
       `Workflow "${this.name}" created.`
     );
 
-    return this.getState('statuses.workflow').CREATED;
+    return statuses.workflow.CREATED;
   }
 
   /**
@@ -354,23 +362,23 @@ export default class Workflow extends Base {
    */
   markAsPaused() {
     this.timing.pause_time = new Date();
-    this.status = this.getState('statuses.workflow').PAUSED;
+    this.status = statuses.workflow.PAUSED;
 
-    this.getState('events.workflow').emit(
-      this.getState('event_names.workflow').WORKFLOW_PAUSED,
+    events.workflow.emit(
+      event_names.workflow.WORKFLOW_PAUSED,
       this.getState()
     );
   }
-  
+
   /**
    * Marks the workflow as resumed.
    */
   markAsResumed() {
     this.timing.resume_time = new Date();
-    this.status = this.getState('statuses.workflow').RUNNING;
+    this.status = statuses.workflow.RUNNING;
 
-    this.getState('events.workflow').emit(
-      this.getState('event_names.workflow').WORKFLOW_RESUMED,
+    events.workflow.emit(
+      event_names.workflow.WORKFLOW_RESUMED,
       this.getState()
     );
   }
@@ -384,8 +392,8 @@ export default class Workflow extends Base {
     const [step] = this._steps.splice(fromIndex, 1);
     this._steps.splice(toIndex, 0, step);
 
-    this.getState('events.workflow').emit(
-      this.getState('event_names.workflow').WORKFLOW_STEP_MOVED,
+    events.workflow.emit(
+      event_names.workflow.WORKFLOW_STEP_MOVED,
       this.getState()
     );
   }
@@ -407,8 +415,8 @@ export default class Workflow extends Base {
     this.should_pause = true;
     this.timing.pause_time = new Date();
 
-    this.getState('events.workflow').emit(
-      this.getState('event_names.workflow').WORKFLOW_PAUSED,
+    events.workflow.emit(
+      event_names.workflow.WORKFLOW_PAUSED,
       this.getState()
     );
   }
@@ -597,16 +605,20 @@ export default class Workflow extends Base {
     });
 
     // The constructor above (via Base) always generates a fresh id, and addStep() has
-    // already stamped that fresh id onto each step's parent_workflow_id and registered
-    // the workflow under it in its own state's `workflows` registry. Restoring the real id
-    // below would otherwise leave both of those referencing a discarded id, so fix them up here too.
+    // already stamped that fresh id onto each step's parent_workflow_id and (in singleton mode)
+    // registered the workflow under it in the singleton's `workflows` registry. Restoring the
+    // real id below would otherwise leave both referencing a discarded id, so fix them up here
+    // too. Per-instance state needs no such fixup for its `workflow` key - it's the same live
+    // object, so the id mutation below is reflected automatically.
     const stale_id = hydrated_workflow.id;
     hydrated_workflow.id = parsed_workflow.id;
 
-    const workflows = hydrated_workflow.getState('workflows');
-    delete workflows[stale_id];
-    workflows[hydrated_workflow.id] = hydrated_workflow;
-    hydrated_workflow.setState('workflows', workflows);
+    if (hydrated_workflow.use_state_singleton) {
+      const workflows = hydrated_workflow.getState('workflows');
+      delete workflows[stale_id];
+      workflows[hydrated_workflow.id] = hydrated_workflow;
+      hydrated_workflow.setState('workflows', workflows);
+    }
 
     hydrated_workflow.steps.forEach(step => {
       step.parent_workflow_id = hydrated_workflow.id;
@@ -622,3 +634,12 @@ export default class Workflow extends Base {
     return hydrated_workflow;
   }
 }
+
+// Framework constants, exposed as static members rather than duplicated into every
+// Workflow's own state (see instance_state.js, the canonical source for these values).
+Workflow.statuses = statuses;
+Workflow.event_names = event_names;
+Workflow.events = events;
+Workflow.types = types;
+Workflow.conditional_step_comparators = conditional_step_comparators;
+Workflow.messages = messages;

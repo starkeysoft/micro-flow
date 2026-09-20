@@ -1,5 +1,6 @@
 import Step from './step.js';
 import { delay_types, step_types } from '../../enums/index.js';
+import { event_names } from '../instance_state.js';
 import schedule from 'node-schedule';
 import { addMilliseconds } from 'date-fns';
 
@@ -47,7 +48,7 @@ export default class DelayStep extends Step {
 
     if (this.absolute_timestamp.getTime() <= now.getTime()) {
       this.log(
-        this.getState('events.step.event_names.DELAY_STEP_ABSOLUTE_COMPLETE'),
+        event_names.step.DELAY_STEP_ABSOLUTE_COMPLETE,
         `No delay for step: ${this.name}. Continuing.`
       );
       return { delayed: false, delay_type: this.delay_type, timestamp: now.toISOString() };
@@ -63,17 +64,13 @@ export default class DelayStep extends Step {
   async delay(delay_until) {
     return new Promise((resolve) => {
       this.log(
-        this.getState(
-          `events.step.event_names.DELAY_STEP_${this.delay_type.toUpperCase()}_SCHEDULED`
-        ),
+        event_names.step[`DELAY_STEP_${this.delay_type.toUpperCase()}_SCHEDULED`],
         `Delay scheduled for step: ${this.name} until ${delay_until.toISOString()}`
       );
 
       const job = schedule.scheduleJob(delay_until, () => {
         this.log(
-          this.getState(
-            `events.step.event_names.DELAY_STEP_${this.delay_type.toUpperCase()}_COMPLETE`
-          ),
+          event_names.step[`DELAY_STEP_${this.delay_type.toUpperCase()}_COMPLETE`],
           `Delay complete for step: ${this.name}. Continuing.`
         );
         resolve({ delayed: true, delay_type: this.delay_type, timestamp: new Date().toISOString() });
@@ -90,7 +87,7 @@ export default class DelayStep extends Step {
   async relative() {
     if (this.relative_delay_ms <= 0) {
       this.log(
-        this.getState('events.step.event_names.DELAY_STEP_RELATIVE_COMPLETE'),
+        event_names.step.DELAY_STEP_RELATIVE_COMPLETE,
         `No delay for step: ${this.name}. Continuing.`
       );
       return { delayed: false, delay_type: this.delay_type, timestamp: new Date().toISOString() };
