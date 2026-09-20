@@ -207,7 +207,7 @@ console.log(result.result); // 'adult'
 
 ## Related
 
-- [SwitchStep](switch_step.md) — The parent container that manages and evaluates cases. `SwitchStep` hydrates its `cases` array by dispatching each entry through [`Step.hydrateAny()`](step.md#static-hydrateanyparsed_step-callableregistry--step), which is how a serialized case comes back as a `Case` (not a plain `Step`).
+- [SwitchStep](switch_step.md) — The parent container that manages and evaluates cases. `SwitchStep` hydrates its `cases` array by dispatching each entry through [`Step.hydrateAny()`](step.md#static-hydrateanyparsed_step-callableregistry--step), which is how a serialized case comes back as a `Case` (not a plain `Step`). It also stamps each case with its own `parent_workflow_id`/`use_state_singleton`/`state` right before evaluating it, so `this.getState()`/`this.setState()` inside a case's callable share the parent workflow's state.
 - [LogicStep](logic_step.md) — Parent class providing `checkCondition()` and `conditional_config`.
 - [Step § Persistence](step.md#persistence) — General serialization/hydration model.
 - [conditional_step_comparators](../../../enums/conditional_step_comparators.md) — Full operator reference.

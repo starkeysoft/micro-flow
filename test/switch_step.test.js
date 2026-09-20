@@ -208,8 +208,6 @@ describe('Case', () => {
     });
 
     it('should have access to state in callable', async () => {
-      State.set('case.value', 42);
-
       const caseStep = new Case({
         conditional: {
           subject: true,
@@ -220,6 +218,7 @@ describe('Case', () => {
           return this.getState('case.value');
         }
       });
+      caseStep.setState('case.value', 42);
 
       const result = await caseStep.execute();
 
@@ -617,14 +616,12 @@ describe('SwitchStep', () => {
     });
 
     it('should work with state in switch', async () => {
-      State.set('user.type', 'admin');
-
       const workflow = new Workflow({
         name: 'state-switch-workflow',
         steps: [
           new SwitchStep({
             name: 'user-type-switch',
-            subject: State.get('user.type'),
+            subject: 'admin',
             cases: [
               new Case({
                 conditional: { operator: '===', value: 'admin' },
@@ -643,6 +640,54 @@ describe('SwitchStep', () => {
       const result = await workflow.execute();
 
       expect(result.results[0].data.result).toBe('admin dashboard');
+    });
+
+    it('should share the parent workflow\'s state with a matched Case callable', async () => {
+      const workflow = new Workflow({
+        name: 'switch-case-shared-state',
+        steps: [
+          new SwitchStep({
+            subject: 'a',
+            cases: [
+              new Case({
+                conditional: { operator: '===', value: 'a' },
+                callable: async function () {
+                  this.setState('switch.touched', 'yes');
+                },
+              }),
+            ],
+          }),
+        ],
+      });
+
+      await workflow.execute();
+
+      expect(workflow.getState('switch.touched')).toBe('yes');
+    });
+
+    it('should share the parent workflow\'s state with a Step default_callable', async () => {
+      const defaultStep = new Step({
+        name: 'default-step',
+        callable: async function () {
+          this.setState('default.touched', 'yes');
+        },
+      });
+      const workflow = new Workflow({
+        name: 'switch-default-shared-state',
+        steps: [
+          new SwitchStep({
+            subject: 'no-match',
+            cases: [
+              new Case({ conditional: { operator: '===', value: 'a' }, callable: async () => 'a' }),
+            ],
+            default_callable: defaultStep,
+          }),
+        ],
+      });
+
+      await workflow.execute();
+
+      expect(workflow.getState('default.touched')).toBe('yes');
     });
   });
 

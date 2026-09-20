@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import State from '../src/classes/state.js';
+import State, { InstanceState } from '../src/classes/state.js';
 
 describe('State', () => {
   beforeEach(() => {
@@ -621,6 +621,152 @@ describe('State', () => {
       State.set('nullVal', null);
       // String conversion of null
       expect(State.get('nullVal', null, 'string')).toBe('null');
+    });
+  });
+});
+
+// InstanceState backs `Workflow`/`Step` instances now that the `State` singleton is
+// deprecated (see `use_state_singleton` on Base/Workflow) - each Workflow gets its own,
+// shared with every Step it owns.
+describe('InstanceState', () => {
+  describe('default data', () => {
+    it('should be seeded with every default_state top-level key except workflows', () => {
+      const instance_state = new InstanceState();
+
+      expect(instance_state.get('messages').errors).toBeDefined();
+      expect(instance_state.get('messages').warnings).toBeDefined();
+      expect(instance_state.get('statuses').workflow).toBeDefined();
+      expect(instance_state.get('statuses').step).toBeDefined();
+      expect(instance_state.get('event_names').workflow).toBeDefined();
+      expect(instance_state.get('event_names').step).toBeDefined();
+      expect(instance_state.get('event_names').state).toBeDefined();
+      expect(instance_state.get('events').workflow).toBeDefined();
+      expect(instance_state.get('events').step).toBeDefined();
+      expect(instance_state.get('events').state).toBeDefined();
+      expect(instance_state.get('types').base_types).toBeDefined();
+      expect(instance_state.get('types').step_types).toBeDefined();
+      expect(instance_state.get('types').sub_step_types).toBeDefined();
+      expect(instance_state.get('conditional_step_comparators')).toBeDefined();
+    });
+
+    it('should start with its own empty workflows registry, instead of the singleton default', () => {
+      const instance_state = new InstanceState();
+
+      expect(instance_state.get('workflows')).toEqual({});
+      expect(instance_state.get('workflows')).not.toBe(State.get('workflows'));
+    });
+
+    it('should share the same event emitter instances as the State singleton defaults', () => {
+      const instance_state = new InstanceState();
+
+      expect(instance_state.get('events.workflow')).toBe(State.get('events.workflow'));
+      expect(instance_state.get('events.step')).toBe(State.get('events.step'));
+    });
+  });
+
+  describe('isolation', () => {
+    it('should not share custom data between separate instances', () => {
+      const a = new InstanceState();
+      const b = new InstanceState();
+
+      a.set('owner', 'a');
+
+      expect(a.get('owner')).toBe('a');
+      expect(b.get('owner')).toBeNull();
+    });
+
+    it('should not leak custom data into the State singleton', () => {
+      const instance_state = new InstanceState();
+
+      instance_state.set('only.here', true);
+
+      expect(State.get('only.here')).toBeNull();
+    });
+  });
+
+  describe('get/set/delete', () => {
+    it('should support dot and bracket notation paths', () => {
+      const instance_state = new InstanceState();
+
+      instance_state.set('a.b.c', 'deep');
+      instance_state.set('list[0].name', 'first');
+
+      expect(instance_state.get('a.b.c')).toBe('deep');
+      expect(instance_state.get('list[0].name')).toBe('first');
+    });
+
+    it('should return the default value when a path is missing', () => {
+      const instance_state = new InstanceState();
+
+      expect(instance_state.get('missing.path', 'fallback')).toBe('fallback');
+    });
+
+    it('should delete a path', () => {
+      const instance_state = new InstanceState();
+      instance_state.set('temp', 'value');
+
+      instance_state.delete('temp');
+
+      expect(instance_state.get('temp')).toBeNull();
+    });
+
+    it('should throw when set/delete is given an empty path', () => {
+      const instance_state = new InstanceState();
+
+      expect(() => instance_state.set('', 'value')).toThrow();
+      expect(() => instance_state.delete('')).toThrow();
+    });
+  });
+
+  describe('parseStatePath/getStateFromPropertyPath/setStateToPropertyPath', () => {
+    it('parseStatePath should parse dot and bracket notation', () => {
+      const instance_state = new InstanceState();
+
+      expect(instance_state.parseStatePath('users[0].name')).toEqual(['users', '0', 'name']);
+    });
+
+    it('setStateToPropertyPath/getStateFromPropertyPath should write and read a path directly', () => {
+      const instance_state = new InstanceState();
+
+      instance_state.setStateToPropertyPath('foo.bar', 'baz');
+
+      expect(instance_state.getStateFromPropertyPath('foo.bar')).toBe('baz');
+    });
+
+    it('getStateFromPropertyPath should return undefined (not a default) for a missing path', () => {
+      const instance_state = new InstanceState();
+
+      expect(instance_state.getStateFromPropertyPath('missing.path')).toBeUndefined();
+    });
+  });
+
+  describe('merge', () => {
+    it('should merge new properties in and return the updated data', () => {
+      const instance_state = new InstanceState();
+
+      const result = instance_state.merge({ merged: true });
+
+      expect(instance_state.get('merged')).toBe(true);
+      expect(result.merged).toBe(true);
+    });
+  });
+
+  describe('each', () => {
+    it('should iterate over an array at the given path', async () => {
+      const instance_state = new InstanceState();
+      instance_state.set('items', ['a', 'b']);
+      const seen = [];
+
+      await instance_state.each('items', (item, index) => seen.push({ item, index }));
+
+      expect(seen).toEqual([{ item: 'a', index: 0 }, { item: 'b', index: 1 }]);
+    });
+
+    it('should throw for a non-iterable value', async () => {
+      const instance_state = new InstanceState();
+      instance_state.set('scalar', 42);
+
+      await expect(instance_state.each('scalar', () => {})).rejects.toThrow();
     });
   });
 });

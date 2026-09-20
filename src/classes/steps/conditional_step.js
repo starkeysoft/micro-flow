@@ -66,7 +66,11 @@ export default class ConditionalStep extends LogicStep {
   }
 
   /**
-   * Executes the appropriate branch based on the condition evaluation.
+   * Executes the appropriate branch based on the condition evaluation. When the executed branch
+   * is a `Step`/`Workflow` (not a plain function), it is stamped with this step's own
+   * `parent_workflow_id`/`use_state_singleton`/`state` first - true/false_callable are never
+   * added to the parent workflow via `addStep()`, so this is the only way they end up sharing
+   * its state instead of their own, independent one.
    * @async
    * @returns {Promise<*>} The result of the executed branch.
    */
@@ -86,6 +90,8 @@ export default class ConditionalStep extends LogicStep {
         result = await true_callable();
       } else {
         true_callable.parent_workflow_id = this.parent_workflow_id;
+        true_callable.use_state_singleton = this.use_state_singleton;
+        true_callable.state = this.state;
         result = await true_callable.execute();
       }
     } else {
@@ -98,6 +104,8 @@ export default class ConditionalStep extends LogicStep {
         result = await false_callable();
       } else {
         false_callable.parent_workflow_id = this.parent_workflow_id;
+        false_callable.use_state_singleton = this.use_state_singleton;
+        false_callable.state = this.state;
         result = await false_callable.execute();
       }
     }

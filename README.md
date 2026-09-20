@@ -17,7 +17,7 @@ Micro-Flow treats logic as a first-class object. Instead of managing one monolit
 - 🗄️ **Durable Persistence** - Serialize any `Workflow` or `Step` to JSON — even mid-pause — and hydrate it back later, in the same process or a different one.
 - 🌿 **Declarative Branching** - Use `ConditionalStep` and `SwitchStep` to keep complex branching logic out of your callables and in the workflow structure.
 - 🎯 **Dynamic Flow Control** - Break out of or skip steps dynamically at runtime.
-- 💾 **Namespaced State Management** - Access global state through a namespaced singleton with dot-notation support — eliminate data-threading through arguments.
+- 💾 **Namespaced State Management** - Every `Workflow` (and the steps it owns) gets its own namespaced, dot-notation state — eliminate data-threading through arguments. _(The process-wide `State` singleton this replaced is deprecated — see [State Management](#state-management).)_
 - ✨ **Cross-Tab/Worker Sync** - Broadcast events automatically via `BroadcastChannel` to reach other tabs and workers with zero configuration.
 - 🌍 **Isomorphic by Design** - Run the same API in Node.js (≥18) and all modern browsers.
 - 🎨 **Framework Agnostic** - Integrate seamlessly with React, Vue, Svelte, or vanilla JS.
@@ -233,18 +233,27 @@ Orchestrate functions, other steps, or entire workflows as individual units of w
 Define logic using callables. Assign any async function, step, or workflow to a step's `callable` parameter. This flexibility enables everything from simple logic chains to modularized, enterprise-scale flows.
 
 ### State Management
-Manage namespaced global state across all workflows and steps:
+
+> **Deprecated:** The `State` singleton shown below is deprecated and will be removed in the next major version. By default, every `Workflow` (and the `Step`s it owns) now has its own namespaced state via the same `this.getState()`/`this.setState()` calls — no global singleton required. See [Deprecation: continuing to use `State`](docs/classes/state.md#deprecation-continuing-to-use-state) for how to opt back into the old, process-wide behavior in the meantime.
+
+Manage namespaced state, scoped to a workflow and the steps it owns:
 
 ```javascript
-import { State } from 'micro-flow';
+import { Workflow, Step } from 'micro-flow';
 
-// Set and get values with dot-notation
-State.set('user.name', 'John Doe');
-const timeout = State.get('config.timeout', 3000);
+const workflow = new Workflow({
+  steps: [
+    new Step({
+      callable: async function () {
+        // Set and get values with dot-notation
+        this.setState('user.name', 'John Doe');
+        const timeout = this.getState('config.timeout') ?? 3000;
+      },
+    }),
+  ],
+});
 
-// Merge or iterate over collections
-State.merge({ settings: { theme: 'dark' } });
-State.each('users', (user) => console.log(user.name));
+await workflow.execute();
 ```
 
 ### Events
@@ -273,5 +282,5 @@ Explore the full documentation in the [docs](docs/) directory:
 - [API Reference](docs/index.md)
 - [Workflow API](docs/classes/workflow.md)
 - [Step API](docs/classes/steps/step.md)
-- [State Management](docs/classes/state.md)
+- [State Management](docs/classes/state.md) _(the `State` singleton documented here is deprecated)_
 - [CallableRegistry API (Persistence)](docs/classes/callable_registry.md)

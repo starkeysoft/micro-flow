@@ -45,6 +45,10 @@ export default class SwitchStep extends Step {
   /**
    * Executes the switch logic by evaluating each case in order.
    * Returns the result of the first matching case, or the default callable if no match.
+   * Every `Case` (and, if it's a `Step`/`Workflow`, `default_callable`) is stamped with this
+   * step's own `parent_workflow_id`/`use_state_singleton`/`state` before it runs, since `cases`
+   * lives on this step rather than the parent workflow's `_steps`, so it never goes through
+   * `Workflow.addStep()` to pick those up on its own.
    * @returns {Promise<*>} The result of the matched case or default callable.
    */
   async switch() {
@@ -53,6 +57,11 @@ export default class SwitchStep extends Step {
     
     for (const switch_case of this.cases) {
       switch_case.switch_subject = resolved_subject;
+      // Cases live in `this.cases`, not the workflow's `_steps` array, so they never go through
+      // Workflow.addStep() - stamp them here instead, mirroring what addStep() does.
+      switch_case.parent_workflow_id = this.parent_workflow_id;
+      switch_case.use_state_singleton = this.use_state_singleton;
+      switch_case.state = this.state;
 
       const is_matched = await switch_case.checkCondition();
 
@@ -71,6 +80,12 @@ export default class SwitchStep extends Step {
     }
 
     // Unwrap Step/Workflow results for consistency with case results
+    if (this._default_callable_type !== 'function') {
+      this._default_callable_raw.parent_workflow_id = this.parent_workflow_id;
+      this._default_callable_raw.use_state_singleton = this.use_state_singleton;
+      this._default_callable_raw.state = this.state;
+    }
+
     const default_result = await this.default_callable();
     if (this._default_callable_type !== 'function') {
       return default_result.result;

@@ -55,13 +55,29 @@ export default class LoopStep extends LogicStep {
     // this._callable will be set to the loop method by the setter below.
     // The raw object is kept too (distinct from the bound version) so serialization
     // can recover the original function/Step/Workflow instead of the loop-runner method.
-    const user_callable_type = this.getCallableType(callable);
+    this._loop_callable_type = this.getCallableType(callable);
     this._loop_callable_object = callable;
-    this._loop_callable = user_callable_type === 'function'
+    this._loop_callable = this._loop_callable_type === 'function'
       ? callable.bind(this)
       : callable.execute.bind(callable);
 
     this.callable = this[`${loop_type}_loop`].bind(this);
+  }
+
+  /**
+   * When the per-iteration callable is a `Step`/`Workflow` (not a plain function), stamps it with
+   * this loop step's own `parent_workflow_id`/`use_state_singleton`/`state` right before the loop
+   * runs - mirrors what `Workflow.addStep()` does for top-level steps, since a loop callable is
+   * never added to the workflow directly.
+   */
+  propagateStateToLoopCallable() {
+    if (this._loop_callable_type === 'function') {
+      return;
+    }
+
+    this._loop_callable_object.parent_workflow_id = this.parent_workflow_id;
+    this._loop_callable_object.use_state_singleton = this.use_state_singleton;
+    this._loop_callable_object.state = this.state;
   }
 
   /**
@@ -73,6 +89,8 @@ export default class LoopStep extends LogicStep {
     if (!this._loop_callable.constructor.name.includes('Generator')) {
       throw new Error('Iterable must be a generator function for generator loops');
     }
+
+    this.propagateStateToLoopCallable();
 
     let iterations = 0;
     // Use for await...of to handle both sync and async generators
@@ -97,6 +115,8 @@ export default class LoopStep extends LogicStep {
    * @returns {Object} - An object containing a message and the results of the loop.
    */
   async for_loop() {
+    this.propagateStateToLoopCallable();
+
     const target = this.iterations;
     let i = 0;
     for (; i < target; i++) {
@@ -120,6 +140,8 @@ export default class LoopStep extends LogicStep {
     if (!this.iterable) {
       throw new Error('Iterable is required for for_each loops');
     }
+
+    this.propagateStateToLoopCallable();
 
     if (typeof this.iterable === 'function') {
       this.iterable = this.iterable();
@@ -149,6 +171,8 @@ export default class LoopStep extends LogicStep {
     if (!this.conditionalIsValid()) {
       throw new Error('Valid conditional is required for while loops');
     }
+
+    this.propagateStateToLoopCallable();
 
     let iterations = 0;
     while (this.checkCondition() && iterations < this.max_iterations) {

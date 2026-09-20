@@ -6,8 +6,7 @@ A foundational example demonstrating how to construct and execute a logic flow w
 
 You will learn:
 - Creating a `Workflow` with multiple `Step` instances
-- Passing data between steps via the `State` singleton
-- Using `this.getState()` / `this.setState()` inside step callables
+- Passing data between steps via `this.getState()` / `this.setState()` (scoped to the workflow by default — see the deprecated `State` singleton note below)
 - Reading per-step results from `workflow.results`
 - Checking `workflow.status` and `timing`
 - Listening to workflow and step lifecycle events
@@ -177,9 +176,9 @@ for (const [i, entry] of result.results.entries()) {
 
 console.log('');
 console.log('Final state snapshot:');
-console.log('  User:   ', State.get('onboarding.user')?.name);
-console.log('  Valid:  ', State.get('onboarding.valid'));
-console.log('  Profile:', State.get('onboarding.profile')?.displayName);
+console.log('  User:   ', userOnboardingFlow.getState('onboarding.user')?.name);
+console.log('  Valid:  ', userOnboardingFlow.getState('onboarding.valid'));
+console.log('  Profile:', userOnboardingFlow.getState('onboarding.profile')?.displayName);
 ```
 
 ## Key Concepts
@@ -190,7 +189,9 @@ The `Workflow` constructor accepts `steps`, `exit_on_error`, and `throw_on_empty
 
 ### State Sharing
 
-The `State` singleton is the idiomatic way to pass data between steps. Inside a step callable, `this.setState(path, value)` and `this.getState(path)` are shortcuts to `State.set()` / `State.get()`. Use dot-notation paths like `'onboarding.user'`.
+> **Deprecated:** Earlier versions routed `this.setState()`/`this.getState()` through a process-wide `State` singleton. That singleton is deprecated and will be removed in the next major version — see [Deprecation: continuing to use `State`](../classes/state.md#deprecation-continuing-to-use-state).
+
+`this.setState(path, value)` and `this.getState(path)` inside a step callable are the idiomatic way to pass data between steps, scoped to the workflow those steps belong to. Use dot-notation paths like `'onboarding.user'`.
 
 ### Retries and Timeouts
 

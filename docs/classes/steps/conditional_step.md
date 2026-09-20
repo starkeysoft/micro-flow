@@ -27,8 +27,10 @@ Creates a new ConditionalStep instance.
 | `options.conditional.subject` | `any\|Function` | — | Value or function returning value to evaluate. |
 | `options.conditional.operator` | `string` | — | Comparison operator string. |
 | `options.conditional.value` | `any\|Function` | — | Value or function returning value to compare against. |
-| `options.true_callable` | `Function\|Step\|Workflow` | `async () => {}` | Executed when the condition is `true`. Functions are bound to `this`. |
-| `options.false_callable` | `Function\|Step\|Workflow` | `async () => {}` | Executed when the condition is `false`. Functions are bound to `this`. |
+| `options.true_callable` | `Function\|Step\|Workflow` | `async () => {}` | Executed when the condition is `true`. Functions are bound to `this`. A `Step`/`Workflow` inherits this step's `parent_workflow_id` and state (see below) right before it runs. |
+| `options.false_callable` | `Function\|Step\|Workflow` | `async () => {}` | Executed when the condition is `false`. Functions are bound to `this`. A `Step`/`Workflow` inherits this step's `parent_workflow_id` and state (see below) right before it runs. |
+
+> A `true_callable`/`false_callable` that's a `Step`/`Workflow` isn't added to the parent workflow via `addStep()`, so it wouldn't otherwise share the workflow's state - `ConditionalStep` stamps it with this step's own `parent_workflow_id`, `use_state_singleton`, and `state` right before invoking it, so `this.getState()`/`this.setState()` inside it read and write the same state as every other step in the workflow.
 
 ## Properties
 
