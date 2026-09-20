@@ -63,10 +63,10 @@ describe('Workflow', () => {
       expect(workflow._steps[1].name).toBe('step-2');
     });
 
-    it('should register workflow in global state', () => {
+    it('should register itself in its own state\'s workflows registry', () => {
       const workflow = new Workflow({ name: 'registered-workflow' });
-      const workflows = State.get('workflows');
-      
+      const workflows = workflow.getState('workflows');
+
       expect(workflows[workflow.id]).toBe(workflow);
     });
 
@@ -84,6 +84,132 @@ describe('Workflow', () => {
       expect(workflow.timing.create_time).toBeDefined();
       expect(workflow.timing.create_time >= before).toBe(true);
       expect(workflow.timing.create_time <= after).toBe(true);
+    });
+  });
+
+  describe('use_state_singleton', () => {
+    it('defaults to false, giving the workflow its own isolated state', () => {
+      const workflow = new Workflow({ name: 'isolated-workflow' });
+
+      expect(workflow.use_state_singleton).toBe(false);
+
+      workflow.setState('custom.value', 'only-mine');
+
+      expect(workflow.getState('custom.value')).toBe('only-mine');
+      // The deprecated singleton is untouched.
+      expect(State.get('custom.value')).toBeNull();
+    });
+
+    it('keeps each workflow\'s custom state independent of other workflows', () => {
+      const workflowA = new Workflow({ name: 'workflow-a' });
+      const workflowB = new Workflow({ name: 'workflow-b' });
+
+      workflowA.setState('owner', 'a');
+      workflowB.setState('owner', 'b');
+
+      expect(workflowA.getState('owner')).toBe('a');
+      expect(workflowB.getState('owner')).toBe('b');
+    });
+
+    it('shares its state with steps added via the constructor, addStep, addStepAtIndex, and unshiftStep', () => {
+      const constructorStep = new Step({ name: 'constructor-step', callable: async () => {} });
+      const addedStep = new Step({ name: 'added-step', callable: async () => {} });
+      const indexedStep = new Step({ name: 'indexed-step', callable: async () => {} });
+      const unshiftedStep = new Step({ name: 'unshifted-step', callable: async () => {} });
+
+      const workflow = new Workflow({ name: 'sharing-workflow', steps: [constructorStep] });
+      workflow.addStep(addedStep);
+      workflow.addStepAtIndex(indexedStep, 0);
+      workflow.unshiftStep(unshiftedStep);
+
+      workflow.setState('shared.value', 'visible-everywhere');
+
+      expect(constructorStep.getState('shared.value')).toBe('visible-everywhere');
+      expect(addedStep.getState('shared.value')).toBe('visible-everywhere');
+      expect(indexedStep.getState('shared.value')).toBe('visible-everywhere');
+      expect(unshiftedStep.getState('shared.value')).toBe('visible-everywhere');
+
+      addedStep.setState('set.from.step', true);
+      expect(workflow.getState('set.from.step')).toBe(true);
+    });
+
+    it('propagates use_state_singleton down to every step it owns', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const step = new Step({ name: 'inherits-flag', callable: async () => {} });
+      const workflow = new Workflow({ name: 'singleton-workflow', steps: [step], use_state_singleton: true });
+
+      expect(step.use_state_singleton).toBe(true);
+
+      step.setState('legacy.value', 'from-step');
+      expect(State.get('legacy.value')).toBe('from-step');
+      expect(workflow.getState('legacy.value')).toBe('from-step');
+
+      warnSpy.mockRestore();
+    });
+
+    it('routes getState/setState/deleteState through the deprecated singleton when true, with a warning', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const workflow = new Workflow({ name: 'legacy-workflow', use_state_singleton: true });
+      workflow.setState('legacy.counter', 1);
+
+      expect(warnSpy).toHaveBeenCalled();
+      expect(State.get('legacy.counter')).toBe(1);
+      expect(workflow.getState('legacy.counter')).toBe(1);
+
+      workflow.deleteState('legacy.counter');
+      expect(State.get('legacy.counter')).toBeNull();
+
+      warnSpy.mockRestore();
+    });
+
+    it('round-trips through prepareForSerialization/hydrate', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const workflow = new Workflow({ name: 'round-trip-workflow', use_state_singleton: true });
+
+      expect(workflow.prepareForSerialization().use_state_singleton).toBe(true);
+
+      const hydrated = Workflow.hydrate(workflow.prepareForSerialization());
+
+      expect(hydrated.use_state_singleton).toBe(true);
+
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe('path methods (parseStatePath / getStateFromPropertyPath / setStateToPropertyPath)', () => {
+    it('parseStatePath should parse dot and bracket notation without touching any state', () => {
+      const workflow = new Workflow({ name: 'path-parsing-workflow' });
+
+      expect(workflow.parseStatePath('a.b.c')).toEqual(['a', 'b', 'c']);
+      expect(workflow.parseStatePath('users[0].name')).toEqual(['users', '0', 'name']);
+    });
+
+    it('setStateToPropertyPath/getStateFromPropertyPath should read and write this workflow\'s own state', () => {
+      const workflow = new Workflow({ name: 'low-level-path-workflow' });
+
+      workflow.setStateToPropertyPath('foo.bar', 'baz');
+
+      expect(workflow.getStateFromPropertyPath('foo.bar')).toBe('baz');
+      // Shares the same underlying state as getState/setState.
+      expect(workflow.getState('foo.bar')).toBe('baz');
+    });
+
+    it('should fall back to the deprecated State singleton when use_state_singleton is true', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const workflow = new Workflow({ name: 'legacy-path-workflow', use_state_singleton: true });
+      workflow.setStateToPropertyPath('legacy.path', 'value');
+
+      expect(warnSpy).toHaveBeenCalled();
+      expect(State.get('legacy.path')).toBe('value');
+      expect(workflow.getStateFromPropertyPath('legacy.path')).toBe('value');
+      // parseStatePath is a pure utility - no state involved, so no deprecation warning.
+      expect(workflow.parseStatePath('legacy.path')).toEqual(['legacy', 'path']);
+
+      warnSpy.mockRestore();
     });
   });
 
@@ -157,7 +283,7 @@ describe('Workflow', () => {
       const step = new Step({
         name: 'check-status',
         callable: async function() {
-          const workflow = State.get('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflows')[this.parent_workflow_id];
           statusDuringExecution = workflow.status;
         }
       });
@@ -233,7 +359,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         name: 'set-break',
         callable: async function() {
-          const workflow = State.get('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflows')[this.parent_workflow_id];
           workflow.should_break = true;
           return 'set break';
         }
@@ -258,7 +384,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         name: 'set-skip',
         callable: async function() {
-          const workflow = State.get('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflows')[this.parent_workflow_id];
           workflow.should_skip = true;
           results.push('step1');
           return 'set skip';
@@ -293,7 +419,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         name: 'set-pause',
         callable: async function() {
-          const workflow = State.get('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflows')[this.parent_workflow_id];
           workflow.should_pause = true;
           return 'set pause';
         }
@@ -339,7 +465,7 @@ describe('Workflow', () => {
           step1Count++;
           // Only pause on first execution
           if (step1Count === 1) {
-            const workflow = State.get('workflows')[this.parent_workflow_id];
+            const workflow = this.getState('workflows')[this.parent_workflow_id];
             workflow.should_pause = true;
           }
           return 'step1 done';
@@ -403,7 +529,7 @@ describe('Workflow', () => {
         name: 'step-2',
         callable: async function() {
           step2Calls++;
-          const workflow = State.get('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflows')[this.parent_workflow_id];
           workflow.should_pause = true;
           return 'step2 done';
         }
@@ -433,7 +559,7 @@ describe('Workflow', () => {
         name: 'step-1',
         callable: async function() {
           executed.push('step-1');
-          const workflow = State.get('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflows')[this.parent_workflow_id];
           workflow.should_pause = true;
         }
       });
@@ -1167,7 +1293,7 @@ describe('Workflow', () => {
         name: 'step-1',
         callable: async function() {
           results.push('step1');
-          const workflow = State.get('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflows')[this.parent_workflow_id];
           const dynamicStep = new Step({
             name: 'dynamic-step',
             callable: async () => {
@@ -1247,7 +1373,7 @@ describe('Workflow', () => {
         name: 'step-1',
         callable: async function() {
           if (pauseOnFirst) {
-            const wf = State.get('workflows')[this.parent_workflow_id];
+            const wf = this.getState('workflows')[this.parent_workflow_id];
             wf.pause();
             pauseOnFirst = false;
           }
@@ -1274,7 +1400,7 @@ describe('Workflow', () => {
       const step = new Step({
         name: 'step-1',
         callable: async function() {
-          const wf = State.get('workflows')[this.parent_workflow_id];
+          const wf = this.getState('workflows')[this.parent_workflow_id];
           wf.pause();
           return 'result';
         }
@@ -1358,7 +1484,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         name: 'step-1',
         callable: async function() {
-          const workflow = State.get('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflows')[this.parent_workflow_id];
           workflow.should_pause = true;
         }
       });
@@ -1423,7 +1549,7 @@ describe('Workflow', () => {
 
       const hydrated = Workflow.hydrate(original.prepareForSerialization());
 
-      const workflows = State.get('workflows');
+      const workflows = hydrated.getState('workflows');
       expect(workflows[hydrated.id]).toBe(hydrated);
     });
 
@@ -1432,7 +1558,7 @@ describe('Workflow', () => {
 
       const hydrated = Workflow.hydrate(original.prepareForSerialization());
 
-      const workflows = State.get('workflows');
+      const workflows = hydrated.getState('workflows');
       const staleEntries = Object.keys(workflows).filter(
         (id) => id !== hydrated.id && workflows[id] === hydrated
       );
@@ -1463,7 +1589,7 @@ describe('Workflow', () => {
         // ("callable", from being assigned to the `callable:` object key) - give
         // it an explicit name so hydration resolves each independently.
         callable: async function pauseStep() {
-          const workflow = State.get('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflows')[this.parent_workflow_id];
           workflow.should_pause = true;
         }
       });
@@ -1528,7 +1654,7 @@ describe('Workflow', () => {
       });
       registry.register('step2Fn', async function step2Fn() {
         step2Calls++;
-        const workflow = State.get('workflows')[this.parent_workflow_id];
+        const workflow = this.getState('workflows')[this.parent_workflow_id];
         workflow.should_pause = true;
         return 'step2 done';
       });
@@ -1557,7 +1683,7 @@ describe('Workflow', () => {
       freshRegistry.register('step1Fn', async function step1Fn() { step1Calls++; return 'step1 done'; });
       freshRegistry.register('step2Fn', async function step2Fn() {
         step2Calls++;
-        const workflow = State.get('workflows')[this.parent_workflow_id];
+        const workflow = this.getState('workflows')[this.parent_workflow_id];
         workflow.should_pause = true;
         return 'step2 done';
       });

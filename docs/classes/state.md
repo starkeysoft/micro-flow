@@ -1,15 +1,44 @@
 # State
 
-The global singleton that acts as the shared data store, event hub, and workflow registry for the entire library. `State` is a plain module-level object — it is never instantiated with `new`. All methods are called directly on the exported object.
+> **Deprecated:** The `State` singleton is deprecated and will be removed in the next major version. Every `Workflow` (and every `Step` it owns) now has its own state, reached the same way — via `this.getState()` / `this.setState()` / `this.deleteState()` — so a single process-wide store is no longer needed for the common case. See [Deprecation: continuing to use `State`](#deprecation-continuing-to-use-state) below for how to keep the old behavior while you migrate.
+
+The global singleton that historically acted as the shared data store, event hub, and workflow registry for the entire library. `State` is a plain module-level object — it is never instantiated with `new`. All methods are called directly on the exported object.
 
 `State` is automatically initialized with enums, event instances, and an empty workflow registry when the module loads. Any workflow, step, or application code can read and write to it using dot-notation or bracket-notation paths.
 
 ## Table of Contents
+- [Deprecation: continuing to use `State`](#deprecation-continuing-to-use-state)
 - [Default Structure](#default-structure)
 - [Path Syntax](#path-syntax)
 - [Methods](#methods)
 - [Examples](#examples)
 - [Related](#related)
+
+## Deprecation: continuing to use `State`
+
+As of this version, `Base` (the shared parent of `Workflow` and `Step`) defaults to `use_state_singleton: false`. This gives every `Workflow` its own `InstanceState` object, shared with every `Step` it owns (steps get it automatically when added via `addStep`/`addStepAtIndex`/`unshiftStep`, or passed via the constructor's `steps` option). `this.getState(path)` / `this.setState(path, value)` / `this.deleteState(path)` work exactly as before, but now read and write that workflow-scoped state instead of the process-wide singleton — so two unrelated `Workflow`s no longer see each other's custom data.
+
+Framework internals that used to live on `State` — `statuses`, `event_names`, `events`, `types`, `conditional_step_comparators` — are still reachable the same way (`this.getState('statuses.workflow')`, etc.), and the `events.*` entries are the *same* `Event` instances as `State`'s, so listeners registered via `State.get('events.workflow')` keep receiving events regardless of `use_state_singleton`.
+
+If you still need one global store shared by every `Workflow`/`Step` in the process (the old default), pass `use_state_singleton: true` when constructing a `Workflow` — it propagates to every `Step` the workflow owns:
+
+```javascript
+import { Workflow, Step } from '@ronaldroe/micro-flow';
+
+const workflow = new Workflow({
+  name: 'legacy-state-workflow',
+  use_state_singleton: true, // propagates to every step below
+  steps: [
+    new Step({
+      callable: async function () {
+        this.setState('pipeline.raw', [1, 2, 3]); // writes to the State singleton
+      },
+    }),
+  ],
+});
+```
+
+Calling `getState`/`setState`/`deleteState` with `use_state_singleton: true` logs a `console.warn` pointing back here, and still calls through to `State.get()` / `State.set()` / `State.delete()` exactly as documented below. This escape hatch (and the `State` class itself) will be removed in the next major version — migrate to per-instance state (or pass data through `prepareForSerialization()` / step results) before then.
 
 ## Default Structure
 
@@ -254,8 +283,10 @@ Low-level path setter. Sets the value at the given path and optionally emits a `
 
 ### Passing data between steps via State
 
+Since `use_state_singleton` defaults to `false`, `this.setState()`/`this.getState()` below read and write the workflow's own state, not the `State` singleton — that's why the final line reads it back via `wf.getState()` rather than `State.get()`.
+
 ```javascript
-import { Workflow, Step, State } from '@ronaldroe/micro-flow';
+import { Workflow, Step } from '@ronaldroe/micro-flow';
 
 const wf = new Workflow({
   name: 'data-pipeline',
@@ -290,7 +321,7 @@ const wf = new Workflow({
 });
 
 await wf.execute();
-console.log('Sum:', State.get('pipeline.sum')); // 60
+console.log('Sum:', wf.getState('pipeline.sum')); // 60
 ```
 
 ### Reacting to state changes
@@ -336,6 +367,7 @@ workflowEvents.on(workflowStatuses.COMPLETE, (data) => {
 
 ## Related
 
-- [Base](base.md) — Exposes `this.getState()`, `this.setState()`, `this.deleteState()` as instance shortcuts.
+- [Base](base.md) — Exposes `this.getState()`, `this.setState()`, `this.deleteState()` as instance shortcuts. By default these read/write the owning `Workflow`'s own state, not this singleton — see [Deprecation: continuing to use `State`](#deprecation-continuing-to-use-state).
+- [Workflow](workflow.md) — `use_state_singleton` constructor option to opt a workflow (and its steps) back into this singleton.
 - [StateEvent](events/state_event.md) — The event instance at `State.get('events.state')`.
 - [state_event_names](../../enums/state_event_names.md) — All state event names.

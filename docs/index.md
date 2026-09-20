@@ -13,7 +13,7 @@ Master micro-flow, the lightweight logic orchestration engine for Node.js and mo
 
 #### Orchestration
 - [Workflow](classes/workflow.md) - Manage and execute complex logic sequences with precision.
-- [State](classes/state.md) - Coordinate global application state and cross-context events.
+- [State](classes/state.md) - Coordinate cross-context events; its global state store is deprecated in favor of per-workflow state (see the [deprecation note](classes/state.md#deprecation-continuing-to-use-state)).
 - [CallableRegistry](classes/callable_registry.md) - Resolve function callables by name so workflows and steps survive serialization.
 
 #### Specialized Steps
@@ -198,7 +198,10 @@ Steps are individual units of work that can:
 - Emit lifecycle events
 
 ### State Management
-Global state accessible across all workflows and steps:
+
+> **Deprecated:** The process-wide `State` singleton is deprecated and will be removed in the next major version. State is now scoped per-workflow by default — see [Deprecation: continuing to use `State`](classes/state.md#deprecation-continuing-to-use-state) for how to keep the old, global behavior in the meantime.
+
+Namespaced state, scoped to a workflow and the steps it owns:
 - Dot-notation path access - Access data using a string representation of the same syntax JavaScript uses to access array indices and object keys. `"users[0].email"`
 - Nested object support
 - Array indexing

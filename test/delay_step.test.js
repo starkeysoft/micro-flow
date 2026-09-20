@@ -362,12 +362,11 @@ describe('DelayStep', () => {
 
   describe('state access', () => {
     it('should have access to getState method', async () => {
-      State.set('test.value', 'hello');
-
       const step = new DelayStep({
         delay_type: delay_types.RELATIVE,
         relative_delay_ms: 0
       });
+      step.setState('test.value', 'hello');
 
       expect(step.getState('test.value')).toBe('hello');
     });
@@ -380,7 +379,7 @@ describe('DelayStep', () => {
 
       step.setState('delay.completed', true);
 
-      expect(State.get('delay.completed')).toBe(true);
+      expect(step.getState('delay.completed')).toBe(true);
     });
   });
 

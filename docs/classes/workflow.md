@@ -17,7 +17,7 @@ The primary orchestration engine in micro-flow. A `Workflow` sequences an ordere
 
 ### `new Workflow(options)`
 
-Creates a new Workflow instance and registers it in the global `State.workflows` registry.
+Creates a new Workflow instance and registers it in its own state's `workflows` registry (see `options.use_state_singleton` below).
 
 #### Parameters
 
@@ -27,6 +27,7 @@ Creates a new Workflow instance and registers it in the global `State.workflows`
 | `options.callable_registry` | `CallableRegistry` | `null` | Instance of `CallableRegistry` to use for the instance's registry. If not passed, instantiates a new `CallableRegistry` instance. |
 | `options.exit_on_error` | `boolean` | `false` | When `true`, any step failure immediately halts execution and marks the workflow as failed. |
 | `options.result_per_step` | `boolean` | `false` | When `true`, `result_per_step_function` is awaited after each step completes, before that step's result is pushed onto `results`. |
+| `options.use_state_singleton` | `boolean` | `false` | Deprecated escape hatch. When `true`, this workflow (and every `Step` it owns) routes `getState`/`setState`/`deleteState` through the deprecated, process-wide [`State`](state.md) singleton instead of the workflow's own state. See [State: Deprecation](state.md#deprecation-continuing-to-use-state). |
 | `options.result_per_step_function` | `Function\|null` | `null` | Callback invoked as `await result_per_step_function(workflow.prepareForSerialization())` after each step completes, when `result_per_step` is `true`. Ignored otherwise. |
 | `options.steps` | `Step[]` | `[]` | Initial array of steps to add to the workflow. |
 | `options.throw_on_empty` | `boolean` | `false` | When `true`, calling `execute()` on a workflow with no steps throws an error. |
@@ -198,6 +199,19 @@ Removes the step at the given zero-based index. Emits `WORKFLOW_STEP_REMOVED`.
 
 ---
 
+### `getStateFromPropertyPath(path, emit?)` → `any`
+
+Low-level counterpart to `getState()` - resolves a nested property path within this workflow's own state, without the falsy/`'*'`-path-means-"everything" special case `getState()` has. Falls back to the deprecated [`State.getFromPropertyPath()`](state.md#stategetfrompropertypathpath-emit--any) singleton when `use_state_singleton` is `true` (see [State: Deprecation](state.md#deprecation-continuing-to-use-state)).
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | `string` | — | Dot/bracket path. |
+| `emit` | `boolean` | `true` | Only meaningful when `use_state_singleton` is `true`; whether to emit the singleton's `GET_FROM_PROPERTY_PATH` state event. |
+
+---
+
 ### `isEmpty()` → `boolean`
 
 Returns `true` if the workflow has no steps.
@@ -235,6 +249,18 @@ Reorders a step by moving it from one index to another. Emits `WORKFLOW_STEP_MOV
 
 ---
 
+### `parseStatePath(path)` → `string[]`
+
+Parses a dot/bracket-notation path string into an array of string keys (e.g. `'users[0].name'` → `['users', '0', 'name']`). A pure utility - unaffected by `use_state_singleton`.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path` | `string` | Path string to parse. |
+
+---
+
 ### `pause()`
 
 Sets `should_pause = true`. The workflow will suspend execution after the currently running step completes.
@@ -256,6 +282,20 @@ Alias for `addStep(step)`.
 ### `pushSteps(steps)`
 
 Alias for `addSteps(steps)`.
+
+---
+
+### `setStateToPropertyPath(path, value, emit?)` → `void`
+
+Low-level counterpart to `setState()` - sets a nested property value within this workflow's own state, creating intermediate objects/arrays as needed. Falls back to the deprecated [`State.setToPropertyPath()`](state.md#statesettopropertypathpath-value-emit--void) singleton when `use_state_singleton` is `true` (see [State: Deprecation](state.md#deprecation-continuing-to-use-state)).
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | `string` | — | Dot/bracket path. |
+| `value` | `any` | — | Value to write. |
+| `emit` | `boolean` | `true` | Only meaningful when `use_state_singleton` is `true`; whether to emit the singleton's `SET_TO_PROPERTY_PATH` state event. |
 
 ---
 
@@ -377,7 +417,7 @@ Deserializes a JSON string into a `Workflow` instance.
 
 ### `static hydrate(parsedWorkflow, callableRegistry?)` → `Workflow`
 
-Hydrates a parsed workflow object into a `Workflow` instance, including all of its steps — each rehydrated as the correct `Step` subclass via [`Step.hydrateAny()`](steps/step.md#static-hydrateanyparsed_step-callable_registry--step). The returned workflow is constructed with `callableRegistry` as its own `callable_registry`, so it can continue to resolve the same named callables after hydration (e.g. on subsequent `resume()` calls). Each step's `parent_workflow_id` and the workflow's entry in the global `State.get('workflows')` registry are corrected to the restored `id` (not the fresh one generated during construction), so calls like `setParentWorkflowValue()` from inside a hydrated step's callable — including the `should_pause` pattern used to pause a workflow — resolve to the right workflow instance.
+Hydrates a parsed workflow object into a `Workflow` instance, including all of its steps — each rehydrated as the correct `Step` subclass via [`Step.hydrateAny()`](steps/step.md#static-hydrateanyparsed_step-callable_registry--step). The returned workflow is constructed with `callableRegistry` as its own `callable_registry`, so it can continue to resolve the same named callables after hydration (e.g. on subsequent `resume()` calls). Each step's `parent_workflow_id` and the workflow's entry in its own state's `workflows` registry (`this.getState('workflows')`, or the deprecated `State.get('workflows')` singleton when `use_state_singleton` is `true`) are corrected to the restored `id` (not the fresh one generated during construction), so calls like `setParentWorkflowValue()` from inside a hydrated step's callable — including the `should_pause` pattern used to pause a workflow — resolve to the right workflow instance.
 
 **Parameters:**
 

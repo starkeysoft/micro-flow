@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import Base from './base.js';
 import CallableRegistry from './callable_registry.js';
 import Step from './steps/step.js';
+import State from './state.js';
 import { base_types } from '../enums/index.js';
 
 /**
@@ -18,6 +19,9 @@ export default class Workflow extends Base {
    * @param {boolean} [options.exit_on_error=false] - Whether to exit on error.
    * @param {Array<Step>} [options.steps=[]] - Array of steps to add to the workflow.
    * @param {boolean} [options.throw_on_empty=false] - Whether to throw error if workflow is empty.
+   * @param {boolean} [options.use_state_singleton=false] - Deprecated. When true, this workflow (and every
+   * `Step` it owns) reads/writes `getState`/`setState`/`deleteState` calls through the process-wide `State`
+   * singleton instead of this workflow's own state.
    */
   constructor({
     name,
@@ -27,9 +31,10 @@ export default class Workflow extends Base {
     result_per_step_function = null,
     steps = [],
     throw_on_empty = false,
+    use_state_singleton = false,
   }) {
-    super({ name, base_type: base_types.WORKFLOW });
-    
+    super({ name, base_type: base_types.WORKFLOW, use_state_singleton });
+
     this.callable_registry = callable_registry ?? new CallableRegistry();
     this.current_session_id = null;
     this.exit_on_error = exit_on_error;
@@ -174,6 +179,8 @@ export default class Workflow extends Base {
 
     step.parent_workflow_id = this.id;
     step.parent_workflow = this.prepareForSerialization();
+    step.use_state_singleton = this.use_state_singleton;
+    step.state = this.state;
     this._steps.push(step);
   }
 
@@ -190,6 +197,8 @@ export default class Workflow extends Base {
     this.steps_by_id[step.id] = step;
     step.parent_workflow_id = this.id;
     step.parent_workflow = this.prepareForSerialization();
+    step.use_state_singleton = this.use_state_singleton;
+    step.state = this.state;
     this._steps.splice(index, 0, step);
   }
 
@@ -252,6 +261,24 @@ export default class Workflow extends Base {
     }
 
     this._steps.splice(index, 1);
+  }
+
+  /**
+   * Resolves a nested property path within this workflow's own state - the low-level counterpart
+   * to `getState()`. Falls back to the deprecated `State` singleton's resolver when
+   * `use_state_singleton` is `true`.
+   * @param {string} path - Path to the state property.
+   * @param {boolean} [emit=true] - Only meaningful when `use_state_singleton` is `true`; whether
+   * to emit the singleton's `GET_FROM_PROPERTY_PATH` state event.
+   * @returns {*} The value at the specified path, or undefined if not found.
+   */
+  getStateFromPropertyPath(path, emit = true) {
+    if (this.use_state_singleton) {
+      console.warn('The state singleton has been deprecated. Use the .prepareForSerialization() method on the workflow instance instead.');
+      return State.getFromPropertyPath(path, emit);
+    }
+
+    return this.state.getStateFromPropertyPath(path);
   }
 
   /**
@@ -364,6 +391,16 @@ export default class Workflow extends Base {
   }
 
   /**
+   * Parses a property path string into an array of keys, supporting both dot notation and
+   * bracket notation (e.g. `"users[0].name"`). Pure utility - not affected by `use_state_singleton`.
+   * @param {string} path - The path to parse.
+   * @returns {string[]} Array of property keys.
+   */
+  parseStatePath(path) {
+    return this.use_state_singleton ? State.parsePath(path) : this.state.parseStatePath(path);
+  }
+
+  /**
    * Pauses the workflow execution.
    */
   pause() {
@@ -401,6 +438,7 @@ export default class Workflow extends Base {
       throw_on_empty: this.throw_on_empty,
       timing: this.timing,
       results: this.results,
+      use_state_singleton: this.use_state_singleton,
     };
 
     return serialized_workflow;
@@ -445,6 +483,25 @@ export default class Workflow extends Base {
   }
 
   /**
+   * Sets a nested property value within this workflow's own state, creating intermediate
+   * objects/arrays as needed - the low-level counterpart to `setState()`. Falls back to the
+   * deprecated `State` singleton's setter when `use_state_singleton` is `true`.
+   * @param {string} path - Path to the state property.
+   * @param {*} value - The value to set at the specified path.
+   * @param {boolean} [emit=true] - Only meaningful when `use_state_singleton` is `true`; whether
+   * to emit the singleton's `SET_TO_PROPERTY_PATH` state event.
+   */
+  setStateToPropertyPath(path, value, emit = true) {
+    if (this.use_state_singleton) {
+      console.warn('The state singleton has been deprecated. Use the .prepareForSerialization() method on the workflow instance instead.');
+      State.setToPropertyPath(path, value, emit);
+      return;
+    }
+
+    this.state.setStateToPropertyPath(path, value);
+  }
+
+  /**
    * Removes and returns the first step from the workflow.
    * @returns {Step} The first step.
    */
@@ -469,6 +526,8 @@ export default class Workflow extends Base {
     this.steps_by_id[step.id] = step;
 
     step.parent_workflow_id = this.id;
+    step.use_state_singleton = this.use_state_singleton;
+    step.state = this.state;
     this._steps.unshift(step);
   }
 
@@ -534,12 +593,13 @@ export default class Workflow extends Base {
       exit_on_error: parsed_workflow.exit_on_error,
       steps: parsed_workflow.steps.map(step => Step.hydrateAny(step, callable_registry)),
       throw_on_empty: parsed_workflow.throw_on_empty,
+      use_state_singleton: parsed_workflow.use_state_singleton ?? false,
     });
 
     // The constructor above (via Base) always generates a fresh id, and addStep() has
     // already stamped that fresh id onto each step's parent_workflow_id and registered
-    // the workflow under it in State.get('workflows'). Restoring the real id below would
-    // otherwise leave both of those referencing a discarded id, so fix them up here too.
+    // the workflow under it in its own state's `workflows` registry. Restoring the real id
+    // below would otherwise leave both of those referencing a discarded id, so fix them up here too.
     const stale_id = hydrated_workflow.id;
     hydrated_workflow.id = parsed_workflow.id;
 

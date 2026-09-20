@@ -195,7 +195,6 @@ describe('Step', () => {
     });
 
     it('should rethrow error when exit_on_error is true', async () => {
-      State.set('exit_on_error', true);
       const error = new Error('Test error');
       const step = new Step({
         name: 'failing-step',
@@ -203,12 +202,12 @@ describe('Step', () => {
           throw error;
         }
       });
+      step.setState('exit_on_error', true);
 
       await expect(step.execute()).rejects.toThrow('Test error');
     });
 
     it('should not rethrow error when exit_on_error is false', async () => {
-      State.set('exit_on_error', false);
       const step = new Step({
         name: 'failing-step',
         callable: async () => {
@@ -515,7 +514,6 @@ describe('Step', () => {
     });
 
     it('should rethrow on final retry when exit_on_error is true', async () => {
-      State.set('exit_on_error', true);
       const step = new Step({
         name: 'rethrow-after-retry',
         max_retries: 1,
@@ -523,6 +521,7 @@ describe('Step', () => {
           throw new Error('fatal');
         },
       });
+      step.setState('exit_on_error', true);
 
       await expect(step.execute()).rejects.toThrow('fatal');
     });
@@ -585,7 +584,7 @@ describe('Step', () => {
     it('should set a value on the parent workflow', () => {
       const workflow = new Workflow({ name: 'parent-workflow' });
       const step = new Step({ name: 'child-step' });
-      step.parent_workflow_id = workflow.id;
+      workflow.addStep(step);
 
       step.setParentWorkflowValue(workflow.id, 'customProperty', 'customValue');
 
@@ -603,6 +602,7 @@ describe('Step', () => {
     it('should set nested properties on parent workflow', () => {
       const workflow = new Workflow({ name: 'parent-workflow' });
       const step = new Step({ name: 'child-step' });
+      workflow.addStep(step);
 
       step.setParentWorkflowValue(workflow.id, 'should_break', true);
 
@@ -756,8 +756,6 @@ describe('Step', () => {
     });
 
     it('should allow step to access state', async () => {
-      State.set('testData', { value: 42 });
-
       const step = new Step({
         name: 'state-access',
         callable: async function() {
@@ -765,6 +763,7 @@ describe('Step', () => {
           return data.value * 2;
         }
       });
+      step.setState('testData', { value: 42 });
 
       await step.execute();
 
@@ -782,7 +781,8 @@ describe('Step', () => {
 
       await step.execute();
 
-      expect(State.get('modifiedValue')).toBe('set by step');
+      expect(step.getState('modifiedValue')).toBe('set by step');
+      expect(step.prepareForSerialization().result).toBe('done');
     });
 
     it('should handle deeply nested step execution', async () => {

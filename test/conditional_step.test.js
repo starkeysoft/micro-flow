@@ -865,11 +865,9 @@ describe('ConditionalStep', () => {
 
   describe('integration with State', () => {
     it('should access state within callables', async () => {
-      State.set('user.role', 'admin');
-
       const step = new ConditionalStep({
         conditional: {
-          subject: State.get('user.role'),
+          subject: 'admin',
           operator: '===',
           value: 'admin'
         },
@@ -878,6 +876,7 @@ describe('ConditionalStep', () => {
         },
         false_callable: async () => 'Access denied'
       });
+      step.setState('user.role', 'admin');
 
       const result = await step.execute();
 
@@ -885,8 +884,6 @@ describe('ConditionalStep', () => {
     });
 
     it('should modify state within callables', async () => {
-      State.set('counter', 0);
-
       const step = new ConditionalStep({
         conditional: {
           subject: true,
@@ -899,10 +896,29 @@ describe('ConditionalStep', () => {
           return this.getState('counter');
         }
       });
+      step.setState('counter', 0);
 
       await step.execute();
 
-      expect(State.get('counter')).toBe(1);
+      expect(step.getState('counter')).toBe(1);
+    });
+
+    it('should share the parent workflow\'s state with a nested Step true_callable', async () => {
+      const innerStep = new Step({
+        name: 'inner',
+        callable: async function () {
+          this.setState('touched', 'yes');
+        },
+      });
+      const cond = new ConditionalStep({
+        conditional: { subject: true, operator: '===', value: true },
+        true_callable: innerStep,
+      });
+      const workflow = new Workflow({ name: 'cond-shared-state', steps: [cond] });
+
+      await workflow.execute();
+
+      expect(workflow.getState('touched')).toBe('yes');
     });
   });
 

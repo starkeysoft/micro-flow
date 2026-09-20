@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { base_types } from '../enums/index.js';
-import State from './state.js';
+import State, { InstanceState } from './state.js';
 
 /**
  * Base class for workflows and steps.
@@ -13,12 +13,20 @@ export default class Base {
    * @param {Object} options - Configuration options.
    * @param {string} [options.name] - Name of the instance.
    * @param {string} [options.base_type=base_types.STEP] - Type of the base instance.
+   * @param {boolean} [options.use_state_singleton=false] - Deprecated. When true, `getState`/`setState`/`deleteState`
+   * fall back to the process-wide `State` singleton instead of this instance's own state. `Workflow` passes this
+   * value down to every `Step` it owns, so it only needs to be set once, on the workflow.
+   * @param {InstanceState|null} [options.state=null] - The `InstanceState` this instance's `getState`/`setState`/
+   * `deleteState` calls should read and write. `Workflow` creates its own on construction and shares it with its
+   * `Step`s; a `Step` created standalone (not yet added to a workflow) gets its own until it's added to one.
    */
-  constructor({ name, base_type = base_types.STEP }) {
+  constructor({ name, base_type = base_types.STEP, use_state_singleton = false, state = null }) {
     this.id = crypto.randomUUID();
     this.name = name ?? `${base_type}-${this.id}`;
 
     this.base_type = base_type;
+    this.use_state_singleton = use_state_singleton;
+    this.state = use_state_singleton ? null : (state ?? new InstanceState());
     this.timing = {
       cancel_time: null,
       complete_time: null,
@@ -115,28 +123,51 @@ export default class Base {
 
   // State management methods
   /**
-   * Gets a value from the global state.
+   * Gets a value from this instance's own state (the `Workflow`'s state, shared with its `Step`s).
+   * Set `use_state_singleton: true` (on the owning `Workflow`) to instead read from the
+   * deprecated, process-wide `State` singleton.
    * @param {string} path - Path to the state property.
    * @returns {*} The state value at the specified path.
    */
   getState(path) {
-    return State.get(path);
+    if (this.use_state_singleton) {
+      console.warn('The state singleton has been deprecated. Use the .prepareForSerialization() method on the workflow instance instead.');
+      return State.get(path);
+    }
+
+    return this.state.get(path);
   }
 
   /**
-   * Sets a value in the global state.
+   * Sets a value in this instance's own state (the `Workflow`'s state, shared with its `Step`s).
+   * Set `use_state_singleton: true` (on the owning `Workflow`) to instead write to the
+   * deprecated, process-wide `State` singleton.
    * @param {string} path - Path to the state property.
    * @param {*} value - Value to set.
    */
   setState(path, value) {
-    State.set(path, value);
+    if (this.use_state_singleton) {
+      console.warn('The state singleton has been deprecated. Use the .prepareForSerialization() method on the workflow instance instead.');
+      State.set(path, value);
+      return;
+    }
+
+    this.state.set(path, value);
   }
 
   /**
-   * Deletes a property from the global state.
+   * Deletes a property from this instance's own state (the `Workflow`'s state, shared with its `Step`s).
+   * Set `use_state_singleton: true` (on the owning `Workflow`) to instead delete from the
+   * deprecated, process-wide `State` singleton.
    * @param {string} path - Path to the state property to delete.
    */
   deleteState(path) {
-    State.delete(path);
+    if (this.use_state_singleton) {
+      console.warn('The state singleton has been deprecated. Use the .prepareForSerialization() method on the workflow instance instead.');
+      State.delete(path);
+      return;
+    }
+
+    this.state.delete(path);
   }
 }

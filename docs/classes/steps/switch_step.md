@@ -24,8 +24,10 @@ Creates a new SwitchStep instance.
 |-----------|------|---------|-------------|
 | `options.name` | `string` | `'step-<uuid>'` | Human-readable identifier. |
 | `options.subject` | `any\|Function` | `null` | Value (or function returning value) passed to each case as `switch_subject`. Evaluated when `switch()` runs. |
-| `options.cases` | `Array<Case\|LogicStep>` | `[]` | Ordered list of cases. `LogicStep` instances **must** have `conditional.subject` set explicitly. |
-| `options.default_callable` | `Function\|Step\|Workflow` | `async () => {}` | Executed if no case matches. |
+| `options.cases` | `Array<Case\|LogicStep>` | `[]` | Ordered list of cases. `LogicStep` instances **must** have `conditional.subject` set explicitly. Each case inherits this step's `parent_workflow_id` and state (see below) before it's evaluated. |
+| `options.default_callable` | `Function\|Step\|Workflow` | `async () => {}` | Executed if no case matches. A `Step`/`Workflow` inherits this step's `parent_workflow_id` and state (see below) before it runs. |
+
+> Neither `cases` nor a `Step`/`Workflow` `default_callable` are added to the parent workflow via `addStep()` (they live on this `SwitchStep`, not the workflow's own step list), so `switch()` stamps each with this step's own `parent_workflow_id`, `use_state_singleton`, and `state` right before it runs - otherwise `this.getState()`/`this.setState()` inside a case or the default callable would read/write a disconnected state instead of the workflow's.
 
 ## Properties
 

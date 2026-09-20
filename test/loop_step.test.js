@@ -125,8 +125,6 @@ describe('LoopStep', () => {
     });
 
     it('should have access to state in callable', async () => {
-      State.set('multiplier', 2);
-
       const step = new LoopStep({
         loop_type: loop_types.FOR,
         iterations: 3,
@@ -134,6 +132,7 @@ describe('LoopStep', () => {
           return this.getState('multiplier') * this.results.length;
         }
       });
+      step.setState('multiplier', 2);
 
       const result = await step.execute();
 
@@ -449,7 +448,7 @@ describe('LoopStep', () => {
 
       await workflow.execute();
 
-      expect(State.get('items')).toEqual([1, 2, 3]);
+      expect(workflow.getState('items')).toEqual([1, 2, 3]);
     });
 
     it('should work with Step as callable', async () => {
@@ -468,6 +467,27 @@ describe('LoopStep', () => {
       // When callable is a Step, it returns the step's result
       expect(result.result.result[0].result).toBe('from step');
       expect(result.result.result[1].result).toBe('from step');
+    });
+
+    it('should share the parent workflow\'s state with a nested Step callable', async () => {
+      const innerStep = new Step({
+        name: 'loop-inner',
+        callable: async function () {
+          this.setState('loop.touched', 'yes');
+          return this.parent_workflow_id;
+        },
+      });
+      const loopStep = new LoopStep({
+        loop_type: loop_types.FOR,
+        iterations: 1,
+        callable: innerStep,
+      });
+      const workflow = new Workflow({ name: 'loop-shared-state', steps: [loopStep] });
+
+      await workflow.execute();
+
+      expect(workflow.getState('loop.touched')).toBe('yes');
+      expect(innerStep.parent_workflow_id).toBe(workflow.id);
     });
   });
 
