@@ -272,17 +272,17 @@ Prefer `hydrateAny()` / `hydrateSerialized()` unless you already know the concre
 
 ### `setParentWorkflowValue(workflow_id, path, value)`
 
-Sets a property on the parent workflow instance (retrieved from this step's own state's `workflows` registry — see [State: Deprecation](../state.md#deprecation-continuing-to-use-state) if `use_state_singleton` is `true`, in which case it's retrieved from the deprecated `State.workflows` singleton instead). Used internally by `FlowControlStep` to set `should_break` or `should_skip`.
+Sets a property on the parent workflow instance — normally the live object shared via this step's own state under the `workflow` key (`this.getState('workflow')`); when `use_state_singleton` is `true`, several unrelated workflows can share the same process-wide state, so it's looked up by id in the deprecated singleton's `workflows` registry instead (see [State: Deprecation](../state.md#deprecation-continuing-to-use-state)). Used internally by `FlowControlStep` to set `should_break` or `should_skip`.
 
 **Parameters:**
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `workflow_id` | `string` | UUID of the workflow, as registered in this step's `workflows` state. |
+| `workflow_id` | `string` | UUID of the parent workflow, checked against the resolved instance's own `id`. |
 | `path` | `string` | Property path on the workflow object. |
 | `value` | `any` | Value to assign. |
 
-**Throws:** `Error` if the workflow with `workflow_id` is not found in state.
+**Throws:** `Error` if the workflow with `workflow_id` is not found.
 
 ---
 

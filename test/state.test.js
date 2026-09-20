@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import State, { InstanceState } from '../src/classes/state.js';
+import State from '../src/classes/state.js';
+import { InstanceState } from '../src/classes/instance_state.js';
+import Workflow from '../src/classes/workflow.js';
 
 describe('State', () => {
   beforeEach(() => {
@@ -630,37 +632,34 @@ describe('State', () => {
 // shared with every Step it owns.
 describe('InstanceState', () => {
   describe('default data', () => {
-    it('should be seeded with every default_state top-level key except workflows', () => {
+    it('should start empty - framework constants live on Workflow statics, not instance data', () => {
       const instance_state = new InstanceState();
 
-      expect(instance_state.get('messages').errors).toBeDefined();
-      expect(instance_state.get('messages').warnings).toBeDefined();
-      expect(instance_state.get('statuses').workflow).toBeDefined();
-      expect(instance_state.get('statuses').step).toBeDefined();
-      expect(instance_state.get('event_names').workflow).toBeDefined();
-      expect(instance_state.get('event_names').step).toBeDefined();
-      expect(instance_state.get('event_names').state).toBeDefined();
-      expect(instance_state.get('events').workflow).toBeDefined();
-      expect(instance_state.get('events').step).toBeDefined();
-      expect(instance_state.get('events').state).toBeDefined();
-      expect(instance_state.get('types').base_types).toBeDefined();
-      expect(instance_state.get('types').step_types).toBeDefined();
-      expect(instance_state.get('types').sub_step_types).toBeDefined();
-      expect(instance_state.get('conditional_step_comparators')).toBeDefined();
+      expect(instance_state.get('*')).toEqual({});
     });
+  });
 
-    it('should start with its own empty workflows registry, instead of the singleton default', () => {
-      const instance_state = new InstanceState();
-
-      expect(instance_state.get('workflows')).toEqual({});
-      expect(instance_state.get('workflows')).not.toBe(State.get('workflows'));
+  describe('Workflow statics', () => {
+    it('should expose the framework constants formerly seeded onto every InstanceState', () => {
+      expect(Workflow.messages.errors).toBeDefined();
+      expect(Workflow.messages.warnings).toBeDefined();
+      expect(Workflow.statuses.workflow).toBeDefined();
+      expect(Workflow.statuses.step).toBeDefined();
+      expect(Workflow.event_names.workflow).toBeDefined();
+      expect(Workflow.event_names.step).toBeDefined();
+      expect(Workflow.event_names.state).toBeDefined();
+      expect(Workflow.events.workflow).toBeDefined();
+      expect(Workflow.events.step).toBeDefined();
+      expect(Workflow.events.state).toBeDefined();
+      expect(Workflow.types.base_types).toBeDefined();
+      expect(Workflow.types.step_types).toBeDefined();
+      expect(Workflow.types.sub_step_types).toBeDefined();
+      expect(Workflow.conditional_step_comparators).toBeDefined();
     });
 
     it('should share the same event emitter instances as the State singleton defaults', () => {
-      const instance_state = new InstanceState();
-
-      expect(instance_state.get('events.workflow')).toBe(State.get('events.workflow'));
-      expect(instance_state.get('events.step')).toBe(State.get('events.step'));
+      expect(Workflow.events.workflow).toBe(State.get('events.workflow'));
+      expect(Workflow.events.step).toBe(State.get('events.step'));
     });
   });
 

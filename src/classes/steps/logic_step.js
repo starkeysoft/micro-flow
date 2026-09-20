@@ -55,77 +55,77 @@ export default class LogicStep extends Step {
     const subject = typeof raw_subject === 'function' ? raw_subject() : raw_subject;
     
     // Don't resolve value for CUSTOM_FUNCTION - the value IS the function to call
-    const is_custom_function = operator === this.getState('conditional_step_comparators.CUSTOM_FUNCTION');
+    const is_custom_function = operator === conditional_step_comparators.CUSTOM_FUNCTION;
     const value = (!is_custom_function && typeof raw_value === 'function') ? raw_value() : raw_value;
 
     switch (operator) {
-      case this.getState('conditional_step_comparators.STRICT_EQUALS'):
-      case this.getState('conditional_step_comparators.SIGN_STRICT_EQUALS'):
+      case conditional_step_comparators.STRICT_EQUALS:
+      case conditional_step_comparators.SIGN_STRICT_EQUALS:
         return subject === value;
-      case this.getState('conditional_step_comparators.SIGN_EQUALS'):
-      case this.getState('conditional_step_comparators.EQUALS'):
+      case conditional_step_comparators.SIGN_EQUALS:
+      case conditional_step_comparators.EQUALS:
         return subject == value;
-      case this.getState('conditional_step_comparators.NOT_EQUALS'):
-      case this.getState('conditional_step_comparators.SIGN_NOT_EQUALS'):
+      case conditional_step_comparators.NOT_EQUALS:
+      case conditional_step_comparators.SIGN_NOT_EQUALS:
         return subject != value;
-      case this.getState('conditional_step_comparators.STRICT_NOT_EQUALS'):
-      case this.getState('conditional_step_comparators.SIGN_STRICT_NOT_EQUALS'):
+      case conditional_step_comparators.STRICT_NOT_EQUALS:
+      case conditional_step_comparators.SIGN_STRICT_NOT_EQUALS:
         return subject !== value;
-      case this.getState('conditional_step_comparators.GREATER_THAN'):
-      case this.getState('conditional_step_comparators.SIGN_GREATER_THAN'):
+      case conditional_step_comparators.GREATER_THAN:
+      case conditional_step_comparators.SIGN_GREATER_THAN:
         return subject > value;
-      case this.getState('conditional_step_comparators.LESS_THAN'):
-      case this.getState('conditional_step_comparators.SIGN_LESS_THAN'):
+      case conditional_step_comparators.LESS_THAN:
+      case conditional_step_comparators.SIGN_LESS_THAN:
         return subject < value;
-      case this.getState('conditional_step_comparators.GREATER_THAN_OR_EQUAL'):
-      case this.getState('conditional_step_comparators.SIGN_GREATER_THAN_OR_EQUAL'):
+      case conditional_step_comparators.GREATER_THAN_OR_EQUAL:
+      case conditional_step_comparators.SIGN_GREATER_THAN_OR_EQUAL:
         return subject >= value;
-      case this.getState('conditional_step_comparators.LESS_THAN_OR_EQUAL'):
-      case this.getState('conditional_step_comparators.SIGN_LESS_THAN_OR_EQUAL'):
+      case conditional_step_comparators.LESS_THAN_OR_EQUAL:
+      case conditional_step_comparators.SIGN_LESS_THAN_OR_EQUAL:
         return subject <= value;
-      case this.getState('conditional_step_comparators.STRING_CONTAINS'):
-      case this.getState('conditional_step_comparators.STRING_INCLUDES'):
-      case this.getState('conditional_step_comparators.ARRAY_CONTAINS'):
-      case this.getState('conditional_step_comparators.ARRAY_INCLUDES'):
+      case conditional_step_comparators.STRING_CONTAINS:
+      case conditional_step_comparators.STRING_INCLUDES:
+      case conditional_step_comparators.ARRAY_CONTAINS:
+      case conditional_step_comparators.ARRAY_INCLUDES:
         return (Array.isArray(subject) || typeof subject === 'string') && subject.includes(value);
-      case this.getState('conditional_step_comparators.IN'):
+      case conditional_step_comparators.IN:
         return (Array.isArray(value) || typeof value === 'string') && value.includes(subject);
-      case this.getState('conditional_step_comparators.STRING_NOT_CONTAINS'):
-      case this.getState('conditional_step_comparators.STRING_NOT_INCLUDES'):
-      case this.getState('conditional_step_comparators.ARRAY_NOT_CONTAINS'):
-      case this.getState('conditional_step_comparators.ARRAY_NOT_INCLUDES'):
+      case conditional_step_comparators.STRING_NOT_CONTAINS:
+      case conditional_step_comparators.STRING_NOT_INCLUDES:
+      case conditional_step_comparators.ARRAY_NOT_CONTAINS:
+      case conditional_step_comparators.ARRAY_NOT_INCLUDES:
         return (Array.isArray(subject) || typeof subject === 'string') && !subject.includes(value);
-      case this.getState('conditional_step_comparators.NOT_IN'):
+      case conditional_step_comparators.NOT_IN:
         return (Array.isArray(value) || typeof value === 'string') && !value.includes(subject);
-      case this.getState('conditional_step_comparators.EMPTY'):
+      case conditional_step_comparators.EMPTY:
         return subject === '' || subject === null || subject === undefined || subject.length === 0;
-      case this.getState('conditional_step_comparators.NOT_EMPTY'):
+      case conditional_step_comparators.NOT_EMPTY:
         return subject !== '' && subject !== null && subject !== undefined && subject.length > 0;
-      case this.getState('conditional_step_comparators.REGEX_MATCH'):
+      case conditional_step_comparators.REGEX_MATCH:
         if (typeof value !== 'string') {
           throw new Error(`Regex input must be a string.`);
         }
         const regex = new RegExp(value);
         return regex.test(subject);
-      case this.getState('conditional_step_comparators.REGEX_NOT_MATCH'):
+      case conditional_step_comparators.REGEX_NOT_MATCH:
         if (typeof value !== 'string') {
           throw new Error(`Regex input must be a string.`);
         }
         const not_match_regex = new RegExp(value);
         return !not_match_regex.test(subject);
-      case this.getState('conditional_step_comparators.STRING_STARTS_WITH'):
+      case conditional_step_comparators.STRING_STARTS_WITH:
         return typeof subject === 'string' && typeof value === 'string' && subject.startsWith(value);
-      case this.getState('conditional_step_comparators.STRING_ENDS_WITH'):
+      case conditional_step_comparators.STRING_ENDS_WITH:
         return typeof subject === 'string' && typeof value === 'string' && subject.endsWith(value);
-      case this.getState('conditional_step_comparators.NULLISH'):
+      case conditional_step_comparators.NULLISH:
         return subject === null || subject === undefined;
-      case this.getState('conditional_step_comparators.NOT_NULLISH'):
+      case conditional_step_comparators.NOT_NULLISH:
         return subject !== null && subject !== undefined;
-      case this.getState('conditional_step_comparators.IS_TYPE'):
+      case conditional_step_comparators.IS_TYPE:
         return typeof subject === value;
-      case this.getState('conditional_step_comparators.IS_NOT_TYPE'):
+      case conditional_step_comparators.IS_NOT_TYPE:
         return typeof subject !== value;
-      case this.getState('conditional_step_comparators.CUSTOM_FUNCTION'):
+      case conditional_step_comparators.CUSTOM_FUNCTION:
         if (typeof value !== 'function') {
           throw new Error(`Invalid custom function: ${value}`);
         }

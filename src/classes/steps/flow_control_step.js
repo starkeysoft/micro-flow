@@ -1,6 +1,7 @@
 import LogicStep from './logic_step.js';
 import flow_control_types from '../../enums/flow_control_types.js';
 import { conditional_step_comparators } from '../../enums/index.js';
+import { event_names } from '../instance_state.js';
 
 /**
  * FlowControlStep class for controlling workflow execution flow (break or skip).
@@ -51,7 +52,7 @@ export default class FlowControlStep extends LogicStep {
   async shouldFlowControl() {
     if (this.checkCondition()) {
       this.log(
-        this.getState('events.step.event_names.CONDITIONAL_TRUE_BRANCH_EXECUTED'),
+        event_names.step.CONDITIONAL_TRUE_BRANCH_EXECUTED,
         `Break condition met for step: ${this.name}`
       );
       this.setParentWorkflowValue(this.parent_workflow_id, `should_${this.flow_control_type}`, true);
@@ -59,7 +60,7 @@ export default class FlowControlStep extends LogicStep {
       return true;
     } else {
       this.log(
-        this.getState('events.step.event_names.CONDITIONAL_FALSE_BRANCH_EXECUTED'),
+        event_names.step.CONDITIONAL_FALSE_BRANCH_EXECUTED,
         `Break condition not met for step: ${this.name}`
       );
       this.setParentWorkflowValue(this.parent_workflow_id, `should_${this.flow_control_type}`, false);

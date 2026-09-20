@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { base_types } from '../enums/index.js';
-import State, { InstanceState } from './state.js';
+import State from './state.js';
+import { InstanceState } from './instance_state.js';
 
 /**
  * Base class for workflows and steps.

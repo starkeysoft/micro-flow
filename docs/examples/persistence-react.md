@@ -47,7 +47,7 @@ function buildRegistry() {
   registry.register('submitOrder', async function submitOrder() {
     // Pull prior pages' data from the workflow's own results, not from State —
     // State doesn't survive a real page reload, but the workflow's results do.
-    const workflow = this.getState('workflows')[this.parent_workflow_id];
+    const workflow = this.getState('workflow');
     const pageData = (page) =>
       workflow.results.find((r) => r.data?.name === page)?.data.result.data;
 

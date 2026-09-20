@@ -63,11 +63,10 @@ describe('Workflow', () => {
       expect(workflow._steps[1].name).toBe('step-2');
     });
 
-    it('should register itself in its own state\'s workflows registry', () => {
+    it('should register itself under the workflow key of its own state', () => {
       const workflow = new Workflow({ name: 'registered-workflow' });
-      const workflows = workflow.getState('workflows');
 
-      expect(workflows[workflow.id]).toBe(workflow);
+      expect(workflow.getState('workflow')).toBe(workflow);
     });
 
     it('should set initial status to CREATED', () => {
@@ -283,7 +282,7 @@ describe('Workflow', () => {
       const step = new Step({
         name: 'check-status',
         callable: async function() {
-          const workflow = this.getState('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflow');
           statusDuringExecution = workflow.status;
         }
       });
@@ -359,7 +358,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         name: 'set-break',
         callable: async function() {
-          const workflow = this.getState('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflow');
           workflow.should_break = true;
           return 'set break';
         }
@@ -384,7 +383,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         name: 'set-skip',
         callable: async function() {
-          const workflow = this.getState('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflow');
           workflow.should_skip = true;
           results.push('step1');
           return 'set skip';
@@ -419,7 +418,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         name: 'set-pause',
         callable: async function() {
-          const workflow = this.getState('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflow');
           workflow.should_pause = true;
           return 'set pause';
         }
@@ -465,7 +464,7 @@ describe('Workflow', () => {
           step1Count++;
           // Only pause on first execution
           if (step1Count === 1) {
-            const workflow = this.getState('workflows')[this.parent_workflow_id];
+            const workflow = this.getState('workflow');
             workflow.should_pause = true;
           }
           return 'step1 done';
@@ -529,7 +528,7 @@ describe('Workflow', () => {
         name: 'step-2',
         callable: async function() {
           step2Calls++;
-          const workflow = this.getState('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflow');
           workflow.should_pause = true;
           return 'step2 done';
         }
@@ -559,7 +558,7 @@ describe('Workflow', () => {
         name: 'step-1',
         callable: async function() {
           executed.push('step-1');
-          const workflow = this.getState('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflow');
           workflow.should_pause = true;
         }
       });
@@ -1293,7 +1292,7 @@ describe('Workflow', () => {
         name: 'step-1',
         callable: async function() {
           results.push('step1');
-          const workflow = this.getState('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflow');
           const dynamicStep = new Step({
             name: 'dynamic-step',
             callable: async () => {
@@ -1373,7 +1372,7 @@ describe('Workflow', () => {
         name: 'step-1',
         callable: async function() {
           if (pauseOnFirst) {
-            const wf = this.getState('workflows')[this.parent_workflow_id];
+            const wf = this.getState('workflow');
             wf.pause();
             pauseOnFirst = false;
           }
@@ -1400,7 +1399,7 @@ describe('Workflow', () => {
       const step = new Step({
         name: 'step-1',
         callable: async function() {
-          const wf = this.getState('workflows')[this.parent_workflow_id];
+          const wf = this.getState('workflow');
           wf.pause();
           return 'result';
         }
@@ -1484,7 +1483,7 @@ describe('Workflow', () => {
       const step1 = new Step({
         name: 'step-1',
         callable: async function() {
-          const workflow = this.getState('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflow');
           workflow.should_pause = true;
         }
       });
@@ -1544,25 +1543,13 @@ describe('Workflow', () => {
       expect(hydrated.id).toBe(original.id);
     });
 
-    it('should register the hydrated workflow under its real id in the workflows registry', () => {
+    it('should register itself under the workflow key of its own state using its real (restored) id', () => {
       const original = new Workflow({ name: 'registry-workflow' });
 
       const hydrated = Workflow.hydrate(original.prepareForSerialization());
 
-      const workflows = hydrated.getState('workflows');
-      expect(workflows[hydrated.id]).toBe(hydrated);
-    });
-
-    it('should not leave a stale entry for the constructor-generated id', () => {
-      const original = new Workflow({ name: 'no-stale-entry-workflow' });
-
-      const hydrated = Workflow.hydrate(original.prepareForSerialization());
-
-      const workflows = hydrated.getState('workflows');
-      const staleEntries = Object.keys(workflows).filter(
-        (id) => id !== hydrated.id && workflows[id] === hydrated
-      );
-      expect(staleEntries).toHaveLength(0);
+      expect(hydrated.getState('workflow')).toBe(hydrated);
+      expect(hydrated.getState('workflow').id).toBe(hydrated.id);
     });
 
     it('should set each step\'s parent_workflow_id to the real (restored) workflow id', () => {
@@ -1589,7 +1576,7 @@ describe('Workflow', () => {
         // ("callable", from being assigned to the `callable:` object key) - give
         // it an explicit name so hydration resolves each independently.
         callable: async function pauseStep() {
-          const workflow = this.getState('workflows')[this.parent_workflow_id];
+          const workflow = this.getState('workflow');
           workflow.should_pause = true;
         }
       });
@@ -1654,7 +1641,7 @@ describe('Workflow', () => {
       });
       registry.register('step2Fn', async function step2Fn() {
         step2Calls++;
-        const workflow = this.getState('workflows')[this.parent_workflow_id];
+        const workflow = this.getState('workflow');
         workflow.should_pause = true;
         return 'step2 done';
       });
@@ -1683,7 +1670,7 @@ describe('Workflow', () => {
       freshRegistry.register('step1Fn', async function step1Fn() { step1Calls++; return 'step1 done'; });
       freshRegistry.register('step2Fn', async function step2Fn() {
         step2Calls++;
-        const workflow = this.getState('workflows')[this.parent_workflow_id];
+        const workflow = this.getState('workflow');
         workflow.should_pause = true;
         return 'step2 done';
       });

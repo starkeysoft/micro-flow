@@ -101,7 +101,7 @@ export default class Step extends Base {
       }
     }
 
-    const { FAILED, COMPLETE } = this.getState('statuses')[this.base_type];
+    const { FAILED, COMPLETE } = Workflow.statuses[this.base_type];
 
     if (![FAILED, COMPLETE].includes(this.status)) {
       this.markAsComplete();
@@ -264,16 +264,22 @@ export default class Step extends Base {
   }
 
   /**
-   * Sets a value in the parent workflow's state.
+   * Sets a value on the parent workflow instance itself. Normally this is the live object
+   * shared via this step's own state under the `workflow` key (see `initializeWorkflowState()`
+   * in `workflow.js`); when `use_state_singleton` is `true`, several unrelated workflows can
+   * share the same process-wide state, so it's looked up by id in the singleton's `workflows`
+   * registry instead.
    * @param {string} workflow_id - ID of the parent workflow.
-   * @param {string} path - Path in the workflow state to set.
+   * @param {string} path - Property name to set on the workflow instance.
    * @param {*} value - Value to set at the specified path.
-   * @throws {Error} Throws if parent workflow is not found.
+   * @throws {Error} Throws if the parent workflow is not found.
    */
   setParentWorkflowValue(workflow_id, path, value) {
-    const parent_workflow = this.getState('workflows')[workflow_id];
+    const parent_workflow = this.use_state_singleton
+      ? this.getState('workflows')[workflow_id]
+      : this.getState('workflow');
 
-    if (!parent_workflow) {
+    if (!parent_workflow || parent_workflow.id !== workflow_id) {
       throw new Error(`Parent workflow with ID ${workflow_id} not found.`);
     }
 

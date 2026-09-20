@@ -1,4 +1,5 @@
 import Step from './step.js';
+import { event_names } from '../instance_state.js';
 
 /**
  * SwitchStep class for implementing switch/case logic in workflows.
@@ -67,7 +68,7 @@ export default class SwitchStep extends Step {
 
       if (is_matched) {
         this.log(
-          this.getState('events.step.event_names.SWITCH_CASE_MATCHED'),
+          event_names.step.SWITCH_CASE_MATCHED,
           `Case matched for step: ${this.name}, executing case callable`
         );
 
