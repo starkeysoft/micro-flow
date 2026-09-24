@@ -1,5 +1,7 @@
 # Micro-Flow
 
+See Micro-Flow in action in the [demo repo](https://github.com/starkeysoft/micro-flow-demo).
+
 [Click Here](https://survey.alchemer.com/s3/8882776/Micro-Flow-User-Survey) to complete the Micro-Flow user survey. It will take less than 5 minutes of your time.
 
 Micro-Flow is a simple, lightweight, cross platform (browser and runtime) logic orchestration library. Micro-Flow makes async logic flows first-class objects — named, observable, pauseable, and composable — so a multi-step process is something you can reason about, monitor, and control, not just a wall of awaits.
