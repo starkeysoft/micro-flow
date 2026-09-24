@@ -23,12 +23,15 @@ Creates a new Case instance.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `options.name` | `string` | `'step-<uuid>'` | Human-readable identifier. |
-| `options.conditional` | `Object` | — | Conditional configuration. |
+| `options.conditional` | `Object` | — | Conditional configuration. Copied into `conditional_config`; the case doesn't keep a reference to the object you pass. |
 | `options.conditional.subject` | `any\|Function` | `null` | Subject to evaluate. Typically provided by the parent `SwitchStep`. If set here, it is used unless `force_subject_override` is `true`. |
 | `options.conditional.operator` | `string` | `null` | Comparison operator (see [`conditional_step_comparators`](../../../enums/conditional_step_comparators.md)). |
 | `options.conditional.value` | `any\|Function` | `null` | Value to compare against. |
 | `options.callable` | `Function\|Step\|Workflow` | `async () => {}` | Executed when the case matches. |
+| `options.callable_registry_key` | `string\|null` | `null` | Registry key to serialize `callable` under when it's a function, instead of the function's name. Resolved from the `CallableRegistry` passed to `hydrate()`, and restored onto the hydrated step. See [Persistence](step.md#persistence). |
 | `options.force_subject_override` | `boolean` | `false` | When `true`, the subject injected by `SwitchStep` will override an existing `conditional.subject`. |
+| `options.max_retries` | `number` | `0` | Maximum number of additional attempts after a failure. See [Step](step.md#constructor). |
+| `options.max_timeout_ms` | `number\|null` | `30000` | Milliseconds before an attempt times out and is treated as a failure. Each retry gets the full budget. `null` (or `Infinity`) disables the timeout. |
 
 ## Properties
 
@@ -36,19 +39,21 @@ Creates a new Case instance.
 |----------|------|-------------|
 | `force_subject_override` | `boolean` | Whether the `SwitchStep`'s subject overrides a locally-set subject. |
 | `is_matched` | `boolean` | Internal flag indicating that the case has been matched. Not typically used externally. |
+| `switch_subject` | `any` | Read-only getter for the subject last provided by the parent `SwitchStep` (stored internally as `_switch_subject`), or `null` if none has been provided. Held only in memory and never serialized. |
 
 All properties from [LogicStep](logic_step.md) are inherited.
 
-## Setters
+## Getters and Setters
 
-### `set switch_subject(subject)`
+### `get switch_subject` / `set switch_subject(subject)`
 
-Called automatically by `SwitchStep` before evaluating cases. Applies the subject to `conditional_config.subject` according to the following rules:
+The setter is called automatically by `SwitchStep` before evaluating cases. It stores the subject transiently in `_switch_subject`. It does **not** write to `conditional_config`, so the switch subject is never serialized and can't go stale after hydration. The getter returns the stored value.
 
 - If `subject` is `null`/`undefined` **and** no subject exists on the case → throws `Error`.
-- If `subject` is provided **and** no existing subject (or `force_subject_override` is `true`) → sets `conditional_config.subject`.
-- If an existing subject is already set and `force_subject_override` is `false` → leaves `conditional_config.subject` unchanged.
+- Otherwise stores `subject` (or `null` if it wasn't provided).
 - Throws `Error` if the resulting conditional is invalid (i.e., `conditionalIsValid()` returns `false`).
+
+Which subject is actually evaluated is decided by [`getConditionalSubject()`](#getconditionalsubject--anyfunction).
 
 **Example:**
 ```javascript
@@ -67,6 +72,15 @@ console.log(myCase.checkCondition()); // true
 
 ## Methods
 
+### `getConditionalSubject()` → `any|Function`
+
+Overrides [`LogicStep.getConditionalSubject()`](logic_step.md#getconditionalsubject--anyfunction) to return the effective subject used by `checkCondition()`:
+
+- If a switch subject has been provided **and** the case has no subject of its own (or `force_subject_override` is `true`) → returns the switch subject.
+- Otherwise → returns `conditional_config.subject`.
+
+---
+
 ### `prepareForSerialization()` → `Object`
 
 Extends [`LogicStep.prepareForSerialization()`](logic_step.md#prepareforserialization--object) with `force_subject_override` and `is_matched`.
@@ -76,7 +90,8 @@ Extends [`LogicStep.prepareForSerialization()`](logic_step.md#prepareforserializ
 ```
 {
   ...,                          // Step/LogicStep fields — see Step § prepareForSerialization()
-  conditional: { subject, operator, value },
+  conditional: { subject, operator, value },   // the case's own subject only, never the switch subject
+  conditional_callables: { subject, value },   // see LogicStep § prepareForSerialization()
   force_subject_override: boolean,
   is_matched: boolean
 }
@@ -86,7 +101,7 @@ Extends [`LogicStep.prepareForSerialization()`](logic_step.md#prepareforserializ
 
 ### `static hydrate(parsed_step, callableRegistry?)` → `Case`
 
-Delegates to `super.hydrate()`, then restores `is_matched`.
+Delegates to `super.hydrate()` (which resolves any function-valued `subject`/`value`; see [`LogicStep.hydrate()`](logic_step.md#static-hydrateparsed_step-callableregistry--logicstep)), then restores `is_matched`.
 
 **Parameters:**
 

@@ -123,6 +123,9 @@ function buildEnemyBehaviorWorkflow(scene, enemy) {
         name: 'behavior-loop',
         loop_type: loop_types.WHILE,
         max_iterations: 100000,
+        // A LoopStep's timeout covers the whole loop, and this one runs until the game ends,
+        // so turn it off (the default 30s would fail the loop mid-game).
+        max_timeout_ms: null,
         conditional: {
           subject: () => State.get('game.over') ?? false,
           operator: '===',
@@ -274,7 +277,7 @@ Phaser's tween and timer APIs are callback-based (`onComplete`); the `tween()`/`
 
 ### A `Workflow` for a one-shot sequence, a `while` `LoopStep` for a continuous behavior
 
-The entrance animation has a clear beginning and end, so it's a `Workflow` of `Step`s that runs once and resolves. Enemy AI doesn't — it's a `while`-type `LoopStep` that keeps re-evaluating for as long as `State.get('game.over')` is `false`, rechecking that condition at the top of every iteration (see [LoopStep § Loop Types](../classes/steps/loop_step.md#loop-types)).
+The entrance animation has a clear beginning and end, so it's a `Workflow` of `Step`s that runs once and resolves. Enemy AI doesn't — it's a `while`-type `LoopStep` that keeps re-evaluating for as long as `State.get('game.over')` is `false`, rechecking that condition at the top of every iteration (see [LoopStep § Loop Types](../classes/steps/loop_step.md#loop-types)). Because a `LoopStep`'s `max_timeout_ms` covers the entire loop rather than each iteration, the behavior loop sets it to `null`; otherwise the default 30-second timeout would fail it partway through a game.
 
 ### Cases are evaluated in order — narrowest range first
 

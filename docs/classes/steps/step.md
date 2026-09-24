@@ -24,9 +24,9 @@ Creates a new Step instance.
 |-----------|------|---------|-------------|
 | `options.name` | `string` | `'step-<uuid>'` | Human-readable identifier used in logs and events. |
 | `options.callable` | `Function\|Step\|Workflow` | `async () => {}` | The work to execute. Plain async functions are bound to the step instance, giving them access to `this.getState()` etc. |
-| `options.callable_registry_key` | `string\|null` | `null` | Optional key to reference a callable in the workflow's `CallableRegistry` for persistence/hydration. |
+| `options.callable_registry_key` | `string\|null` | `null` | Registry key to serialize `callable` under when it's a function, instead of the function's name. Resolved from the `CallableRegistry` passed to `hydrate()`, and restored onto the hydrated step. See [Persistence](#persistence). |
 | `options.max_retries` | `number` | `0` | Maximum number of additional attempts after a failure. |
-| `options.max_timeout_ms` | `number` | `30000` | Milliseconds before execution times out and is treated as a failure. |
+| `options.max_timeout_ms` | `number\|null` | `30000` | Milliseconds before an attempt times out and is treated as a failure. Applies to each attempt separately, so every retry gets the full budget. `null` (or `Infinity`) disables the timeout. |
 | `options.step_type` | `string` | `step_types.ACTION` | Semantic type from [`step_types`](../../../enums/step_types.md). |
 | `options.sub_step_type` | `string\|null` | `null` | Sub-type from [`sub_step_types`](../../../enums/sub_step_types.md). |
 
@@ -38,15 +38,15 @@ Creates a new Step instance.
 | `name` | `string` | Human-readable step name. |
 | `base_type` | `string` | Always `'step'`. |
 | `callable_type` | `string` | `'function'`, `'step'`, or `'workflow'`, set when the callable is assigned. |
-| `callable_registry_key` | `string\|null` | Key referencing a callable in the workflow's `CallableRegistry` for persistence/hydration. |
+| `callable_registry_key` | `string\|null` | Registry key `callable` is serialized under when it's a function, instead of the function's name. |
 | `max_retries` | `number` | Maximum number of retry attempts. |
-| `retry_count` | `number` | Number of retries performed so far. |
-| `max_timeout_ms` | `number` | Timeout threshold in milliseconds. |
+| `retry_count` | `number` | Number of retries performed so far in the current run. Incremented by `markAsRetrying()` before each retry, and reset to `0` at the start of every `execute()`. |
+| `max_timeout_ms` | `number\|null` | Per-attempt timeout threshold in milliseconds. `null` or `Infinity` means no timeout. |
 | `step_type` | `string` | Semantic step type. |
 | `sub_step_type` | `string\|null` | Semantic sub-type. |
-| `errors` | `Error[]` | Array of errors caught during execution attempts. |
+| `errors` | `Error[]` | Errors that failed the step (one per failed run, pushed once retries are exhausted). Not reset between runs, so it's a history across every `execute()` call. |
 | `result` | `any` | Return value of the most recent successful execution. |
-| `retry_results` | `Array<{retry_count: number, result: any}>` | Result of each retry attempt. |
+| `retry_results` | `Array<{retry_count: number, result: any}\|{retry_count: number, error: Error}>` | One entry per retry: `{ retry_count, result }` for a retry that succeeded, `{ retry_count, error }` for one that failed. The initial attempt is not recorded. Reset to `[]` at the start of every `execute()`. |
 | `status` | `string` | Current status (see [`step_statuses`](../../../enums/step_statuses.md)). |
 | `timing` | `Object` | `{ start_time, complete_time, execution_time_ms, cancel_time }` from `Base`. |
 | `parent_workflow_id` | `string\|null` | ID of the workflow this step belongs to (set by the workflow on add). |
@@ -56,7 +56,7 @@ Creates a new Step instance.
 
 ### `async execute()` → `Promise<Step|Workflow|Object>`
 
-Races the callable against the timeout. On failure, retries up to `max_retries` times. If the callable is a `Step` or `Workflow`, returns that object directly (not the wrapper `Step`). Plain function callables return a serialized plain object (via `prepareForSerialization()`) with `result`, `errors`, and `timing` populated.
+Resets `retry_count` to `0`, `retry_results` to `[]`, and `timing.start_time`/`complete_time`/`execution_time_ms` to `null`, so every run (e.g. each iteration of a `LoopStep`, or each run of a workflow that's executed again) gets its full retry budget and accurate timing. `errors` is deliberately not reset: it keeps a history across runs. Then calls `markAsRunning()` once (emitting `STEP_RUNNING`) and runs the callable via `runWithTimeout()`. On failure, retries in a loop up to `max_retries` times: before each retry it calls `markAsRetrying(error)`, which increments `retry_count` and emits `STEP_RETRYING`. `STEP_RUNNING` is not emitted again for retries. Each attempt gets its own fresh `max_timeout_ms` timer, so a retry that follows a timeout isn't cut short. If the callable is a `Step` or `Workflow` that ends up failed, the attempt counts as failed too (see `runCallable()` and `throwIfFailed()`), so it is retried and can fail this step. Once retries are exhausted, the last error is pushed onto `errors` and the step is marked failed. If the callable is a `Step` or `Workflow`, returns that object directly (not the wrapper `Step`). Plain function callables return a serialized plain object (via `prepareForSerialization()`) with `result`, `errors`, and `timing` populated.
 
 **Returns:** The inner Step/Workflow if callable is a step/workflow, or a serialized plain object for function callables.
 
@@ -78,6 +78,56 @@ console.log(result.result); // 'sha256:abc123'
 console.log(result.status); // 'complete'
 console.log(result.timing.execution_time_ms); // e.g. 2
 ```
+
+---
+
+### `async runWithTimeout()` → `Promise<*>`
+
+Runs a single attempt of the step's callable (via `runCallable()`), racing it against a new `max_timeout_ms` timer. The timer is created fresh for every attempt and always cleared afterwards, whether the callable resolves, rejects, or times out. If `max_timeout_ms` is `null` or `Infinity`, no timer is created and the callable runs without a time limit. Called internally by `execute()` for the initial attempt and each retry.
+
+**Returns:** The callable's result.
+
+**Throws:** The callable's error (including a nested `Step`/`Workflow` failure raised by `runCallable()`), or `Error('Step "<name>" timed out after <max_timeout_ms>ms')` if the timer fires first.
+
+---
+
+### `async runCallable()` → `Promise<*>`
+
+Invokes the callable once, then calls `Step.throwIfFailed()` on the original callable object. A plain function callable is unaffected; a `Step`/`Workflow` callable that finished in a failed status makes the attempt throw. Called internally by `runWithTimeout()`.
+
+**Returns:** The callable's result.
+
+**Throws:** The callable's own error, or the nested `Step`/`Workflow` failure (see `throwIfFailed()`).
+
+---
+
+### `static throwIfFailed(obj)`
+
+Throws if `obj` is a `Step` or `Workflow` whose status is failed. Nested steps and workflows record their failure instead of throwing it (a `Workflow` with `exit_on_error` returns itself in a failed state), so whatever runs them uses this to pass the failure up. Anything else, such as a plain function or a plain value, is ignored.
+
+Used by `runCallable()`, `LoopStep.runIteration()`, `ConditionalStep` (after running a `Step`/`Workflow` branch), and `SwitchStep` (after the matched `Case`, and after a `Step`/`Workflow` `default_callable`).
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `obj` | `any` | The value to check. |
+
+**Throws:** For a failed `Step`, its last entry in `errors`. For a failed `Workflow`, the `data.error` of its last entry in `results`. If neither is available, `Error('Nested <step|workflow> "<name>" failed')`.
+
+**Note:** A nested workflow with `exit_on_error: false` finishes as `complete` even when one of its steps fails (it only emits `workflow_errored`), so it doesn't fail the step or workflow that ran it.
+
+---
+
+### `markAsRetrying(error)`
+
+Increments `retry_count` and emits `STEP_RETRYING` (payload: the step instance) before the next attempt. Called internally by `execute()`; it does not change `status`.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `error` | `Error` | The error that caused the retry. Its message is included in the log message. |
 
 ---
 
@@ -113,9 +163,9 @@ Creates a plain object containing safely serializable properties of the step. Th
   step_type: string,
   sub_step_type: string | null,
   max_retries: number,
-  max_timeout_ms: number,
+  max_timeout_ms: number | null,
   retry_count: number,
-  retry_results: [{ retry_count: number, result: any }, ...],
+  retry_results: [{ retry_count: number, result: any } | { retry_count: number, error: Error }, ...],
   errors: [Error, ...],
   result: any,
   timing: { start_time, complete_time, execution_time_ms, cancel_time },
@@ -219,6 +269,38 @@ Hydrates a `{ type, value }` descriptor (as produced by `serializeCallableField`
 
 ---
 
+### `static serializeFunctionRef(fn, registry_key?)` → `Object|null`
+
+Serializes a plain function that isn't a step's primary callable (e.g. a function-valued conditional `subject`, `SwitchStep.subject`, or `LoopStep.iterable`) into a registry reference descriptor, so it can be resolved from a [`CallableRegistry`](../callable_registry.md) on hydration.
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `fn` | `Function\|any` | — | The function to serialize. Anything that isn't a function returns `null`. |
+| `registry_key` | `string\|null` | `null` | Explicit registry key. Defaults to `fn.name`. |
+
+**Returns:** A `{ type: 'function', value }` descriptor, or `null` if `fn` isn't a function or has no usable key (an anonymous function with no explicit `registry_key`).
+
+**Note:** Inline arrow functions assigned to a property get an inferred name. For example, the function in `{ subject: () => x }` is named `'subject'`. Register such functions in the registry under that name, or they can't be resolved on hydration.
+
+---
+
+### `static hydrateFunctionRef(descriptor, callableRegistry?)` → `Function|null`
+
+Resolves a descriptor produced by `serializeFunctionRef()` from a registry. Unlike `hydrateCallableField()`, a missing registry entry doesn't throw: it `console.warn`s and returns `null`, so the field stays empty and you can re-attach the function after hydrating.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `descriptor` | `Object\|null` | The `{ type: 'function', value }` descriptor. |
+| `callableRegistry` | `CallableRegistry\|null` | Registry used to resolve the function by name. |
+
+**Returns:** The resolved function, or `null` if the descriptor is empty or its key isn't in the registry (or no registry was provided).
+
+---
+
 ### `static hydrateAny(parsed_step, callableRegistry?)` → `Step`
 
 The main entry point for hydrating a step of **unknown subclass** — used internally by `Workflow.hydrate()` and by any subclass whose own fields nest other steps (e.g. `SwitchStep.cases`). Resolves the correct class from `parsed_step.class_name` via `resolveStepClass()`, then delegates to that class's own `static hydrate()`.
@@ -253,7 +335,7 @@ Deserializes a JSON string and hydrates it via `hydrateAny()`, dispatching to th
 
 ### `static hydrate(parsed_step, callableRegistry?)` → `Step`
 
-Hydrates a parsed step object into an instance of **`this`** class — so `ConditionalStep.hydrate(x)` builds a `ConditionalStep`, while `Step.hydrate(x)` builds a plain `Step`. Resolves the step's primary `callable` (from a registry key, function name, or nested `Step`/`Workflow`) and restores execution metadata (`id`, `retry_count`, `retry_results`, `errors`, `result`, `timing`, `status`, `parent_workflow_id`). Subclasses with extra callable-like fields (e.g. `ConditionalStep.true_callable`/`false_callable`) override this to resolve those fields with `hydrateCallableField()` before delegating to `super.hydrate()`.
+Hydrates a parsed step object into an instance of **`this`** class — so `ConditionalStep.hydrate(x)` builds a `ConditionalStep`, while `Step.hydrate(x)` builds a plain `Step`. Resolves the step's primary `callable` (from a registry key, function name, or nested `Step`/`Workflow`), passes the serialized constructor options (including `max_retries` and `max_timeout_ms`, which every built-in subclass accepts) back through the constructor, and restores execution metadata (`id`, `retry_count`, `retry_results`, `errors`, `result`, `timing`, `status`, `parent_workflow_id`). Subclasses with extra callable-like fields (e.g. `ConditionalStep.true_callable`/`false_callable`) override this to resolve those fields with `hydrateCallableField()` before delegating to `super.hydrate()`.
 
 Prefer `hydrateAny()` / `hydrateSerialized()` unless you already know the concrete subclass — calling `hydrate()` directly on the wrong class will silently build the wrong type.
 
@@ -390,6 +472,8 @@ console.log(result.name);    // 'sub-flow'
 console.log(result.results); // [{ message: '...', data: 'a' }, ...]
 ```
 
+If the nested workflow fails (it has `exit_on_error: true` and one of its steps fails), the wrapping step fails too, and is retried if it has `max_retries`. The same applies to a nested `Step` callable that fails.
+
 ## Persistence
 
 Any `Step` can be saved and reconstructed via `serialize()` → `Step.hydrateSerialized()`. Because a step can hold nested `Step`/`Workflow` callables of any subclass, hydration always needs to know which concrete class to rebuild — that's what `class_name` (from `static step_name`) and the `Step.registerStepClass()`/`resolveStepClass()` registry are for. **Always hydrate through `Step.hydrateSerialized()` or `Step.hydrateAny()`**, not a subclass's own `static hydrate()` directly, unless you already know the concrete type — calling `hydrate()` on the wrong class silently builds the wrong one.
@@ -428,6 +512,10 @@ const outer = new Step({ name: 'outer', callable: inner });
 const hydrated = Step.hydrateSerialized(outer.serialize());
 console.log(hydrated.constructor.name); // 'Step' (the inner one, per execute()'s semantics)
 ```
+
+Function-valued fields other than callables (a conditional `subject`/`value`, `SwitchStep.subject`, a function `LoopStep.iterable`) are serialized as `null` in their normal field, with a `serializeFunctionRef()` descriptor stored alongside, and resolved on hydration with `hydrateFunctionRef()`. If the function isn't in the registry, hydration warns and leaves the field `null` instead of throwing.
+
+Instance state (anything set with `setState()`) is not serialized.
 
 See [`CallableRegistry`](../callable_registry.md) for the registry API and the naming convention it depends on, and each subclass's own docs (e.g. [ConditionalStep § Persistence](conditional_step.md), [LoopStep § Persistence](loop_step.md)) for the extra fields they persist.
 

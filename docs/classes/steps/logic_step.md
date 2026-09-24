@@ -24,10 +24,13 @@ Creates a new LogicStep instance.
 |-----------|------|---------|-------------|
 | `options.name` | `string` | `'step-<uuid>'` | Human-readable identifier. |
 | `options.callable` | `Function\|Step\|Workflow` | `async () => {}` | Work to execute when `execute()` is called. |
+| `options.callable_registry_key` | `string\|null` | `null` | Registry key to serialize `callable` under when it's a function, instead of the function's name. Resolved from the `CallableRegistry` passed to `hydrate()`, and restored onto the hydrated step. See [Persistence](step.md#persistence). |
 | `options.conditional` | `Object` | `{ subject: null, operator: null, value: null }` | Conditional configuration. |
 | `options.conditional.subject` | `any\|Function` | `null` | Value (or function returning value) to evaluate. Evaluated at check time if a function. |
 | `options.conditional.operator` | `string` | `null` | Comparison operator string (see [Supported Operators](#supported-operators)). |
 | `options.conditional.value` | `any\|Function` | `null` | Value (or function returning value) to compare against. For `CUSTOM_FUNCTION`, `value` is the comparison function itself. |
+| `options.max_retries` | `number` | `0` | Maximum number of additional attempts after a failure. See [Step](step.md#constructor). |
+| `options.max_timeout_ms` | `number\|null` | `30000` | Milliseconds before an attempt times out and is treated as a failure. Each retry gets the full budget. `null` (or `Infinity`) disables the timeout. |
 
 ## Properties
 
@@ -41,7 +44,7 @@ All properties from [Step](step.md) are inherited.
 
 ### `checkCondition()` → `boolean`
 
-Evaluates the conditional expression. If `subject` or `value` are functions, they are called first to resolve the actual values. For the `CUSTOM_FUNCTION` operator, `value(subject)` is called directly.
+Evaluates the conditional expression, taking the subject from `getConditionalSubject()`. If `subject` or `value` are functions, they are called first to resolve the actual values. For the `CUSTOM_FUNCTION` operator, `value(subject)` is called directly.
 
 **Returns:** `true` if the condition is satisfied, `false` otherwise.
 
@@ -71,7 +74,7 @@ console.log(check.checkCondition()); // false
 
 ### `conditionalIsValid()` → `boolean`
 
-Returns `true` if both `conditional_config.subject` and `conditional_config.operator` are non-null and non-undefined.
+Returns `true` if both the subject (as returned by `getConditionalSubject()`) and `conditional_config.operator` are non-null and non-undefined.
 
 **Returns:** `boolean`
 
@@ -91,6 +94,14 @@ const valid = new LogicStep({
 });
 console.log(valid.conditionalIsValid()); // true
 ```
+
+---
+
+### `getConditionalSubject()` → `any|Function`
+
+Returns the unresolved subject used by `checkCondition()` and `conditionalIsValid()`. On `LogicStep` this is `conditional_config.subject`. Subclasses can override it to supply a subject from somewhere else without persisting it; [`Case`](case.md#getconditionalsubject--anyfunction) uses it to return its parent `SwitchStep`'s subject.
+
+**Returns:** The subject, or the function that produces it.
 
 ---
 
@@ -121,18 +132,37 @@ console.log(step.checkCondition()); // true
 
 ### `prepareForSerialization()` → `Object`
 
-Extends [`Step.prepareForSerialization()`](step.md#prepareforserialization--object) with the step's `conditional` configuration.
+Extends [`Step.prepareForSerialization()`](step.md#prepareforserialization--object) with the step's `conditional` configuration. A function-valued `subject` or `value` is stored as `null` in `conditional`, with a registry reference in `conditional_callables` (built by [`Step.serializeFunctionRef()`](step.md#static-serializefunctionreffn-registry_key--objectnull), keyed by the function's name).
 
-**Returns:** The base `Step` fields plus `conditional: { subject, operator, value }`.
+**Returns:** The base `Step` fields plus `conditional` and `conditional_callables`.
 
 ```
 {
   ...,                          // Step fields — see Step § prepareForSerialization()
-  conditional: { subject, operator, value }
+  conditional: { subject, operator, value },   // function-valued subject/value become null
+  conditional_callables: {
+    subject: { type: 'function', value: string } | null,
+    value: { type: 'function', value: string } | null
+  }
 }
 ```
 
-**Note:** A function-valued `subject`/`value` (e.g. `subject: () => State.get('x')`) is **not** persisted — there's no `CallableRegistry`-style mechanism for conditional subjects/values, only for the plain `callable` field. `JSON.stringify` silently drops function-valued properties, so a hydrated step's conditional will be missing that value.
+**Note:** To round-trip a function-valued `subject`/`value`, register the function in the [`CallableRegistry`](../callable_registry.md) under its name. Inline arrow functions get an inferred name from the property they're assigned to, so `subject: () => State.get('x')` is named `'subject'`. A named function (`subject: function inventoryCount() { ... }`) or one registered separately and referenced by name is easier to manage. Anonymous functions have no name and serialize as `null`.
+
+---
+
+### `static hydrate(parsed_step, callableRegistry?)` → `LogicStep`
+
+Resolves any function-valued `subject`/`value` from `conditional_callables` via [`Step.hydrateFunctionRef()`](step.md#static-hydratefunctionrefdescriptor-callableregistry--functionnull), then delegates to [`Step.hydrate()`](step.md#static-hydrateparsed_step-callableregistry--step). Inherited by `ConditionalStep`, `FlowControlStep`, `LoopStep`, and `Case`. If a function's name isn't found in `callableRegistry`, it logs a `console.warn` and leaves that field `null` instead of throwing (unlike a missing primary `callable`). Re-attach it with `setConditional()` after hydrating.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `parsed_step` | `Object` | A parsed step object (e.g., from `JSON.parse()`). |
+| `callableRegistry` | `CallableRegistry\|null` | Registry used to resolve function callables and function-valued conditional fields. |
+
+**Returns:** A hydrated instance of `this` class.
 
 ## Supported Operators
 

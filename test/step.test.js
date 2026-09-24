@@ -87,11 +87,6 @@ describe('Step', () => {
       expect(step.retry_count).toBe(0);
     });
 
-    it('should initialize timeout to null', () => {
-      const step = new Step({});
-      expect(step.timeout).toBeNull();
-    });
-
     it('should have static step_name property', () => {
       expect(Step.step_name).toBe('step');
     });
@@ -359,7 +354,7 @@ describe('Step', () => {
       expect(step.result).toBe('done');
     });
 
-    it('should create the timeout promise only once across retries', async () => {
+    it('should give each retry a fresh timeout after an attempt times out', async () => {
       let callCount = 0;
       const step = new Step({
         name: 'retry-timeout-step',
@@ -367,18 +362,32 @@ describe('Step', () => {
         max_timeout_ms: 1000,
         callable: async () => {
           callCount++;
-          throw new Error('fail');
+          if (callCount === 1) {
+            // First attempt hangs past the timeout
+            return new Promise(() => {});
+          }
+          return new Promise(resolve => setTimeout(resolve, 500, 'ok'));
         },
       });
 
       const promise = step.execute();
+      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(500);
       await promise;
 
-      const firstTimeout = step.timeout;
-      expect(firstTimeout).not.toBeNull();
+      expect(callCount).toBe(2);
+      expect(step.status).toBe(State.get('statuses.step').COMPLETE);
+      expect(step.result).toBe('ok');
+      expect(step.retry_count).toBe(1);
+      expect(step.errors).toHaveLength(0);
+    });
 
-      // timeout is the same promise object set on first execute
-      expect(step.timeout).toBe(firstTimeout);
+    it('should not leave a pending timer after the step completes', async () => {
+      const step = new Step({ max_timeout_ms: 1000, callable: async () => 'done' });
+
+      await step.execute();
+
+      expect(vi.getTimerCount()).toBe(0);
     });
 
     it('should set start_time only on the first execute call', async () => {
@@ -494,6 +503,48 @@ describe('Step', () => {
 
       expect(step.retry_results).toHaveLength(1);
       expect(step.retry_results[0].retry_count).toBe(1);
+      expect(step.retry_results[0].result).toBe('finally ok');
+    });
+
+    it('should record the error of each failed retry in retry_results', async () => {
+      const step = new Step({
+        name: 'retry-errors-step',
+        max_retries: 2,
+        callable: async () => { throw new Error('nope'); },
+      });
+
+      await step.execute();
+
+      expect(step.retry_results.map(r => r.retry_count)).toEqual([1, 2]);
+      expect(step.retry_results.every(r => r.error.message === 'nope')).toBe(true);
+    });
+
+    it('should emit step_retrying (not step_running) for each retry', async () => {
+      const emitted = [];
+      const events = Workflow.events.step;
+      const listener = (event_name) => (step) => { if (step.name === 'retry-events-step') emitted.push(event_name); };
+      const on_running = listener('running');
+      const on_retrying = listener('retrying');
+      events.on(Workflow.event_names.step.STEP_RUNNING, on_running);
+      events.on(Workflow.event_names.step.STEP_RETRYING, on_retrying);
+
+      let callCount = 0;
+      const step = new Step({
+        name: 'retry-events-step',
+        max_retries: 2,
+        callable: async () => {
+          callCount++;
+          if (callCount < 3) throw new Error('fail');
+          return 'ok';
+        },
+      });
+
+      await step.execute();
+
+      events.off(Workflow.event_names.step.STEP_RUNNING, on_running);
+      events.off(Workflow.event_names.step.STEP_RETRYING, on_retrying);
+
+      expect(emitted).toEqual(['running', 'retrying', 'retrying']);
     });
 
     it('should not retry when max_retries is 0', async () => {

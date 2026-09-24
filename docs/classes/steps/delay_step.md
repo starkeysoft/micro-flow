@@ -26,6 +26,8 @@ Creates a new DelayStep instance.
 | `options.delay_type` | `string` | `delay_types.RELATIVE` | `'relative'` or `'absolute'`. See [`delay_types`](../../../enums/delay_types.md). |
 | `options.relative_delay_ms` | `number` | `0` | Milliseconds to wait when `delay_type` is `'relative'`. If `<= 0`, execution continues immediately. |
 | `options.absolute_timestamp` | `Date` | `new Date()` | The point in time to wait until when `delay_type` is `'absolute'`. If in the past, execution continues immediately. |
+| `options.max_retries` | `number` | `0` | Maximum number of additional attempts after a failure. See [Step](step.md#constructor). |
+| `options.max_timeout_ms` | `number\|null` | `null` | Milliseconds before an attempt times out. Defaults to `null` (no timeout), unlike other steps, since waiting is this step's whole job: a timeout would cut any delay longer than it short. Set a number only if you want the delay itself to fail after that long. |
 
 ## Properties
 

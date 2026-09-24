@@ -25,10 +25,10 @@ All events from [`step_event_names`](../../enums/step_event_names.md):
 | Event Name | Value | Description |
 |------------|-------|-------------|
 | `STEP_PENDING` | `'step_pending'` | Emitted when a step is set to pending status. |
-| `STEP_RUNNING` | `'step_running'` | Emitted when a step begins executing. |
+| `STEP_RUNNING` | `'step_running'` | Emitted once when a step begins executing. Not emitted again for retries. |
 | `STEP_COMPLETE` | `'step_complete'` | Emitted when a step finishes successfully. |
 | `STEP_FAILED` | `'step_failed'` | Emitted when a step fails (all retries exhausted). |
-| `STEP_RETRYING` | `'step_retrying'` | Emitted when the engine retries a failed step. |
+| `STEP_RETRYING` | `'step_retrying'` | Emitted by `markAsRetrying()` before each automatic retry of a failed step, after `retry_count` has been incremented. |
 | `STEP_WAITING` | `'step_waiting'` | Emitted when a step enters a waiting state (e.g., DelayStep). |
 | `CONDITIONAL_TRUE_BRANCH_EXECUTED` | `'conditional_true_branch_executed'` | Emitted when a ConditionalStep takes the true branch. |
 | `CONDITIONAL_FALSE_BRANCH_EXECUTED` | `'conditional_false_branch_executed'` | Emitted when a ConditionalStep takes the false branch. |

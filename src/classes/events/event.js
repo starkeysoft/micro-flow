@@ -39,12 +39,25 @@ class Event extends EventTarget {
    * @returns {boolean} True if the event was not cancelled, false if it was cancelled.
    */
   emit(event_name, data, bubbles = false, cancelable = true) {
-    const seen = new WeakSet();
-    const working_data = JSON.parse(JSON.stringify(data, (key, value) => {
-      if (typeof value === 'object' && value !== null) {
-        if (seen.has(value)) return undefined;
-        seen.add(value);
+    // Drop only true cycles (a value that is one of its own ancestors). Objects that are merely
+    // referenced more than once - e.g. a step's `timing` shared by `steps` and `sessions` - are
+    // serialized at every occurrence. `this` is the object holding `key`, so popping ancestors
+    // until it's on top leaves exactly the current path from the root.
+    const ancestors = [];
+    const working_data = JSON.parse(JSON.stringify(data, function (key, value) {
+      if (typeof value !== 'object' || value === null) {
+        return value;
       }
+
+      while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
+        ancestors.pop();
+      }
+
+      if (ancestors.includes(value)) {
+        return undefined;
+      }
+
+      ancestors.push(value);
       return value;
     }));
 

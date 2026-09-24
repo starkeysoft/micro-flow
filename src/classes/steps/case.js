@@ -20,8 +20,10 @@ export default class Case extends LogicStep {
    * @param {conditional_step_comparators|string} [options.conditional.operator=null] - Comparison operator.
    * @param {*|Function} [options.conditional.value=null] - Value to compare against. Can be a function that returns the value.
    * @param {Function|Step|Workflow} [options.callable=async () => {}] - Function, Step, or Workflow to execute when case matches.
-   * @param {string|null} [options.callable_registry_key=null] - Optional key to reference the callable to be rehydrated after serialization.
+   * @param {string|null} [options.callable_registry_key=null] - Registry key to serialize `callable` under when it's a function (defaults to the function's name); it's resolved from the `CallableRegistry` passed to `hydrate()`.
    * @param {boolean} [options.force_subject_override=false] - Force override of subject even if already set.
+   * @param {number} [options.max_retries=0] - Maximum number of retries on failure.
+   * @param {number|null} [options.max_timeout_ms=30000] - Maximum execution time per attempt in milliseconds. `null` disables the timeout.
    */
   constructor({
     name,
@@ -33,23 +35,33 @@ export default class Case extends LogicStep {
     callable = async () => {},
     callable_registry_key = null,
     force_subject_override = false,
+    max_retries,
+    max_timeout_ms,
   }) {
     super({
       name,
       step_type: Case.step_name,
       callable,
       callable_registry_key,
+      max_retries,
+      max_timeout_ms,
     });
 
-    this.conditional_config = conditional;
+    this.setConditional(conditional);
     this.force_subject_override = force_subject_override;
+
+    // Subject provided by the parent SwitchStep at run time. Kept separate from
+    // conditional_config so it's never serialized (it would be stale after hydration).
+    this._switch_subject = null;
 
     this.is_matched = false;
   }
 
   /**
-   * Sets the switch subject from the parent SwitchStep.
-   * Automatically sets the conditional subject if not already set or if force_subject_override is true.
+   * Sets the switch subject from the parent SwitchStep. It's held separately from
+   * `conditional_config` (so it's never serialized) and used as the conditional subject when this
+   * case has no subject of its own, or when `force_subject_override` is true - see
+   * `getConditionalSubject()`.
    * @param {*} subject - The subject value from the SwitchStep.
    * @throws {Error} If no subject is provided and conditional.subject is not set.
    * @throws {Error} If the resulting conditional configuration is invalid.
@@ -62,13 +74,36 @@ export default class Case extends LogicStep {
       throw new Error(`No subject set for case step: ${this.name}, using default equality check`);
     }
 
-    if (subject_provided && (!has_existing_subject || this.force_subject_override)) {
-      this.conditional_config.subject = subject;
-    }
+    this._switch_subject = subject_provided ? subject : null;
 
     if (!this.conditionalIsValid()) {
       throw new Error(`Invalid conditional configuration for case step: ${this.name}`);
     }
+  }
+
+  /**
+   * Gets the switch subject last provided by the parent SwitchStep.
+   * @returns {*} The switch subject, or null if none has been provided.
+   */
+  get switch_subject() {
+    return this._switch_subject;
+  }
+
+  /**
+   * Returns the subject to evaluate: the switch subject if one was provided and this case has no
+   * subject of its own (or `force_subject_override` is set), otherwise the configured subject.
+   * @returns {*|Function} The effective conditional subject.
+   */
+  getConditionalSubject() {
+    const own_subject = this.conditional_config.subject;
+    const has_own_subject = own_subject !== null && own_subject !== undefined;
+    const has_switch_subject = this._switch_subject !== null && this._switch_subject !== undefined;
+
+    if (has_switch_subject && (!has_own_subject || this.force_subject_override)) {
+      return this._switch_subject;
+    }
+
+    return own_subject;
   }
 
   /**

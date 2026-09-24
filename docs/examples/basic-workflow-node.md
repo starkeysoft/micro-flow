@@ -195,7 +195,7 @@ The `Workflow` constructor accepts `steps`, `exit_on_error`, and `throw_on_empty
 
 ### Retries and Timeouts
 
-Set `max_retries` and `max_timeout_ms` per step. The engine automatically retries on failure and races against the timeout. Each retry attempt is recorded in `step.retry_results`.
+Set `max_retries` and `max_timeout_ms` per step. The engine automatically retries on failure and races each attempt against its own fresh `max_timeout_ms` timer, so a retry after a timeout gets the full budget. Each retry emits `STEP_RETRYING` and is recorded in `step.retry_results` as `{ retry_count, result }` or `{ retry_count, error }`. The initial attempt isn't recorded there.
 
 ### Results Array
 

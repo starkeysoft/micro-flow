@@ -1116,6 +1116,51 @@ describe('ConditionalStep', () => {
   });
 
   describe('hydrate / hydrateSerialized', () => {
+    it('should round-trip function-valued conditional subject/value through the registry', async () => {
+      const registry = new CallableRegistry();
+      registry.register('getSubject', function getSubject() { return 10; });
+      registry.register('getValue', function getValue() { return 5; });
+      registry.register('trueBranch', async function trueBranch() { return 'yes'; });
+      registry.register('falseBranch', async function falseBranch() { return 'no'; });
+
+      const original = new ConditionalStep({
+        conditional: { subject: registry.get('getSubject'), operator: '>', value: registry.get('getValue') },
+        true_callable: registry.get('trueBranch'),
+        false_callable: registry.get('falseBranch'),
+      });
+
+      const serialized = JSON.parse(original.serialize());
+      expect(serialized.conditional).toEqual({ subject: null, operator: '>', value: null });
+      expect(serialized.conditional_callables).toEqual({
+        subject: { type: 'function', value: 'getSubject' },
+        value: { type: 'function', value: 'getValue' },
+      });
+
+      const hydrated = ConditionalStep.hydrate(serialized, registry);
+
+      expect(hydrated.conditional_config.subject).toBe(registry.get('getSubject'));
+      expect(hydrated.conditional_config.value).toBe(registry.get('getValue'));
+      expect(hydrated.checkCondition()).toBe(true);
+    });
+
+    it('should warn and leave an unregistered function subject null on hydrate', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const registry = new CallableRegistry();
+      registry.register('trueBranch', async function trueBranch() {});
+      registry.register('falseBranch', async function falseBranch() {});
+      const original = new ConditionalStep({
+        conditional: { subject: () => 1, operator: '===', value: 1 },
+        true_callable: registry.get('trueBranch'),
+        false_callable: registry.get('falseBranch'),
+      });
+
+      const hydrated = ConditionalStep.hydrateSerialized(original.serialize(), registry);
+
+      expect(hydrated.conditional_config.subject).toBeNull();
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
     it('should round-trip and execute the true branch when the condition is met', async () => {
       const registry = new CallableRegistry();
       registry.register('trueBranch', async function trueBranch() {

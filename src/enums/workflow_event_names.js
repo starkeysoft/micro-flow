@@ -12,6 +12,7 @@ const workflow_event_names = {
   WORKFLOW_CREATED: 'workflow_created',
   WORKFLOW_ERRORED: 'workflow_errored',
   WORKFLOW_FAILED: 'workflow_failed',
+  WORKFLOW_PAUSE_REQUESTED: 'workflow_pause_requested',
   WORKFLOW_PAUSED: 'workflow_paused',
   WORKFLOW_RESUMED: 'workflow_resumed',
   WORKFLOW_RUNNING: 'workflow_running',

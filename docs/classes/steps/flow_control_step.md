@@ -27,6 +27,8 @@ Creates a new FlowControlStep instance.
 | `options.conditional.operator` | `string` | `null` | Comparison operator string. |
 | `options.conditional.value` | `any\|Function` | `null` | Value or function to compare against. |
 | `options.flow_control_type` | `string` | `flow_control_types.BREAK` | Either `'break'` or `'skip'`. See [`flow_control_types`](../../../enums/flow_control_types.md). |
+| `options.max_retries` | `number` | `0` | Maximum number of additional attempts after a failure. See [Step](step.md#constructor). |
+| `options.max_timeout_ms` | `number\|null` | `30000` | Milliseconds before an attempt times out and is treated as a failure. Each retry gets the full budget. `null` (or `Infinity`) disables the timeout. |
 
 **Throws:** `Error` if `flow_control_type` is not a valid value from `flow_control_types`.
 

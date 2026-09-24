@@ -26,6 +26,9 @@ Creates a new SwitchStep instance.
 | `options.subject` | `any\|Function` | `null` | Value (or function returning value) passed to each case as `switch_subject`. Evaluated when `switch()` runs. |
 | `options.cases` | `Array<Case\|LogicStep>` | `[]` | Ordered list of cases. `LogicStep` instances **must** have `conditional.subject` set explicitly. Each case inherits this step's `parent_workflow_id` and state (see below) before it's evaluated. |
 | `options.default_callable` | `Function\|Step\|Workflow` | `async () => {}` | Executed if no case matches. A `Step`/`Workflow` inherits this step's `parent_workflow_id` and state (see below) before it runs. |
+| `options.default_callable_registry_key` | `string\|null` | `null` | Registry key to serialize `default_callable` under when it's a function, instead of the function's name. Resolved from the `CallableRegistry` passed to `hydrate()`, and restored onto the hydrated step. See [Persistence](step.md#persistence). |
+| `options.max_retries` | `number` | `0` | Maximum number of additional attempts after a failure. See [Step](step.md#constructor). |
+| `options.max_timeout_ms` | `number\|null` | `30000` | Milliseconds before an attempt times out and is treated as a failure. Each retry gets the full budget. `null` (or `Infinity`) disables the timeout. |
 
 > Neither `cases` nor a `Step`/`Workflow` `default_callable` are added to the parent workflow via `addStep()` (they live on this `SwitchStep`, not the workflow's own step list), so `switch()` stamps each with this step's own `parent_workflow_id`, `use_state_singleton`, and `state` right before it runs - otherwise `this.getState()`/`this.setState()` inside a case or the default callable would read/write a disconnected state instead of the workflow's.
 
@@ -35,6 +38,7 @@ Creates a new SwitchStep instance.
 |----------|------|-------------|
 | `cases` | `Array<Case\|LogicStep>` | The list of cases evaluated in order. |
 | `default_callable` | `Function\|Step\|Workflow` | Fallback callable when no cases match. |
+| `default_callable_registry_key` | `string\|null` | Registry key `default_callable` is serialized under when it's a function, instead of the function's name. |
 | `subject` | `any\|Function` | The subject passed to each case, or a function returning it. |
 
 All properties from [Step](step.md) are inherited.
@@ -51,6 +55,8 @@ Delegates to `switch()` and returns the `SwitchStep` instance.
 
 Resolves the subject (calling it if it is a function), assigns it to each case via `case.switch_subject`, then evaluates cases in order. Executes the first matching case and returns its result. If no case matches, executes `default_callable`. Emits `SWITCH_CASE_MATCHED` on a match.
 
+Failures propagate: if the matched `Case` ends up failed, or a `Step`/`Workflow` `default_callable` does, [`Step.throwIfFailed()`](step.md#static-throwiffailedobj) rethrows its error, so this `SwitchStep` fails too (and retries, if `max_retries` is set).
+
 **Returns:** The return value of the matched case's callable, or the `default_callable`'s return value.
 
 ---
@@ -59,7 +65,7 @@ Resolves the subject (calling it if it is a function), assigns it to each case v
 
 Extends [`Step.prepareForSerialization()`](step.md#prepareforserialization--object) with `cases` (each case serialized via its own `prepareForSerialization()`) and `default_callable`. The base `callable` field is reported as `null` — it's just the internal bound `switch` method, not real data, since `SwitchStep`'s constructor doesn't accept a `callable` option.
 
-**Returns:** The `Step` fields (with `callable: null`) plus `cases`, `default_callable` (via [`Step.serializeCallableField()`](step.md#static-serializecallablefieldcallable--objectnull)), and `subject` (or `null` if it's a function — there's no `CallableRegistry`-style mechanism for a function-valued subject).
+**Returns:** The `Step` fields (with `callable: null`) plus `cases`, `default_callable` (via [`Step.serializeCallableField()`](step.md#static-serializecallablefieldcallable--objectnull)), `subject` (or `null` if it's a function), and `subject_callable`. A function-valued `subject` is stored as a registry reference in `subject_callable` (via [`Step.serializeFunctionRef()`](step.md#static-serializefunctionreffn-registry_key--objectnull), keyed by the function's name) so it can be resolved on hydration. Register it in the `CallableRegistry` under that name. Note that an inline arrow such as `{ subject: () => x }` gets the inferred name `'subject'`.
 
 ```
 {
@@ -67,7 +73,8 @@ Extends [`Step.prepareForSerialization()`](step.md#prepareforserialization--obje
   callable: null,
   cases: [...],                  // each a Case's own prepareForSerialization() — see Case § prepareForSerialization()
   default_callable: { type: 'function', value: string } | { type: 'step' | 'workflow', value: {...} },
-  subject: any | null
+  subject: any | null,          // null when subject is a function
+  subject_callable: { type: 'function', value: string } | null
 }
 ```
 
@@ -75,7 +82,7 @@ Extends [`Step.prepareForSerialization()`](step.md#prepareforserialization--obje
 
 ### `static hydrate(parsed_step, callableRegistry?)` → `SwitchStep`
 
-Hydrates each entry in `cases` via [`Step.hydrateAny()`](step.md#static-hydrateanyparsed_step-callableregistry--step) (so a `Case` comes back as a `Case`, not a plain `Step`), resolves `default_callable` via `Step.hydrateCallableField()`, then delegates to `super.hydrate()`.
+Hydrates each entry in `cases` via [`Step.hydrateAny()`](step.md#static-hydrateanyparsed_step-callableregistry--step) (so a `Case` comes back as a `Case`, not a plain `Step`), resolves `default_callable` via `Step.hydrateCallableField()`, resolves a function-valued `subject` from `subject_callable` via [`Step.hydrateFunctionRef()`](step.md#static-hydratefunctionrefdescriptor-callableregistry--functionnull) (warning and leaving it `null` if the name isn't registered, rather than throwing), then delegates to `super.hydrate()`.
 
 **Parameters:**
 

@@ -26,8 +26,10 @@ export default class Step extends Base {
    * @param {Object} options - Configuration options.
    * @param {string} [options.name] - Name of the step.
    * @param {Function|Step|Workflow} [options.callable=async () => {}] - Function, Step, or Workflow to execute.
+   * @param {string|null} [options.callable_registry_key=null] - Registry key to serialize `callable` under when it's a function (defaults to the function's name); it's resolved from the `CallableRegistry` passed to `hydrate()`.
    * @param {number} [options.max_retries=0] - Maximum number of retries on failure.
-   * @param {number} [options.max_timeout_ms=30000] - Maximum execution time in milliseconds before timing out.
+   * @param {number|null} [options.max_timeout_ms=30000] - Maximum execution time per attempt in milliseconds
+   * before timing out. `null` (or `Infinity`) disables the timeout.
    * @param {string} [options.step_type=step_types.ACTION] - Type of the step.
    * @param {sub_step_types|null} [options.sub_step_type=null] - Sub-type of the step (use values from the sub_step_types enum).
    */
@@ -60,37 +62,48 @@ export default class Step extends Base {
     this.errors = [];
     this.result = null;
     this.retry_results = [];
-    this.timeout = null;
   }
 
   /**
-   * Executes the step's callable function, Step, or Workflow.
+   * Executes the step's callable function, Step, or Workflow. Each attempt is bounded by
+   * `max_timeout_ms`, and a failed attempt (including a nested `Step`/`Workflow` that ends up
+   * failed) is retried up to `max_retries` times, emitting `step_retrying` before each retry.
+   * Once retries are exhausted the step is marked failed.
    * @async
    * @returns {Promise<Step>} The step instance with execution results.
    */
   async execute() {
-    if (!this.timeout) {
-      this.timeout = new Promise((_, reject) =>
-        setTimeout(
-          reject,
-          this.max_timeout_ms,
-          new Error(`Step "${this.name}" timed out after ${this.max_timeout_ms}ms`)
-        )
-      );
-    }
+    // Each run gets its full retry budget and accurate timing, so a step that runs more than
+    // once (e.g. inside a LoopStep, or a workflow that's executed again) behaves the same every
+    // time. `errors` is deliberately kept, as a history across runs.
+    this.retry_count = 0;
+    this.retry_results = [];
+    this.timing.start_time = null;
+    this.timing.complete_time = null;
+    this.timing.execution_time_ms = null;
 
     this.markAsRunning();
 
-    try {
-      this.result = await Promise.race([this._callable(), this.timeout]);
-    } catch (error) {
-      if (this.max_retries && this.retry_count < this.max_retries) {
-        this.retry_count++;
-        this.retry_results.push({
-          retry_count: this.retry_count,
-          result: await this.execute(),
-        });
-      } else {
+    while (true) {
+      try {
+        this.result = await this.runWithTimeout();
+
+        if (this.retry_count > 0) {
+          this.retry_results.push({ retry_count: this.retry_count, result: this.result });
+        }
+
+        break;
+      } catch (error) {
+        // retry_results only records the outcome of retries, not of the initial attempt.
+        if (this.retry_count > 0) {
+          this.retry_results.push({ retry_count: this.retry_count, error });
+        }
+
+        if (this.max_retries && this.retry_count < this.max_retries) {
+          this.markAsRetrying(error);
+          continue;
+        }
+
         this.errors.push(error);
 
         this.markAsFailed();
@@ -98,6 +111,8 @@ export default class Step extends Base {
         if (this.getState('exit_on_error')) {
           throw error;
         }
+
+        break;
       }
     }
 
@@ -112,6 +127,85 @@ export default class Step extends Base {
     }
 
     return this.prepareForSerialization();
+  }
+
+  /**
+   * Runs a single attempt of the step's callable, racing it against a timeout of
+   * `max_timeout_ms`. A fresh timer is created for every attempt (so a retry after a timeout
+   * gets its full time budget) and always cleared afterwards. A `max_timeout_ms` of `null` or
+   * `Infinity` disables the timeout. A nested `Step`/`Workflow` callable that ends up failed
+   * makes the attempt fail too (see `throwIfFailed()`).
+   * @async
+   * @returns {Promise<*>} The callable's result.
+   * @throws {Error} Throws the callable's error, or a timeout error.
+   */
+  async runWithTimeout() {
+    if (this.max_timeout_ms === null || this.max_timeout_ms === Infinity) {
+      return this.runCallable();
+    }
+
+    let timer = null;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(
+        reject,
+        this.max_timeout_ms,
+        new Error(`Step "${this.name}" timed out after ${this.max_timeout_ms}ms`)
+      );
+    });
+
+    try {
+      return await Promise.race([this.runCallable(), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Invokes the callable once, failing if it was a nested `Step`/`Workflow` that failed.
+   * @async
+   * @returns {Promise<*>} The callable's result.
+   */
+  async runCallable() {
+    const result = await this._callable();
+    Step.throwIfFailed(this.#callable_object);
+
+    return result;
+  }
+
+  /**
+   * Throws if the given value is a `Step` or `Workflow` whose status is failed. Nested
+   * steps/workflows record their failure rather than throwing it (a `Workflow` with
+   * `exit_on_error` returns itself in a failed state), so whatever ran them uses this to
+   * propagate the failure. Anything else (e.g. a plain function) is ignored.
+   * @param {*} callable_object - The value to check.
+   * @throws {Error} The nested step's last error, the nested workflow's failing error, or a
+   * generic error if neither is available.
+   */
+  static throwIfFailed(callable_object) {
+    const base_type = callable_object?.base_type;
+
+    if (!base_type || callable_object.status !== Workflow.statuses[base_type]?.FAILED) {
+      return;
+    }
+
+    const error = base_type === base_types.STEP
+      ? callable_object.errors?.at(-1)
+      : callable_object.results?.at(-1)?.data?.error;
+
+    throw error ?? new Error(`Nested ${base_type} "${callable_object.name}" failed`);
+  }
+
+  /**
+   * Increments `retry_count` and emits `step_retrying` before the next attempt.
+   * @param {Error} error - The error that caused the retry.
+   */
+  markAsRetrying(error) {
+    this.retry_count++;
+
+    this.log(
+      Workflow.event_names.step.STEP_RETRYING,
+      `Step "${this.name}" retrying (${this.retry_count}/${this.max_retries}) after error: ${error?.message ?? error}`
+    );
   }
 
   /**
@@ -178,6 +272,46 @@ export default class Step extends Base {
     }
 
     return { type, value: callable.prepareForSerialization() };
+  }
+
+  /**
+   * Serializes a plain function (e.g. a function-valued conditional subject) into a registry
+   * reference descriptor, so it can be resolved from a `CallableRegistry` on hydration.
+   * @param {Function|*} fn - The function to serialize. Non-functions return null.
+   * @param {string|null} [registry_key=null] - Explicit registry key; defaults to the function's name.
+   * @returns {Object|null} A `{ type: 'function', value }` descriptor, or null if `fn` isn't a
+   * function or has no usable key (e.g. an anonymous function with no explicit key).
+   */
+  static serializeFunctionRef(fn, registry_key = null) {
+    if (typeof fn !== 'function') {
+      return null;
+    }
+
+    const value = registry_key ?? fn.name;
+
+    return value ? { type: Step.callable_types.FUNCTION, value } : null;
+  }
+
+  /**
+   * Resolves a descriptor produced by `serializeFunctionRef` from a registry. Unlike
+   * `hydrateCallableField`, a missing registry entry doesn't throw - it warns and returns null,
+   * since these optional fields (e.g. a conditional subject) often hold inline functions whose
+   * inferred name was never registered.
+   * @param {Object|null} descriptor - The `{ type: 'function', value }` descriptor.
+   * @param {import('../callable_registry.js').default|null} [callable_registry] - Registry used to resolve the function.
+   * @returns {Function|null} The resolved function, or null.
+   */
+  static hydrateFunctionRef(descriptor, callable_registry = null) {
+    if (!descriptor?.value) {
+      return null;
+    }
+
+    if (!callable_registry || !callable_registry.has(descriptor.value)) {
+      console.warn(`Callable registry key "${descriptor.value}" not found in registry or registry not provided. Re-attach this function after hydrating.`);
+      return null;
+    }
+
+    return callable_registry.get(descriptor.value);
   }
 
   /**

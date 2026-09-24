@@ -22,7 +22,7 @@ Creates a new Event instance. Sub-classes call `registerEvents(event_names)` in 
 
 ### `emit(event_name, data, bubbles?, cancelable?)` → `boolean`
 
-Dispatches a `CustomEvent` with `detail = data`. Also broadcasts the event over a `BroadcastChannel` named `event_name` for cross-context delivery. Circular references in `data` are stripped via JSON serialization before broadcasting.
+Dispatches a `CustomEvent` with `detail = data`. Also broadcasts the event over a `BroadcastChannel` named `event_name` for cross-context delivery. `data` is copied via JSON serialization before dispatching and broadcasting. Only true circular references (a value that contains itself somewhere below it) are dropped; objects referenced more than once, such as a step's `timing` shared between a workflow's `steps` and `sessions`, are kept at every occurrence.
 
 **Parameters:**
 

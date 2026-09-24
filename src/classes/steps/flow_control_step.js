@@ -20,6 +20,8 @@ export default class FlowControlStep extends LogicStep {
    * @param {*|Function} [options.conditional.value] - Value to compare against. Can be a function that returns the value.
    * @param {string} [options.name] - Name of the step.
    * @param {string} [options.flow_control_type=flow_control_types.BREAK] - Type of flow control.
+   * @param {number} [options.max_retries=0] - Maximum number of retries on failure.
+   * @param {number|null} [options.max_timeout_ms=30000] - Maximum execution time per attempt in milliseconds. `null` disables the timeout.
    * @throws {Error} Throws if flow_control_type is invalid.
    */
   constructor({
@@ -30,10 +32,14 @@ export default class FlowControlStep extends LogicStep {
     },
     name,
     flow_control_type = flow_control_types.BREAK,
+    max_retries,
+    max_timeout_ms,
   }) {
     super({
       name,
-      conditional
+      conditional,
+      max_retries,
+      max_timeout_ms,
     });
 
     if (!Object.values(flow_control_types).includes(flow_control_type)) {

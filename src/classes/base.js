@@ -49,14 +49,15 @@ export default class Base {
    * Logs an event and emits it to the appropriate event emitter.
    * @param {string} event_name - Name of the event to log.
    * @param {string} [message=null] - Optional message to log.
+   * @param {*} [data=this] - Payload to emit with the event. Defaults to this instance.
    * @throws {Error} Throws if event name is invalid or event emitter not found.
    */
-  log(event_name, message = null) {
+  log(event_name, message = null, data = this) {
     if (!event_name || !State.get(`events.${this.base_type}`)) {
       throw new Error('Invalid event name or event emitter not found');
     }
 
-    State.get(`events.${this.base_type}`).emit(event_name, this);
+    State.get(`events.${this.base_type}`).emit(event_name, data);
     if (State.get('log_suppress')) {
       return;
     }
@@ -74,10 +75,6 @@ export default class Base {
     this.timing.complete_time = new Date();
     this.status = State.get('statuses')[this.base_type].COMPLETE;
     this.timing.execution_time_ms = this.timing.complete_time - this.timing.start_time;
-
-    if (this.steps_by_id) {
-      delete this.steps_by_id;
-    }
 
     this.log(
       State.get(`event_names.${this.base_type}`)[`${this.base_type.toUpperCase()}_COMPLETE`],

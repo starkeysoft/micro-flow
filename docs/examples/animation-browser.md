@@ -357,7 +357,7 @@ Each `DelayStep` with `delay_type: delay_types.RELATIVE` and a `relative_delay_m
 
 ### Rebuilding on Each Run
 
-The `buildAnimationFlow()` function creates a fresh `Workflow` and step instances on each run. This avoids stale state from a previous execution — `step.status` and `step.result` are reset.
+The `buildAnimationFlow()` function creates a fresh `Workflow` and step instances on each run. A workflow can be executed again as-is (each `execute()` starts a new session, resetting `results`, the break/skip flags, and timing, and each step resets its own retry count and timing), but rebuilding also gives you a clean instance state and clears history you don't need here, such as `sessions` and each step's `errors`.
 
 ## Related Examples
 
