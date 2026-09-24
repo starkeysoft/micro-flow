@@ -1,3 +1,4 @@
+import Step from './step.js';
 import LogicStep from './logic_step.js';
 import { conditional_step_comparators } from '../../enums/index.js';
 
@@ -19,7 +20,7 @@ export default class Case extends LogicStep {
    * @param {*|Function} [options.conditional.subject=null] - Subject to evaluate (typically set by SwitchStep). Can be a function.
    * @param {conditional_step_comparators|string} [options.conditional.operator=null] - Comparison operator.
    * @param {*|Function} [options.conditional.value=null] - Value to compare against. Can be a function that returns the value.
-   * @param {Function|Step|Workflow} [options.callable=async () => {}] - Function, Step, or Workflow to execute when case matches.
+   * @param {Function|Step|Workflow} [options.callable=Step.noop] - Function, Step, or Workflow to execute when case matches.
    * @param {string|null} [options.callable_registry_key=null] - Registry key to serialize `callable` under when it's a function (defaults to the function's name); it's resolved from the `CallableRegistry` passed to `hydrate()`.
    * @param {boolean} [options.force_subject_override=false] - Force override of subject even if already set.
    * @param {number} [options.max_retries=0] - Maximum number of retries on failure.
@@ -32,7 +33,7 @@ export default class Case extends LogicStep {
       operator: null,
       value: null,
     },
-    callable = async () => {},
+    callable = Step.noop,
     callable_registry_key = null,
     force_subject_override = false,
     max_retries,

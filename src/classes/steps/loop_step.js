@@ -16,7 +16,7 @@ export default class LoopStep extends LogicStep {
    * @param {Object} options - Configuration options.
    * @param {string} [options.name] - Name of the step.
    * @param {Array|Iterable|Function} options.iterable - Iterable to loop over or function returning an iterable. Required for 'for_each' and 'generator' loops.
-   * @param {Function} [options.callable=async () => {}] - Function to execute for each iteration.
+   * @param {Function} [options.callable=Step.noop] - Function to execute for each iteration.
    * @param {Object} [options.conditional] - Conditional configuration for while loops. Required for 'while' loops.
    * @param {*|Function} [options.conditional.subject] - Subject to evaluate. Can be a function that returns the value.
    * @param {conditional_step_comparators|string} [options.conditional.operator] - Comparison operator.
@@ -31,7 +31,7 @@ export default class LoopStep extends LogicStep {
   constructor({
     name,
     iterable,
-    callable = async () => {},
+    callable = Step.noop,
     conditional = {
       operator: null,
       subject: null,

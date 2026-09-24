@@ -276,6 +276,17 @@ describe('Case', () => {
   });
 
   describe('hydrate / hydrateSerialized', () => {
+    it('should round-trip a Case with the default callable without a registry', () => {
+      const original = new Case({ conditional: { subject: 'a', operator: '===', value: 'a' } });
+
+      expect(original.prepareForSerialization().callable).toBeNull();
+
+      const hydrated = Step.hydrateSerialized(original.serialize());
+
+      expect(hydrated).toBeInstanceOf(Case);
+      expect(hydrated.callable_type).toBe('function');
+    });
+
     it('should round-trip a Case, preserving force_subject_override and is_matched', () => {
       const registry = new CallableRegistry();
       registry.register('caseCallable', async function caseCallable() { return 'matched'; });
@@ -889,6 +900,18 @@ describe('SwitchStep', () => {
   });
 
   describe('hydrate / hydrateSerialized', () => {
+    it('should round-trip the default default_callable without a registry', async () => {
+      const original = new SwitchStep({ subject: 'x', cases: [] });
+
+      expect(JSON.parse(original.serialize()).default_callable).toBeNull();
+
+      const hydrated = Step.hydrateSerialized(original.serialize());
+
+      expect(hydrated).toBeInstanceOf(SwitchStep);
+      await hydrated.execute();
+      expect(hydrated.status).toBe(Workflow.statuses.step.COMPLETE);
+    });
+
     it('should round-trip a function-valued subject through the registry', async () => {
       const registry = new CallableRegistry();
       registry.register('getSubject', function getSubject() { return 'b'; });

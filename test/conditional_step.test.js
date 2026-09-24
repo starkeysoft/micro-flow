@@ -1116,6 +1116,24 @@ describe('ConditionalStep', () => {
   });
 
   describe('hydrate / hydrateSerialized', () => {
+    it('should round-trip default true/false branches without a registry', async () => {
+      const original = new ConditionalStep({
+        conditional: { subject: 1, operator: '===', value: 1 },
+      });
+
+      const serialized = JSON.parse(original.serialize());
+      expect(serialized.true_callable).toBeNull();
+      expect(serialized.false_callable).toBeNull();
+
+      const hydrated = Step.hydrateSerialized(original.serialize());
+
+      expect(hydrated).toBeInstanceOf(ConditionalStep);
+      expect(hydrated.true_callable_registry_key).toBeNull();
+      expect(hydrated.false_callable_registry_key).toBeNull();
+      await hydrated.execute();
+      expect(hydrated.status).toBe(Workflow.statuses.step.COMPLETE);
+    });
+
     it('should round-trip function-valued conditional subject/value through the registry', async () => {
       const registry = new CallableRegistry();
       registry.register('getSubject', function getSubject() { return 10; });

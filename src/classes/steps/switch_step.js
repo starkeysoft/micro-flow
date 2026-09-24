@@ -15,7 +15,7 @@ export default class SwitchStep extends Step {
    * @param {Object} options - Configuration options.
    * @param {string} [options.name] - Name of the step.
    * @param {Array<Case|LogicStep>} [options.cases=[]] - Array of Case or LogicStep instances to evaluate. LogicStep instances MUST have conditional.subject set.
-   * @param {Function|Step|Workflow} [options.default_callable=async () => {}] - Function, Step, or Workflow to execute if no cases match.
+   * @param {Function|Step|Workflow} [options.default_callable=Step.noop] - Function, Step, or Workflow to execute if no cases match.
    * @param {*|Function} [options.subject=null] - Subject value to evaluate against each case. Can be a function that returns the value.
    * @param {string|null} [options.default_callable_registry_key=null] - Registry key to serialize `default_callable` under when it's a function (defaults to the function's name); it's resolved from the `CallableRegistry` passed to `hydrate()`.
    * @param {number} [options.max_retries=0] - Maximum number of retries on failure.
@@ -24,7 +24,7 @@ export default class SwitchStep extends Step {
   constructor({
     name,
     cases = [],
-    default_callable = async () => {},
+    default_callable = Step.noop,
     subject = null,
     default_callable_registry_key = null,
     max_retries,

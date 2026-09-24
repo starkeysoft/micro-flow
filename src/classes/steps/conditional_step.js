@@ -19,8 +19,8 @@ export default class ConditionalStep extends LogicStep {
    * @param {*|Function} [options.conditional.subject] - Subject to evaluate. Can be a function that returns the value.
    * @param {conditional_step_comparators|string} [options.conditional.operator] - Comparison operator.
    * @param {*|Function} [options.conditional.value] - Value to compare against. Can be a function that returns the value.
-   * @param {Function|Step|Workflow} [options.true_callable=async () => {}] - Callable to execute if condition is true.
-   * @param {Function|Step|Workflow} [options.false_callable=async () => {}] - Callable to execute if condition is false.
+   * @param {Function|Step|Workflow} [options.true_callable=Step.noop] - Callable to execute if condition is true.
+   * @param {Function|Step|Workflow} [options.false_callable=Step.noop] - Callable to execute if condition is false.
    * @param {string|null} [options.true_callable_registry_key=null] - Registry key to serialize `true_callable` under when it's a function (defaults to the function's name); it's resolved from the `CallableRegistry` passed to `hydrate()`.
    * @param {string|null} [options.false_callable_registry_key=null] - Registry key to serialize `false_callable` under when it's a function (defaults to the function's name); it's resolved from the `CallableRegistry` passed to `hydrate()`.
    * @param {number} [options.max_retries=0] - Maximum number of retries on failure.
@@ -33,8 +33,8 @@ export default class ConditionalStep extends LogicStep {
       operator: null,
       value: null,
     },
-    true_callable = async () => {},
-    false_callable = async () => {},
+    true_callable = Step.noop,
+    false_callable = Step.noop,
     true_callable_registry_key = null,
     false_callable_registry_key = null,
     max_retries,

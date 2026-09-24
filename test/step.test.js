@@ -1062,6 +1062,10 @@ describe('Step', () => {
       expect(Step.serializeCallableField(undefined)).toBeNull();
     });
 
+    it('should serialize the default Step.noop callable to null', () => {
+      expect(Step.serializeCallableField(Step.noop)).toBeNull();
+    });
+
     it('should serialize a function to a { type, value } descriptor keyed by name', () => {
       async function namedFn() {}
 
@@ -1265,6 +1269,18 @@ describe('Step', () => {
   });
 
   describe('hydrate / hydrateSerialized', () => {
+    it('should round-trip a step with the default callable without a registry', async () => {
+      const original = new Step({ name: 'defaults' });
+
+      expect(JSON.parse(original.serialize()).callable).toBeNull();
+
+      const hydrated = Step.hydrateSerialized(original.serialize());
+
+      expect(hydrated.callable_type).toBe('function');
+      await hydrated.execute();
+      expect(hydrated.status).toBe(Workflow.statuses.step.COMPLETE);
+    });
+
     it('should round-trip a step with a registered function callable', async () => {
       const registry = new CallableRegistry();
       registry.register('greet', async function greet() {

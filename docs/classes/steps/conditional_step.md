@@ -27,8 +27,8 @@ Creates a new ConditionalStep instance.
 | `options.conditional.subject` | `any\|Function` | — | Value or function returning value to evaluate. |
 | `options.conditional.operator` | `string` | — | Comparison operator string. |
 | `options.conditional.value` | `any\|Function` | — | Value or function returning value to compare against. |
-| `options.true_callable` | `Function\|Step\|Workflow` | `async () => {}` | Executed when the condition is `true`. Functions are bound to `this`. A `Step`/`Workflow` inherits this step's `parent_workflow_id` and state (see below) right before it runs. |
-| `options.false_callable` | `Function\|Step\|Workflow` | `async () => {}` | Executed when the condition is `false`. Functions are bound to `this`. A `Step`/`Workflow` inherits this step's `parent_workflow_id` and state (see below) right before it runs. |
+| `options.true_callable` | `Function\|Step\|Workflow` | `Step.noop` | Executed when the condition is `true`. Functions are bound to `this`. A `Step`/`Workflow` inherits this step's `parent_workflow_id` and state (see below) right before it runs. |
+| `options.false_callable` | `Function\|Step\|Workflow` | `Step.noop` | Executed when the condition is `false`. Functions are bound to `this`. A `Step`/`Workflow` inherits this step's `parent_workflow_id` and state (see below) right before it runs. |
 | `options.true_callable_registry_key` | `string\|null` | `null` | Registry key to serialize `true_callable` under when it's a function, instead of the function's name. Resolved from the `CallableRegistry` passed to `hydrate()`, and restored onto the hydrated step. See [Persistence](step.md#persistence). |
 | `options.false_callable_registry_key` | `string\|null` | `null` | Registry key to serialize `false_callable` under when it's a function, instead of the function's name. Resolved from the `CallableRegistry` passed to `hydrate()`, and restored onto the hydrated step. See [Persistence](step.md#persistence). |
 | `options.max_retries` | `number` | `0` | Maximum number of additional attempts after a failure. See [Step](step.md#constructor). |
@@ -76,8 +76,8 @@ Extends [`LogicStep.prepareForSerialization()`](logic_step.md#prepareforserializ
   ...,                          // Step/LogicStep fields — see Step § prepareForSerialization()
   conditional: { subject, operator, value },
   callable: null,
-  true_callable: { type: 'function', value: string } | { type: 'step' | 'workflow', value: {...} },
-  false_callable: { type: 'function', value: string } | { type: 'step' | 'workflow', value: {...} }
+  true_callable: { type: 'function', value: string } | { type: 'step' | 'workflow', value: {...} } | null,  // null for the default Step.noop
+  false_callable: { type: 'function', value: string } | { type: 'step' | 'workflow', value: {...} } | null
 }
 ```
 

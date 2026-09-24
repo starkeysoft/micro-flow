@@ -23,7 +23,7 @@ Creates a new Step instance.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `options.name` | `string` | `'step-<uuid>'` | Human-readable identifier used in logs and events. |
-| `options.callable` | `Function\|Step\|Workflow` | `async () => {}` | The work to execute. Plain async functions are bound to the step instance, giving them access to `this.getState()` etc. |
+| `options.callable` | `Function\|Step\|Workflow` | `Step.noop` | The work to execute. Plain async functions are bound to the step instance, giving them access to `this.getState()` etc. |
 | `options.callable_registry_key` | `string\|null` | `null` | Registry key to serialize `callable` under when it's a function, instead of the function's name. Resolved from the `CallableRegistry` passed to `hydrate()`, and restored onto the hydrated step. See [Persistence](#persistence). |
 | `options.max_retries` | `number` | `0` | Maximum number of additional attempts after a failure. |
 | `options.max_timeout_ms` | `number\|null` | `30000` | Milliseconds before an attempt times out and is treated as a failure. Applies to each attempt separately, so every retry gets the full budget. `null` (or `Infinity`) disables the timeout. |
@@ -50,6 +50,7 @@ Creates a new Step instance.
 | `status` | `string` | Current status (see [`step_statuses`](../../../enums/step_statuses.md)). |
 | `timing` | `Object` | `{ start_time, complete_time, execution_time_ms, cancel_time }` from `Base`. |
 | `parent_workflow_id` | `string\|null` | ID of the workflow this step belongs to (set by the workflow on add). |
+| `static noop` | `Function` | Shared no-op `async () => {}` used as the default for every step's optional callables (`callable`, `true_callable`/`false_callable`, `default_callable`). `serializeCallableField()` stores it as `null`, and hydration falls back to the constructor default, so steps left with their defaults round-trip without a `CallableRegistry` entry. |
 | `static step_name` | `string` | `'step'` on the base class; each subclass overrides it with its own name (e.g. `'conditional'`, `'loop'`). Stored as `class_name` on serialization so hydration can rebuild the correct subclass. See [Persistence](#persistence). |
 
 ## Methods
@@ -248,7 +249,7 @@ Serializes a single callable-like value (a function, `Step`, or `Workflow`) into
 |-----------|------|-------------|
 | `callable` | `Function\|Step\|Workflow\|null` | The callable to serialize. |
 
-**Returns:** A `{ type, value }` descriptor, or `null` if `callable` is `null`/`undefined`.
+**Returns:** A `{ type, value }` descriptor, or `null` if `callable` is `null`/`undefined` or the default [`Step.noop`](#properties) (hydrating `null` restores the constructor default, so an untouched default callable needs no registry entry).
 
 ---
 
