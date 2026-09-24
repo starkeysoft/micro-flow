@@ -260,7 +260,7 @@ await workflow.execute();
 Monitor lifecycle events for workflows, steps, and state. Use Node's EventEmitter syntax or the browser's CustomEvent syntax—both support all environments.
 
 ### Persistence
-Turn a `Workflow` (or `Step`) into a JSON string with `serialize()`, and rebuild it with `Workflow.hydrateSerialized()` / `Step.hydrateSerialized()` — including which subclass each step actually is (`ConditionalStep`, `LoopStep`, `SwitchStep`, etc. all come back as themselves). Function callables need a `CallableRegistry` to resolve by name after hydration; `Step`/`Workflow` callables need nothing extra, since they serialize recursively as their own object graph.
+Turn a `Workflow` (or `Step`) into a JSON string with `serialize()`, and rebuild it with `Workflow.hydrateSerialized()` / `Step.hydrateSerialized()` — including which subclass each step actually is (`ConditionalStep`, `LoopStep`, `SwitchStep`, etc. all come back as themselves). Function callables need a `CallableRegistry` to resolve by name after hydration; `Step`/`Workflow` callables need nothing extra, since they serialize recursively as their own object graph. Other function-valued fields (conditional subjects/values, a `SwitchStep` subject, a function `LoopStep` iterable, `result_per_step_function`) are resolved through the same registry. A workflow's instance state (`setState()` data) is deliberately not serialized.
 
 ## Use Cases
 

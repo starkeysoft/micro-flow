@@ -24,7 +24,9 @@ export default class LoopStep extends LogicStep {
    * @param {string} [options.loop_type=loop_types.FOR_EACH] - Type of loop ('for', 'for_each', 'while', or 'generator').
    * @param {number} [options.iterations=0] - Number of iterations to execute. Only used for 'for' loops.
    * @param {number} [options.max_iterations=1000] - Maximum number of iterations to prevent infinite loops.
-   * @param {string|null} [options.loop_callable_registry_key=null] - Optional key to reference the per-iteration callable to be rehydrated after serialization.
+   * @param {string|null} [options.loop_callable_registry_key=null] - Registry key to serialize the per-iteration `callable` under when it's a function (defaults to the function's name); it's resolved from the `CallableRegistry` passed to `hydrate()`.
+   * @param {number} [options.max_retries=0] - Maximum number of retries on failure.
+   * @param {number|null} [options.max_timeout_ms=30000] - Maximum execution time per attempt in milliseconds, covering the whole loop (all iterations). `null` disables the timeout.
    */
   constructor({
     name,
@@ -39,8 +41,10 @@ export default class LoopStep extends LogicStep {
     iterations = 0,
     max_iterations = 1000,
     loop_callable_registry_key = null,
+    max_retries,
+    max_timeout_ms,
   }) {
-    super({ name, conditional });
+    super({ name, conditional, max_retries, max_timeout_ms });
     this.iterable = iterable;
     this.loop_type = loop_type;
     this.iterations = iterations > max_iterations ? max_iterations : iterations;
@@ -81,6 +85,19 @@ export default class LoopStep extends LogicStep {
   }
 
   /**
+   * Runs one iteration of the per-iteration callable. A nested `Step`/`Workflow` that ends up
+   * failed fails the loop (and so this step), rather than the loop carrying on as complete.
+   * @async
+   * @returns {Promise<*>} The iteration's result.
+   */
+  async runIteration() {
+    const result = await this._loop_callable();
+    Step.throwIfFailed(this._loop_callable_object);
+
+    return result;
+  }
+
+  /**
    * Executes a generator/async generator and appends yielded values to results.
    * @throws {Error} If the callable is not a generator or async generator function.
    * @returns {Object} - An object containing a message and the results of the loop.
@@ -91,6 +108,8 @@ export default class LoopStep extends LogicStep {
     }
 
     this.propagateStateToLoopCallable();
+    // Each run starts with fresh results, rather than appending to a previous run's.
+    this.results = [];
 
     let iterations = 0;
     // Use for await...of to handle both sync and async generators
@@ -116,11 +135,13 @@ export default class LoopStep extends LogicStep {
    */
   async for_loop() {
     this.propagateStateToLoopCallable();
+    // Each run starts with fresh results, rather than appending to a previous run's.
+    this.results = [];
 
     const target = this.iterations;
     let i = 0;
     for (; i < target; i++) {
-      this.results.push(await this._loop_callable());
+      this.results.push(await this.runIteration());
     }
 
     this.iterations = i;
@@ -142,16 +163,18 @@ export default class LoopStep extends LogicStep {
     }
 
     this.propagateStateToLoopCallable();
+    // Each run starts with fresh results, rather than appending to a previous run's.
+    this.results = [];
 
-    if (typeof this.iterable === 'function') {
-      this.iterable = this.iterable();
-    }
+    // Resolve a function iterable into a local, rather than overwriting this.iterable, so the
+    // function is still there to serialize (and to call again on a later run).
+    const iterable = typeof this.iterable === 'function' ? this.iterable() : this.iterable;
 
     let iterations = 0;
-    for (const item of this.iterable) {
+    for (const item of iterable) {
       iterations++;
       this.current_item = item;
-      this.results.push(await this._loop_callable());
+      this.results.push(await this.runIteration());
     }
 
     this.iterations = iterations;
@@ -173,11 +196,13 @@ export default class LoopStep extends LogicStep {
     }
 
     this.propagateStateToLoopCallable();
+    // Each run starts with fresh results, rather than appending to a previous run's.
+    this.results = [];
 
     let iterations = 0;
     while (this.checkCondition() && iterations < this.max_iterations) {
       iterations++;
-      this.results.push(await this._loop_callable());
+      this.results.push(await this.runIteration());
     }
 
     this.iterations = iterations;
@@ -190,7 +215,9 @@ export default class LoopStep extends LogicStep {
 
   /**
    * Inserts safely serializable properties of the step into a new object for serialization.
-   * Note: a function-valued `iterable` is not persisted, since there's no registry for it.
+   * A function-valued `iterable` is stored as `null`, with a registry reference (keyed by the
+   * function's name) in `iterable_callable`, so it can be resolved on hydration. Non-array
+   * iterables (e.g. a Set) are not persisted.
    * @returns {Object} An object containing the step's properties ready for serialization.
    */
   prepareForSerialization() {
@@ -203,12 +230,14 @@ export default class LoopStep extends LogicStep {
       iterations: this.iterations,
       max_iterations: this.max_iterations,
       iterable: Array.isArray(this.iterable) ? this.iterable : null,
+      iterable_callable: Step.serializeFunctionRef(this.iterable),
       results: this.results,
     };
   }
 
   /**
-   * Hydrates a parsed step object into a LoopStep instance, resolving the per-iteration callable.
+   * Hydrates a parsed step object into a LoopStep instance, resolving the per-iteration callable
+   * and (if function-valued) iterable.
    * @param {Object} parsed_step - The parsed step object.
    * @param {import('../callable_registry.js').default|null} [callable_registry] - Registry used to resolve function callables.
    * @returns {LoopStep} The hydrated LoopStep instance.
@@ -219,6 +248,9 @@ export default class LoopStep extends LogicStep {
     const instance = super.hydrate({
       ...parsed_step,
       callable: Step.hydrateCallableField(callable_descriptor, callable_registry),
+      iterable: parsed_step.iterable_callable
+        ? Step.hydrateFunctionRef(parsed_step.iterable_callable, callable_registry)
+        : parsed_step.iterable,
       loop_callable_registry_key: callable_descriptor?.type === Step.callable_types.FUNCTION
         ? callable_descriptor.value
         : null,

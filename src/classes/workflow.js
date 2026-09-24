@@ -18,6 +18,10 @@ export default class Workflow extends Base {
    * @param {string} [options.name] - Name of the workflow.
    * @param {CallableRegistry|null} [options.callable_registry=null] - Registry for callable objects.
    * @param {boolean} [options.exit_on_error=false] - Whether to exit on error.
+   * @param {boolean} [options.result_per_step=false] - Whether to call `result_per_step_function` after each step.
+   * @param {Function|null} [options.result_per_step_function=null] - Called with the serialized workflow after each step.
+   * @param {string|null} [options.result_per_step_function_registry_key=null] - Optional key to reference
+   * `result_per_step_function` to be rehydrated after serialization. Defaults to the function's name.
    * @param {Array<Step>} [options.steps=[]] - Array of steps to add to the workflow.
    * @param {boolean} [options.throw_on_empty=false] - Whether to throw error if workflow is empty.
    * @param {boolean} [options.use_state_singleton=false] - Deprecated. When true, this workflow (and every
@@ -30,6 +34,7 @@ export default class Workflow extends Base {
     exit_on_error = false,
     result_per_step = false,
     result_per_step_function = null,
+    result_per_step_function_registry_key = null,
     steps = [],
     throw_on_empty = false,
     use_state_singleton = false,
@@ -43,6 +48,7 @@ export default class Workflow extends Base {
     this.sessions = {};
     this.throw_on_empty = throw_on_empty;
     this.result_per_step_function = result_per_step_function;
+    this.result_per_step_function_registry_key = result_per_step_function_registry_key;
 
     // _steps/steps_by_id must exist before initializeWorkflowState(): it reads this._steps
     // (to set current_step) and logs, which serializes `this` - both need this._steps to
@@ -58,13 +64,16 @@ export default class Workflow extends Base {
    * Executes the workflow by running all steps in sequence.
    * If the workflow is currently `paused`, resumes from the step after the one
    * that was running when it paused, rather than starting over from the beginning.
+   * Otherwise a new session starts: `results`, the break/skip flags and the timing of the
+   * previous run are reset (earlier runs remain available in `sessions`), so a workflow can be
+   * executed any number of times - e.g. as the body of a `LoopStep`.
    * @async
    * @returns {Promise<Workflow>} The workflow instance with execution results.
    * @throws {Error} Throws if workflow is empty and throw_on_empty is true.
    */
   async execute() {
     if (!this.current_session_id) {
-      this.current_session_id = crypto.randomUUID();
+      this.startNewSession();
     }
 
     if (this.isEmpty()) {
@@ -85,14 +94,19 @@ export default class Workflow extends Base {
 
     for (let i = start_index; i < this._steps.length; i++) {
       if (this.should_break) {
-        this.log(event_names.workflow.WORKFLOW_BREAK_EXECUTED, `Workflow "${this.name}" execution broken at step ${this._steps[i].name} - ${this._steps[i].id}.`);
+        this.log(
+          event_names.workflow.WORKFLOW_BREAK_EXECUTED,
+          `Workflow "${this.name}" execution broken at step ${this._steps[i].name} - ${this._steps[i].id}.`,
+          { workflow: this, step: this._steps[i] }
+        );
         break;
       }
 
       if (this.should_skip) {
         this.log(
           event_names.workflow.WORKFLOW_STEP_SKIPPED,
-          `Workflow "${this.name}" skipping step ${this._steps[i].name} - ${this._steps[i].id}.`
+          `Workflow "${this.name}" skipping step ${this._steps[i].name} - ${this._steps[i].id}.`,
+          { workflow: this, step: this._steps[i] }
         );
         this.should_skip = false;
         continue;
@@ -104,12 +118,22 @@ export default class Workflow extends Base {
         const step_result = await this.step();
         await this.prepareResult('Success', step_result);
       } catch (error) {
-        this.markAsFailed();
-        await this.prepareResult(`Workflow execution failed at step ${this.steps_by_id[this.current_step].name} - ${this.current_step}`, { error });
-  
+        const failed_step = this.steps_by_id[this.current_step];
+
         if (this.exit_on_error) {
+          this.markAsFailed();
+          await this.prepareResult(`Workflow execution failed at step ${failed_step.name} - ${this.current_step}`, { error });
           return this;
         }
+
+        // Non-fatal: report the error, but keep the workflow running (and its session open) so
+        // it can still finish as complete.
+        this.log(
+          event_names.workflow.WORKFLOW_ERRORED,
+          `Workflow "${this.name}" step ${failed_step.name} - ${this.current_step} failed, continuing.`,
+          { workflow: this, step: failed_step, error }
+        );
+        await this.prepareResult(`Step ${failed_step.name} - ${this.current_step} failed`, { error });
       }
 
       if (this.should_pause) {
@@ -221,6 +245,20 @@ export default class Workflow extends Base {
   clearSteps() {
     this._steps = [];
     this.steps_by_id = {};
+  }
+
+  /**
+   * Starts a new session, resetting the per-run state left over from a previous run.
+   * A paused workflow keeps its open session, so this isn't called when resuming.
+   */
+  startNewSession() {
+    this.current_session_id = crypto.randomUUID();
+    this.results = [];
+    this.should_break = false;
+    this.should_skip = false;
+    this.timing.start_time = null;
+    this.timing.complete_time = null;
+    this.timing.execution_time_ms = null;
   }
 
   /**
@@ -409,14 +447,15 @@ export default class Workflow extends Base {
   }
 
   /**
-   * Pauses the workflow execution.
+   * Requests that the workflow pause once its current step finishes. Emits
+   * `workflow_pause_requested`; `workflow_paused` is emitted by `markAsPaused()` when the
+   * pause actually takes effect.
    */
   pause() {
     this.should_pause = true;
-    this.timing.pause_time = new Date();
 
     events.workflow.emit(
-      event_names.workflow.WORKFLOW_PAUSED,
+      event_names.workflow.WORKFLOW_PAUSE_REQUESTED,
       this.getState()
     );
   }
@@ -440,6 +479,11 @@ export default class Workflow extends Base {
       current_step: this.current_step,
       exit_on_error: this.exit_on_error,
       name: this.name,
+      result_per_step: this.result_per_step,
+      result_per_step_function: Step.serializeFunctionRef(
+        this.result_per_step_function,
+        this.result_per_step_function_registry_key
+      ),
       sessions: this.sessions,
       status: this.status,
       steps: this._steps.map(step => step.prepareForSerialization()),
@@ -595,10 +639,15 @@ export default class Workflow extends Base {
       throw new Error('Invalid parsed workflow. Must be a valid object.');
     }
 
+    const result_per_step_descriptor = parsed_workflow.result_per_step_function;
+
     const hydrated_workflow = new Workflow({
       name: parsed_workflow.name,
       callable_registry,
       exit_on_error: parsed_workflow.exit_on_error,
+      result_per_step: parsed_workflow.result_per_step ?? false,
+      result_per_step_function: Step.hydrateFunctionRef(result_per_step_descriptor, callable_registry),
+      result_per_step_function_registry_key: result_per_step_descriptor?.value ?? null,
       steps: parsed_workflow.steps.map(step => Step.hydrateAny(step, callable_registry)),
       throw_on_empty: parsed_workflow.throw_on_empty,
       use_state_singleton: parsed_workflow.use_state_singleton ?? false,

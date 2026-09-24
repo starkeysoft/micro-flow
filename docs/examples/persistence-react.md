@@ -190,7 +190,7 @@ Because `current_step` is part of what `serialize()` captures, `Workflow.hydrate
 
 ### `State` doesn't survive a reload — step results do
 
-The `submitOrder` step deliberately does **not** read `checkout.contact` / `checkout.shipping` from `State`, since a real page reload wipes the in-memory `State` singleton along with all other JS state. Instead it reads them back out of `workflow.results`, which round-trips through `serialize()`/`hydrateSerialized()` along with everything else. `State` is still useful for passing data *within* a single page's validation/submit logic (as `checkout.draft.*` is here), just not across a reload boundary.
+The `submitOrder` step deliberately does **not** read `checkout.contact` / `checkout.shipping` from `State`, since a real page reload wipes the in-memory `State` singleton along with all other JS state. Instead it reads them back out of `workflow.results`, which round-trips through `serialize()`/`hydrateSerialized()` along with everything else. The same goes for the workflow's own instance state (what `this.setState()`/`this.getState()` use): it's deliberately left out of `serialize()`, so a hydrated workflow starts with empty state apart from its own `workflow` key. `State` is still useful for passing data *within* a single page's validation/submit logic (as `checkout.draft.*` is here), just not across a reload boundary.
 
 ### The `CallableRegistry` is rebuilt on every mount
 

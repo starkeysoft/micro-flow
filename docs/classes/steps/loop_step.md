@@ -25,11 +25,14 @@ Creates a new LoopStep instance.
 |-----------|------|---------|-------------|
 | `options.name` | `string` | `'step-<uuid>'` | Human-readable identifier. |
 | `options.loop_type` | `string` | `loop_types.FOR_EACH` | One of `'for'`, `'for_each'`, `'while'`, `'generator'`. See [`loop_types`](../../../enums/loop_types.md). |
-| `options.iterable` | `Array\|Iterable\|Function` | — | Collection to iterate. Required for `for_each` and `generator` loops. Can be a function that returns the iterable (evaluated at execution time). |
+| `options.iterable` | `Array\|Iterable\|Function` | — | Collection to iterate. Required for `for_each` and `generator` loops. Can be a function that returns the iterable (evaluated at execution time, on every run; the function itself stays in `iterable`). |
 | `options.callable` | `Function\|Step\|Workflow` | `async () => {}` | Body executed each iteration. Access `this.current_item` for the current element. A `Step`/`Workflow` inherits this loop step's `parent_workflow_id` and state (see below) before the loop runs. |
+| `options.loop_callable_registry_key` | `string\|null` | `null` | Registry key to serialize the per-iteration `callable` under when it's a function, instead of the function's name. Resolved from the `CallableRegistry` passed to `hydrate()`, and restored onto the hydrated step. See [Persistence](step.md#persistence). |
 | `options.conditional` | `Object` | — | `{ subject, operator, value }` — used by `while` loops to decide whether to continue. |
 | `options.iterations` | `number` | `0` | Number of iterations for `for` loops. Clamped to `max_iterations`. |
 | `options.max_iterations` | `number` | `1000` | Safety cap on the number of iterations to prevent infinite loops. |
+| `options.max_retries` | `number` | `0` | Maximum number of additional attempts after a failure. See [Step](step.md#constructor). |
+| `options.max_timeout_ms` | `number\|null` | `30000` | Milliseconds before an attempt times out and is treated as a failure. The timeout covers the **whole loop** (all iterations together), not each iteration. Each retry gets the full budget. Set it to `null` (or `Infinity`) for loops that may run longer than 30 seconds. |
 
 ## Properties
 
@@ -37,9 +40,10 @@ Creates a new LoopStep instance.
 |----------|------|-------------|
 | `iterable` | `any` | The iterable (or function returning one) used by `for_each` and `generator` loops. |
 | `loop_type` | `string` | The configured loop type. |
+| `loop_callable_registry_key` | `string\|null` | Registry key the per-iteration `callable` is serialized under when it's a function, instead of the function's name. |
 | `iterations` | `number` | Iteration count for `for` loops, or number of iterations completed. |
 | `max_iterations` | `number` | Maximum allowed iterations. |
-| `results` | `Array` | Accumulated results from each iteration's callable. |
+| `results` | `Array` | Accumulated results from each iteration's callable. Reset to `[]` at the start of each run, so a loop that runs again doesn't append to the previous run's results. |
 | `current_item` | `any` | The item currently being processed in `for_each` (set before each iteration). |
 
 All properties from [LogicStep](logic_step.md) are inherited.
@@ -70,6 +74,14 @@ Internal. When `callable` is a `Step`/`Workflow` (not a plain function), stamps 
 
 ---
 
+### `async runIteration()` → `Promise<*>`
+
+Internal. Runs the per-iteration callable once and returns its result, then calls [`Step.throwIfFailed()`](step.md#static-throwiffailedobj) on it. If the callable is a `Step`/`Workflow` that ended up failed, the error is thrown, which stops the loop and fails this `LoopStep` (retrying it first if `max_retries` is set) instead of the loop carrying on and finishing `complete`. Used by the `for`, `for_each`, and `while` loops.
+
+Because a `Workflow` starts a new session each time it's executed, a `Workflow` works as a loop body: each iteration gets fresh `results`, and earlier iterations' runs are kept in its `sessions`. A nested workflow with `exit_on_error: false` finishes `complete` even if one of its steps fails, so it doesn't fail the loop.
+
+---
+
 ### `async for_loop()` → `Promise<{message: string, result: any[]}>`
 
 Executes the `for` loop logic.
@@ -80,7 +92,7 @@ Executes the `for` loop logic.
 
 ### `async for_each_loop()` → `Promise<{message: string, result: any[]}>`
 
-Executes the `for_each` loop logic.
+Executes the `for_each` loop logic. If `iterable` is a function, it's called and its result is iterated, but `this.iterable` is left holding the function (so it's called again on a later run and can still be serialized).
 
 **Returns:** `{ message: 'For each loop complete', result: results[] }`
 
@@ -108,9 +120,9 @@ Executes the generator loop. The callable is called as a generator, and each yie
 
 ### `prepareForSerialization()` → `Object`
 
-Extends [`LogicStep.prepareForSerialization()`](logic_step.md#prepareforserialization--object). The base `callable` field is overridden to hold the **per-iteration callable** you actually configured — at runtime, `this.callable` is reassigned internally to the loop-runner method (`for_loop`/`for_each_loop`/`while_loop`/`generator_loop`), so serializing it as-is would lose your real callable. `iterable` is only persisted when it's a plain array; a function-valued `iterable` is dropped, since there's no `CallableRegistry`-style mechanism for it.
+Extends [`LogicStep.prepareForSerialization()`](logic_step.md#prepareforserialization--object). The base `callable` field is overridden to hold the **per-iteration callable** you actually configured — at runtime, `this.callable` is reassigned internally to the loop-runner method (`for_loop`/`for_each_loop`/`while_loop`/`generator_loop`), so serializing it as-is would lose your real callable. `iterable` is persisted as-is when it's a plain array. A function-valued `iterable` is stored as `null`, with a registry reference in `iterable_callable` (via [`Step.serializeFunctionRef()`](step.md#static-serializefunctionreffn-registry_key--objectnull), keyed by the function's name), so register it in the `CallableRegistry` under that name. Other non-array iterables (e.g. a `Set`) are not persisted.
 
-**Returns:** The `LogicStep` fields (with `callable` replaced) plus `loop_type`, `iterations`, `max_iterations`, `iterable` (or `null` if it's a function), and `results`.
+**Returns:** The `LogicStep` fields (with `callable` replaced) plus `loop_type`, `iterations`, `max_iterations`, `iterable` (or `null` if it's a function or non-array), `iterable_callable`, and `results`.
 
 ```
 {
@@ -121,6 +133,7 @@ Extends [`LogicStep.prepareForSerialization()`](logic_step.md#prepareforserializ
   iterations: number,
   max_iterations: number,
   iterable: any[] | null,
+  iterable_callable: { type: 'function', value: string } | null,
   results: [...]                // one entry per completed iteration
 }
 ```
@@ -129,7 +142,7 @@ Extends [`LogicStep.prepareForSerialization()`](logic_step.md#prepareforserializ
 
 ### `static hydrate(parsed_step, callableRegistry?)` → `LoopStep`
 
-Resolves the per-iteration `callable` via [`Step.hydrateCallableField()`](step.md#static-hydratecallablefieldserialized-callableregistry--functionstepworkflowundefined), delegates to `super.hydrate()`, then restores `results`.
+Resolves the per-iteration `callable` via [`Step.hydrateCallableField()`](step.md#static-hydratecallablefieldserialized-callableregistry--functionstepworkflowundefined) and a function-valued `iterable` from `iterable_callable` via [`Step.hydrateFunctionRef()`](step.md#static-hydratefunctionrefdescriptor-callableregistry--functionnull) (which warns and leaves `iterable` `null` if the name isn't registered, rather than throwing), delegates to `super.hydrate()`, then restores `results`.
 
 **Parameters:**
 

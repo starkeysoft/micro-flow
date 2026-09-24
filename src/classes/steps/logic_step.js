@@ -18,7 +18,9 @@ export default class LogicStep extends Step {
    * @param {conditional_step_comparators|string} [options.conditional.operator] - Comparison operator.
    * @param {*|Function, optional} [options.conditional.value] - Value to compare against. Can be a function that returns the value.
    * @param {Function} [options.callable=async () => {}] - Function to execute.
-   * @param {string|null} [options.callable_registry_key=null] - Optional key to reference the callable to be rehydrated after serialization.
+   * @param {string|null} [options.callable_registry_key=null] - Registry key to serialize `callable` under when it's a function (defaults to the function's name); it's resolved from the `CallableRegistry` passed to `hydrate()`.
+   * @param {number} [options.max_retries=0] - Maximum number of retries on failure.
+   * @param {number|null} [options.max_timeout_ms=30000] - Maximum execution time per attempt in milliseconds. `null` disables the timeout.
    */
   constructor({
     name,
@@ -29,12 +31,16 @@ export default class LogicStep extends Step {
       subject: null,
       value: null,
     },
+    max_retries,
+    max_timeout_ms,
   }) {
     super({
       name,
       step_type: step_types.LOGIC,
       callable,
       callable_registry_key,
+      max_retries,
+      max_timeout_ms,
     });
 
     this.setConditional(conditional);
@@ -47,7 +53,7 @@ export default class LogicStep extends Step {
    * @throws {Error} Throws if operator is unknown.
    */
   checkCondition() {
-    const raw_subject = this.conditional_config.subject;
+    const raw_subject = this.getConditionalSubject();
     const raw_value = this.conditional_config.value;
     const operator = this.conditional_config.operator;
     
@@ -145,12 +151,24 @@ export default class LogicStep extends Step {
     // Check if all conditional properties are set (not null or undefined)
     // Can't use falsy check here because valid values could be falsy (e.g. empty string, 0, false)
     // Functions are valid - they'll be called to get the actual value
+    const subject = this.getConditionalSubject();
+
     return (
-      this.conditional_config.subject !== null &&
-      this.conditional_config.subject !== undefined &&
+      subject !== null &&
+      subject !== undefined &&
       this.conditional_config.operator !== null &&
       this.conditional_config.operator !== undefined
     );
+  }
+
+  /**
+   * Returns the (unresolved) subject used when evaluating the conditional. Subclasses can
+   * override this to supply a subject from somewhere other than `conditional_config` (e.g.
+   * `Case` uses its parent `SwitchStep`'s subject) without persisting it.
+   * @returns {*|Function} The conditional subject.
+   */
+  getConditionalSubject() {
+    return this.conditional_config.subject;
   }
 
   /**
@@ -163,15 +181,47 @@ export default class LogicStep extends Step {
 
   /**
    * Inserts safely serializable properties of the step into a new object for serialization.
-   * Note: function-valued subject/value are not persisted - there's no registry for them,
-   * only the plain-callable field supports registry-based rehydration.
+   * Function-valued subject/value are stored as `null` in `conditional`, with a registry
+   * reference (keyed by the function's name) in `conditional_callables` instead, so they can be
+   * resolved from a `CallableRegistry` on hydration. Anonymous functions can't be referenced
+   * and are dropped.
    * @returns {Object} An object containing the step's properties ready for serialization.
    */
   prepareForSerialization() {
+    const { subject, operator, value } = this.conditional_config;
+
     return {
       ...super.prepareForSerialization(),
-      conditional: { ...this.conditional_config },
+      conditional: {
+        subject: typeof subject === 'function' ? null : subject,
+        operator,
+        value: typeof value === 'function' ? null : value,
+      },
+      conditional_callables: {
+        subject: Step.serializeFunctionRef(subject),
+        value: Step.serializeFunctionRef(value),
+      },
     };
+  }
+
+  /**
+   * Hydrates a parsed step object into an instance of `this` class, resolving any function-valued
+   * conditional subject/value from `conditional_callables`.
+   * @param {Object} parsed_step - The parsed step object.
+   * @param {import('../callable_registry.js').default|null} [callable_registry] - Registry used to resolve function callables.
+   * @returns {LogicStep} The hydrated LogicStep (or subclass) instance.
+   */
+  static hydrate(parsed_step, callable_registry = null) {
+    const conditional = { ...(parsed_step.conditional ?? {}) };
+    const callables = parsed_step.conditional_callables ?? {};
+
+    for (const key of ['subject', 'value']) {
+      if (callables[key]) {
+        conditional[key] = Step.hydrateFunctionRef(callables[key], callable_registry);
+      }
+    }
+
+    return super.hydrate({ ...parsed_step, conditional }, callable_registry);
   }
 }
 

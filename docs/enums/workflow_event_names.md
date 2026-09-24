@@ -15,12 +15,13 @@ Event names emitted during the lifecycle of a `Workflow`. All events are availab
 | `WORKFLOW_RUNNING` | `'workflow_running'` | Emitted when `execute()` begins. |
 | `WORKFLOW_COMPLETE` | `'workflow_complete'` | Emitted when all steps finish successfully. |
 | `WORKFLOW_FAILED` | `'workflow_failed'` | Emitted when `exit_on_error` is `true` and a step fails. |
-| `WORKFLOW_ERRORED` | `'workflow_errored'` | Emitted on an unexpected execution error. |
+| `WORKFLOW_ERRORED` | `'workflow_errored'` | Emitted when a step fails and `exit_on_error` is `false`; the workflow keeps running. Payload: `{ workflow, step, error }`. |
 | `WORKFLOW_CANCELLED` | `'workflow_cancelled'` | Emitted when a workflow is cancelled. |
-| `WORKFLOW_PAUSED` | `'workflow_paused'` | Emitted when `pause()` suspends execution. |
+| `WORKFLOW_PAUSE_REQUESTED` | `'workflow_pause_requested'` | Emitted when `pause()` is called. The pause takes effect after the current step finishes. |
+| `WORKFLOW_PAUSED` | `'workflow_paused'` | Emitted by `markAsPaused()` when a requested pause takes effect, after the current step finishes. |
 | `WORKFLOW_RESUMED` | `'workflow_resumed'` | Emitted when `resume()` continues execution. |
-| `WORKFLOW_BREAK_EXECUTED` | `'workflow_break_executed'` | Emitted when a `FlowControlStep` triggers a break. |
-| `WORKFLOW_STEP_SKIPPED` | `'workflow_step_skipped'` | Emitted when a step is skipped due to `should_skip`. |
+| `WORKFLOW_BREAK_EXECUTED` | `'workflow_break_executed'` | Emitted when a `FlowControlStep` triggers a break. Payload: `{ workflow, step }`, where `step` is the step the break stopped at. |
+| `WORKFLOW_STEP_SKIPPED` | `'workflow_step_skipped'` | Emitted when a step is skipped due to `should_skip`. Payload: `{ workflow, step }`, where `step` is the skipped step. |
 | `WORKFLOW_STEP_ADDED` | `'workflow_step_added'` | Emitted when a step is added to the workflow. |
 | `WORKFLOW_STEPS_ADDED` | `'workflow_steps_added'` | Emitted when multiple steps are added at once. |
 | `WORKFLOW_STEP_REMOVED` | `'workflow_step_removed'` | Emitted when a step is removed or popped. |

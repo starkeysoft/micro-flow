@@ -79,7 +79,10 @@ describe('Case', () => {
 
       caseStep.switch_subject = 'expected';
 
-      expect(caseStep.conditional_config.subject).toBe('expected');
+      expect(caseStep.getConditionalSubject()).toBe('expected');
+      expect(caseStep.checkCondition()).toBe(true);
+      // The switch subject is transient - it must not leak into the (serialized) config.
+      expect(caseStep.conditional_config.subject).toBeUndefined();
     });
 
     it('should not override existing subject by default', () => {
@@ -93,7 +96,7 @@ describe('Case', () => {
 
       caseStep.switch_subject = 'new';
 
-      expect(caseStep.conditional_config.subject).toBe('original');
+      expect(caseStep.getConditionalSubject()).toBe('original');
     });
 
     it('should override existing subject when force_subject_override is true', () => {
@@ -108,7 +111,8 @@ describe('Case', () => {
 
       caseStep.switch_subject = 'new';
 
-      expect(caseStep.conditional_config.subject).toBe('new');
+      expect(caseStep.getConditionalSubject()).toBe('new');
+      expect(caseStep.conditional_config.subject).toBe('original');
     });
 
     it('should throw error when no subject provided and no existing subject', () => {
@@ -149,7 +153,30 @@ describe('Case', () => {
       // Should not throw because existing subject is valid
       caseStep.switch_subject = null;
 
-      expect(caseStep.conditional_config.subject).toBe('existing');
+      expect(caseStep.getConditionalSubject()).toBe('existing');
+    });
+
+    it('should not mutate the conditional object passed to the constructor', () => {
+      const conditional = { operator: '===', value: 'x' };
+      const caseStep = new Case({ conditional });
+
+      caseStep.switch_subject = 'x';
+
+      expect(conditional.subject).toBeUndefined();
+    });
+
+    it('should not persist the switch subject through serialization', async () => {
+      const caseStep = new Case({
+        conditional: { operator: '===', value: 'a' },
+        callable: async () => 'matched',
+      });
+      const switchStep = new SwitchStep({ subject: 'a', cases: [caseStep] });
+
+      await switchStep.execute();
+
+      const serialized = switchStep.prepareForSerialization();
+      expect(serialized.cases[0].conditional.subject).toBeUndefined();
+      expect(serialized.subject).toBe('a');
     });
   });
 
@@ -862,6 +889,29 @@ describe('SwitchStep', () => {
   });
 
   describe('hydrate / hydrateSerialized', () => {
+    it('should round-trip a function-valued subject through the registry', async () => {
+      const registry = new CallableRegistry();
+      registry.register('getSubject', function getSubject() { return 'b'; });
+      registry.register('caseB', async function caseB() { return 'B'; });
+      registry.register('fallback', async function fallback() { return 'default'; });
+
+      const original = new SwitchStep({
+        subject: registry.get('getSubject'),
+        default_callable: registry.get('fallback'),
+        cases: [new Case({ conditional: { operator: '===', value: 'b' }, callable: registry.get('caseB') })],
+      });
+
+      const serialized = JSON.parse(original.serialize());
+      expect(serialized.subject).toBeNull();
+      expect(serialized.subject_callable).toEqual({ type: 'function', value: 'getSubject' });
+
+      const hydrated = SwitchStep.hydrate(serialized, registry);
+      expect(hydrated.subject).toBe(registry.get('getSubject'));
+
+      await hydrated.execute();
+      expect(hydrated.result).toBe('B');
+    });
+
     it('should round-trip and execute the matching case after hydration', async () => {
       const registry = new CallableRegistry();
       registry.register('adminCase', async function adminCase() { return 'admin matched'; });

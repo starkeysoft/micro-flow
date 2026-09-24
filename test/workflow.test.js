@@ -3,9 +3,13 @@ import Workflow from '../src/classes/workflow.js';
 import Step from '../src/classes/steps/step.js';
 import LoopStep from '../src/classes/steps/loop_step.js';
 import ConditionalStep from '../src/classes/steps/conditional_step.js';
+import FlowControlStep from '../src/classes/steps/flow_control_step.js';
+import SwitchStep from '../src/classes/steps/switch_step.js';
+import Case from '../src/classes/steps/case.js';
+import DelayStep from '../src/classes/steps/delay_step.js';
 import CallableRegistry from '../src/classes/callable_registry.js';
 import State from '../src/classes/state.js';
-import { loop_types } from '../src/enums/index.js';
+import { flow_control_types, loop_types } from '../src/enums/index.js';
 
 describe('Workflow', () => {
   beforeEach(() => {
@@ -275,6 +279,37 @@ describe('Workflow', () => {
       expect(workflow.results).toHaveLength(2);
       expect(workflow.results[0].message).toBe('Success');
       expect(workflow.results[1].message).toBe('Success');
+    });
+
+    it('should emit workflow_errored (not workflow_failed) and end complete when exit_on_error is false', async () => {
+      const emitted = [];
+      const events = Workflow.events.workflow;
+      const on_errored = (data) => emitted.push(['errored', data.step.name]);
+      const on_failed = () => emitted.push(['failed']);
+      events.on(Workflow.event_names.workflow.WORKFLOW_ERRORED, on_errored);
+      events.on(Workflow.event_names.workflow.WORKFLOW_FAILED, on_failed);
+
+      const workflow = new Workflow({
+        exit_on_error: false,
+        steps: [
+          new Step({ name: 'failing-step', callable: async () => { throw new Error('Step failed'); } }),
+          new Step({ name: 'success-step', callable: async () => 'success' }),
+        ],
+      });
+      const session_id_holder = [];
+      workflow.result_per_step = true;
+      workflow.result_per_step_function = async () => session_id_holder.push(workflow.current_session_id);
+
+      await workflow.execute();
+
+      events.off(Workflow.event_names.workflow.WORKFLOW_ERRORED, on_errored);
+      events.off(Workflow.event_names.workflow.WORKFLOW_FAILED, on_failed);
+
+      expect(emitted).toEqual([['errored', 'failing-step']]);
+      expect(workflow.status).toBe(Workflow.statuses.workflow.COMPLETE);
+      // The session stays open across the non-fatal failure, and is closed once, at the end.
+      expect(session_id_holder[0]).toBe(session_id_holder[1]);
+      expect(Object.keys(workflow.sessions)).toHaveLength(1);
     });
 
     it('should set status to RUNNING during execution', async () => {
@@ -906,13 +941,36 @@ describe('Workflow', () => {
       expect(workflow.should_pause).toBe(true);
     });
 
-    it('should set pause_time', () => {
+    it('should not set pause_time (only markAsPaused does)', () => {
       const workflow = new Workflow({});
-      const before = new Date();
-      
+
       workflow.pause();
-      
-      expect(workflow.timing.pause_time >= before).toBe(true);
+
+      expect(workflow.timing.pause_time).toBeNull();
+    });
+
+    it('should emit workflow_pause_requested, and workflow_paused only once the pause takes effect', async () => {
+      const emitted = [];
+      const events = Workflow.events.workflow;
+      const on_requested = () => emitted.push('requested');
+      const on_paused = () => emitted.push('paused');
+      events.on(Workflow.event_names.workflow.WORKFLOW_PAUSE_REQUESTED, on_requested);
+      events.on(Workflow.event_names.workflow.WORKFLOW_PAUSED, on_paused);
+
+      const workflow = new Workflow({
+        steps: [
+          new Step({ name: 'step-1', callable: async () => { workflow.pause(); emitted.push('step-1 done'); } }),
+          new Step({ name: 'step-2', callable: async () => 'b' }),
+        ],
+      });
+
+      await workflow.execute();
+
+      events.off(Workflow.event_names.workflow.WORKFLOW_PAUSE_REQUESTED, on_requested);
+      events.off(Workflow.event_names.workflow.WORKFLOW_PAUSED, on_paused);
+
+      expect(emitted).toEqual(['requested', 'step-1 done', 'paused']);
+      expect(workflow.status).toBe(Workflow.statuses.workflow.PAUSED);
     });
   });
 
@@ -1033,6 +1091,7 @@ describe('Workflow', () => {
     it('should invoke result_per_step_function for a failed step, with status already "failed" in the snapshot', async () => {
       let snapshot;
       const workflow = new Workflow({
+        exit_on_error: true,
         result_per_step: true,
         result_per_step_function: async (arg) => { snapshot = arg; },
         steps: [
@@ -1079,16 +1138,36 @@ describe('Workflow', () => {
       await expect(workflow.execute()).rejects.toThrow('callback failed');
     });
 
-    it('should not persist result_per_step/result_per_step_function through prepareForSerialization', () => {
+    it('should serialize result_per_step and a registry reference to result_per_step_function', () => {
       const workflow = new Workflow({
         result_per_step: true,
-        result_per_step_function: async () => {},
+        result_per_step_function: async function onStep() {},
       });
 
       const serialized = workflow.prepareForSerialization();
 
-      expect(serialized.result_per_step).toBeUndefined();
-      expect(serialized.result_per_step_function).toBeUndefined();
+      expect(serialized.result_per_step).toBe(true);
+      expect(serialized.result_per_step_function).toEqual({ type: 'function', value: 'onStep' });
+    });
+
+    it('should serialize result_per_step_function by its registry key when set', () => {
+      const workflow = new Workflow({
+        result_per_step: true,
+        result_per_step_function: async function onStep() {},
+        result_per_step_function_registry_key: 'persist',
+      });
+
+      expect(workflow.prepareForSerialization().result_per_step_function).toEqual({ type: 'function', value: 'persist' });
+    });
+
+    it('should not include instance state in the serialized workflow', () => {
+      const workflow = new Workflow({});
+      workflow.setState('secret', 'value');
+
+      const serialized = workflow.prepareForSerialization();
+
+      expect(serialized.state).toBeUndefined();
+      expect(JSON.stringify(serialized)).not.toContain('secret');
     });
   });
 
@@ -1520,7 +1599,287 @@ describe('Workflow', () => {
     });
   });
 
+  describe('running more than once', () => {
+    it('should execute again after completing, starting a fresh session', async () => {
+      let runs = 0;
+      const workflow = new Workflow({ steps: [new Step({ name: 'a', callable: async () => ++runs })] });
+
+      await workflow.execute();
+      await workflow.execute();
+
+      expect(runs).toBe(2);
+      expect(workflow.status).toBe(Workflow.statuses.workflow.COMPLETE);
+      expect(workflow.results).toHaveLength(1);
+      expect(Object.values(workflow.sessions)).toHaveLength(2);
+      expect(Object.values(workflow.sessions).every(session => session.results.length === 1)).toBe(true);
+    });
+
+    it('should not carry a break from one run into the next', async () => {
+      let break_now = true;
+      let second_ran = 0;
+      const workflow = new Workflow({
+        steps: [
+          new FlowControlStep({
+            flow_control_type: flow_control_types.BREAK,
+            conditional: { subject: () => break_now, operator: '===', value: true },
+          }),
+          new Step({ name: 'second', callable: async () => ++second_ran }),
+        ],
+      });
+
+      await workflow.execute();
+      break_now = false;
+      await workflow.execute();
+
+      expect(second_ran).toBe(1);
+    });
+
+    it('should work as the body of a LoopStep', async () => {
+      let runs = 0;
+      const body = new Workflow({ name: 'body', steps: [new Step({ name: 'inc', callable: async () => ++runs })] });
+      const loop = new LoopStep({ loop_type: loop_types.FOR, iterations: 3, callable: body });
+
+      await loop.execute();
+
+      expect(runs).toBe(3);
+      expect(loop.status).toBe('complete');
+    });
+
+    it('should give a step its full retry budget on every run', async () => {
+      let calls = 0;
+      const step = new Step({
+        name: 'flaky',
+        max_retries: 1,
+        // Fails on the first attempt of every run
+        callable: async () => { calls++; if (calls % 2 === 1) throw new Error('flaky'); return 'ok'; },
+      });
+      const workflow = new Workflow({ steps: [step] });
+
+      await workflow.execute();
+      await workflow.execute();
+
+      expect(calls).toBe(4);
+      expect(step.status).toBe('complete');
+      expect(step.retry_count).toBe(1);
+    });
+
+    it('should reset a LoopStep\'s results on each run', async () => {
+      const loop = new LoopStep({ loop_type: loop_types.FOR, iterations: 2, callable: async () => 'x' });
+
+      await loop.execute();
+      await loop.execute();
+
+      expect(loop.results).toEqual(['x', 'x']);
+    });
+  });
+
+  describe('nested failures', () => {
+    const failingWorkflow = () => new Workflow({
+      name: 'inner',
+      exit_on_error: true,
+      steps: [new Step({ name: 'boom', callable: async () => { throw new Error('boom'); } })],
+    });
+    const failingStep = () => new Step({ name: 'boom', callable: async () => { throw new Error('boom'); } });
+
+    it('should fail a Step whose nested workflow fails', async () => {
+      const step = new Step({ name: 'outer', callable: failingWorkflow() });
+
+      await step.execute();
+
+      expect(step.status).toBe('failed');
+      expect(step.errors.at(-1).message).toBe('boom');
+    });
+
+    it('should retry a Step whose nested step fails', async () => {
+      let calls = 0;
+      const inner = new Step({ name: 'inner', callable: async () => { calls++; throw new Error('boom'); } });
+      const step = new Step({ name: 'outer', max_retries: 1, callable: inner });
+
+      await step.execute();
+
+      expect(calls).toBe(2);
+      expect(step.status).toBe('failed');
+    });
+
+    it('should fail a LoopStep whose nested workflow fails', async () => {
+      const loop = new LoopStep({ loop_type: loop_types.FOR, iterations: 2, callable: failingWorkflow() });
+
+      await loop.execute();
+
+      expect(loop.status).toBe('failed');
+    });
+
+    it('should fail a ConditionalStep whose branch step fails', async () => {
+      const step = new ConditionalStep({
+        conditional: { subject: 1, operator: '===', value: 1 },
+        true_callable: failingStep(),
+      });
+
+      await step.execute();
+
+      expect(step.status).toBe('failed');
+    });
+
+    it('should fail a SwitchStep whose matched case fails', async () => {
+      const step = new SwitchStep({
+        subject: 'a',
+        cases: [new Case({ conditional: { operator: '===', value: 'a' }, callable: failingWorkflow() })],
+      });
+
+      await step.execute();
+
+      expect(step.status).toBe('failed');
+    });
+
+    it('should fail a SwitchStep whose default step fails', async () => {
+      const step = new SwitchStep({ subject: 'z', cases: [], default_callable: failingStep() });
+
+      await step.execute();
+
+      expect(step.status).toBe('failed');
+    });
+
+    it('should not fail when the nested workflow only errored (exit_on_error: false)', async () => {
+      const inner = new Workflow({
+        exit_on_error: false,
+        steps: [new Step({ name: 'boom', callable: async () => { throw new Error('boom'); } })],
+      });
+      const step = new Step({ name: 'outer', callable: inner });
+
+      await step.execute();
+
+      expect(inner.status).toBe('complete');
+      expect(step.status).toBe('complete');
+    });
+  });
+
+  describe('max_timeout_ms / max_retries on step subclasses', () => {
+    it.each([
+      ['LogicStep-based ConditionalStep', () => new ConditionalStep({ max_timeout_ms: 5, max_retries: 2 })],
+      ['LoopStep', () => new LoopStep({ loop_type: loop_types.FOR, max_timeout_ms: 5, max_retries: 2 })],
+      ['FlowControlStep', () => new FlowControlStep({ max_timeout_ms: 5, max_retries: 2 })],
+      ['SwitchStep', () => new SwitchStep({ max_timeout_ms: 5, max_retries: 2 })],
+      ['Case', () => new Case({ max_timeout_ms: 5, max_retries: 2 })],
+      ['DelayStep', () => new DelayStep({ max_timeout_ms: 5, max_retries: 2 })],
+    ])('%s should accept them and keep them through hydration', (_, make) => {
+      const step = make();
+
+      expect(step.max_timeout_ms).toBe(5);
+      expect(step.max_retries).toBe(2);
+
+      // Default callables get inferred names ("callable", "true_callable", ...), so register those.
+      const registry = new CallableRegistry();
+      for (const key of ['callable', 'true_callable', 'false_callable', 'default_callable']) {
+        registry.register(key, async () => {});
+      }
+
+      const hydrated = Step.hydrateSerialized(step.serialize(), registry);
+      expect(hydrated.max_timeout_ms).toBe(5);
+      expect(hydrated.max_retries).toBe(2);
+    });
+
+    it('should keep the 30s default for non-delay steps, and no timeout for DelayStep', () => {
+      expect(new LoopStep({ loop_type: loop_types.FOR }).max_timeout_ms).toBe(30000);
+      expect(new DelayStep({}).max_timeout_ms).toBeNull();
+    });
+
+    it('should not time out when max_timeout_ms is null', async () => {
+      vi.useFakeTimers();
+      const step = new Step({
+        max_timeout_ms: null,
+        callable: async () => new Promise(resolve => setTimeout(resolve, 60000, 'slow')),
+      });
+
+      const promise = step.execute();
+      await vi.advanceTimersByTimeAsync(60000);
+      await promise;
+      vi.useRealTimers();
+
+      expect(step.status).toBe('complete');
+      expect(step.result).toBe('slow');
+    });
+  });
+
+  describe('emitting a finished workflow', () => {
+    it("should keep its steps' timing even though sessions/results share those objects", async () => {
+      const workflow = new Workflow({ steps: [new Step({ name: 'a', callable: async () => 1 })] });
+      await workflow.execute();
+
+      let payload;
+      Workflow.events.workflow.once('probe', (data) => { payload = data; });
+      Workflow.events.workflow.emit('probe', workflow);
+
+      expect(Object.keys(payload.sessions)).toHaveLength(1);
+      expect(payload.steps[0].timing.execution_time_ms).toEqual(expect.any(Number));
+    });
+  });
+
+  describe('flow control event payloads', () => {
+    it.each([
+      [flow_control_types.SKIP, 'WORKFLOW_STEP_SKIPPED'],
+      [flow_control_types.BREAK, 'WORKFLOW_BREAK_EXECUTED'],
+    ])('should emit { workflow, step } for %s, with the affected step', async (flow_control_type, event_key) => {
+      let payload;
+      const events = Workflow.events.workflow;
+      const listener = (data) => { payload = data; };
+      events.on(Workflow.event_names.workflow[event_key], listener);
+
+      const workflow = new Workflow({
+        name: 'flow-control-payload',
+        steps: [
+          new FlowControlStep({
+            flow_control_type,
+            conditional: { subject: 1, operator: '===', value: 1 },
+          }),
+          new Step({ name: 'affected-step', callable: async () => 'x' }),
+        ],
+      });
+
+      await workflow.execute();
+      events.off(Workflow.event_names.workflow[event_key], listener);
+
+      expect(payload.workflow.name).toBe('flow-control-payload');
+      expect(payload.step.name).toBe('affected-step');
+    });
+  });
+
   describe('hydrate / hydrateSerialized', () => {
+    it('should restore result_per_step and resolve result_per_step_function from the registry', async () => {
+      const calls = [];
+      const registry = new CallableRegistry();
+      registry.register('onStep', async function onStep(snapshot) { calls.push(snapshot.name); });
+      registry.register('stepOne', async function stepOne() { return 'a'; });
+
+      const original = new Workflow({
+        name: 'rps',
+        result_per_step: true,
+        result_per_step_function: registry.get('onStep'),
+        steps: [new Step({ name: 's1', callable: registry.get('stepOne') })],
+      });
+
+      const hydrated = Workflow.hydrateSerialized(original.serialize(), registry);
+
+      expect(hydrated.result_per_step).toBe(true);
+      expect(hydrated.result_per_step_function).toBe(registry.get('onStep'));
+
+      await hydrated.execute();
+      expect(calls).toEqual(['rps']);
+    });
+
+    it('should warn and leave result_per_step_function null when it is not in the registry', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const original = new Workflow({
+        result_per_step: true,
+        result_per_step_function: async function missing() {},
+      });
+
+      const hydrated = Workflow.hydrateSerialized(original.serialize(), new CallableRegistry());
+
+      expect(hydrated.result_per_step_function).toBeNull();
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
     it('should throw when hydrateSerialized is given a non-string', () => {
       expect(() => Workflow.hydrateSerialized({ not: 'a string' })).toThrow(
         'Invalid serialized workflow. Must be a string.'

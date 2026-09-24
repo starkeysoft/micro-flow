@@ -275,7 +275,7 @@ The `check-has-valid-data` step acts as a gate: if zero valid records exist it t
 
 ### Non-Halting Error Collection
 
-`exit_on_error: false` allows all steps to run even if earlier ones fail. After execution, you can inspect `result.results` for failed steps and read error details from `step.errors`.
+`exit_on_error: false` allows all steps to run even if earlier ones fail, and the workflow still ends `'complete'`. Each failure emits `WORKFLOW_ERRORED` (payload `{ workflow, step, error }`) and records a `{ message: 'Step <name> - <id> failed', data: { error } }` entry in `results`. After execution, you can inspect `result.results` for failed steps and read error details from `step.errors`.
 
 ## Related Examples
 

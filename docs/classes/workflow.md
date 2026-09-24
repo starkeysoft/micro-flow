@@ -25,10 +25,11 @@ Creates a new Workflow instance and registers itself under the `workflow` key of
 |-----------|------|---------|-------------|
 | `options.name` | `string` | `'workflow-<uuid>'` | Human-readable identifier used in logs and events. |
 | `options.callable_registry` | `CallableRegistry` | `null` | Instance of `CallableRegistry` to use for the instance's registry. If not passed, instantiates a new `CallableRegistry` instance. |
-| `options.exit_on_error` | `boolean` | `false` | When `true`, any step failure immediately halts execution and marks the workflow as failed. |
+| `options.exit_on_error` | `boolean` | `false` | When `true`, any step failure immediately halts execution and marks the workflow as failed. When `false`, a failing step emits `WORKFLOW_ERRORED`, gets a failure entry in `results`, and the workflow keeps going and can still finish `'complete'`. |
 | `options.result_per_step` | `boolean` | `false` | When `true`, `result_per_step_function` is awaited after each step completes, before that step's result is pushed onto `results`. |
 | `options.use_state_singleton` | `boolean` | `false` | Deprecated escape hatch. When `true`, this workflow (and every `Step` it owns) routes `getState`/`setState`/`deleteState` through the deprecated, process-wide [`State`](state.md) singleton instead of the workflow's own state. See [State: Deprecation](state.md#deprecation-continuing-to-use-state). |
 | `options.result_per_step_function` | `Function\|null` | `null` | Callback invoked as `await result_per_step_function(workflow.prepareForSerialization())` after each step completes, when `result_per_step` is `true`. Ignored otherwise. |
+| `options.result_per_step_function_registry_key` | `string\|null` | `null` | Optional key used to reference `result_per_step_function` in a `CallableRegistry` so it can be restored on hydration. Defaults to the function's name. |
 | `options.steps` | `Step[]` | `[]` | Initial array of steps to add to the workflow. |
 | `options.throw_on_empty` | `boolean` | `false` | When `true`, calling `execute()` on a workflow with no steps throws an error. |
 
@@ -40,7 +41,7 @@ Creates a new Workflow instance and registers itself under the `workflow` key of
 | `name` | `string` | Human-readable workflow name. |
 | `base_type` | `string` | Always `'workflow'`. |
 | `status` | `string` | Current lifecycle status (see [`workflow_statuses`](../../enums/workflow_statuses.md)). Starts as `'created'`. |
-| `results` | `Array<{message: string, data: any}>` | Ordered array of step results, one entry per executed step. |
+| `results` | `Array<{message: string, data: any}>` | Ordered array of step results for the current (or most recent) run, one entry per executed step. Reset to `[]` when a new session starts; earlier runs' results are kept in `sessions`. |
 | `_steps` | `Step[]` | Internal steps array. Access via the `steps` getter. |
 | `steps_by_id` | `Object` | Map of `step.id → step` for fast lookup. |
 | `current_step` | `string\|null` | ID of the currently executing step. |
@@ -51,17 +52,20 @@ Creates a new Workflow instance and registers itself under the `workflow` key of
 | `exit_on_error` | `boolean` | Whether step failures halt the workflow. |
 | `result_per_step` | `boolean` | Whether `result_per_step_function` is invoked after each step completes. |
 | `result_per_step_function` | `Function\|null` | Callback invoked with the workflow's own `prepareForSerialization()` snapshot after each step, when `result_per_step` is `true`. |
+| `result_per_step_function_registry_key` | `string\|null` | Registry key used when serializing `result_per_step_function`. Falls back to the function's name when `null`. |
 | `throw_on_empty` | `boolean` | Whether executing an empty workflow throws. |
 | `callable_registry` | `CallableRegistry` | Registry for storing named callables used in persistence mode for serialization and hydration. A new instance is created automatically per workflow. To share a registry across workflows, assign the same `CallableRegistry` instance to each workflow's `callable_registry` property. |
 | `timing` | `Object` | Timing data: `{ create_time, start_time, complete_time, pause_time, resume_time, execution_time_ms, cancel_time }`. |
-| `sessions` | `Object` | Keyed record of past execution sessions (UUID → session data). |
-| `current_session_id` | `string\|null` | UUID of the current execution session. |
+| `sessions` | `Object` | Keyed record of past execution sessions (UUID → `{ results, status, timing, closed_at }`). One entry is added each time a run completes or fails. |
+| `current_session_id` | `string\|null` | UUID of the current execution session. Set by `startNewSession()` and cleared back to `null` by `closeCurrentSession()`; it stays set while the workflow is paused. |
 
 ## Methods
 
 ### `async execute()` → `Promise<Object>`
 
-Runs all steps in sequence. Respects `should_break` (stops after current step), `should_skip` (skips next step), and `should_pause` (suspends after current step). Emits `WORKFLOW_RUNNING` at start and `WORKFLOW_COMPLETE` or `WORKFLOW_FAILED` at end. If the workflow's status is currently `'paused'`, starts from the step after `current_step` instead of the beginning — this is what `resume()` relies on, and it works the same way after a paused workflow has been serialized and hydrated in a different process.
+Runs all steps in sequence. Respects `should_break` (stops after current step), `should_skip` (skips next step), and `should_pause` (suspends after current step). Emits `WORKFLOW_RUNNING` at start and `WORKFLOW_COMPLETE` or `WORKFLOW_FAILED` at end. When a step throws and `exit_on_error` is `true`, the workflow is marked failed, a result `{ message: 'Workflow execution failed at step <name> - <id>', data: { error } }` is recorded, and `execute()` returns. When `exit_on_error` is `false`, the workflow emits `WORKFLOW_ERRORED` with `{ workflow, step, error }`, records a result `{ message: 'Step <name> - <id> failed', data: { error } }`, and moves on to the next step. The session stays open and the workflow ends `'complete'`. If the workflow's status is currently `'paused'`, starts from the step after `current_step` instead of the beginning — this is what `resume()` relies on, and it works the same way after a paused workflow has been serialized and hydrated in a different process.
+
+A workflow can be executed any number of times. When `execute()` is called with no open session (i.e. not when resuming from a pause), it calls `startNewSession()` first, which resets `results`, `should_break`/`should_skip`, and the run's timing. Each finished run is snapshotted into `sessions`, so earlier runs aren't lost. This is what lets a workflow serve as the body of a [`LoopStep`](steps/loop_step.md), or as a callable that runs repeatedly.
 
 **Returns:** A serialized plain object (via `prepareForSerialization()`) containing the workflow's properties and results.
 
@@ -175,6 +179,18 @@ Empties the steps array and clears the `steps_by_id` lookup map. Emits `WORKFLOW
 
 ---
 
+### `startNewSession()`
+
+Starts a new execution session: assigns a new UUID to `current_session_id`, resets `results` to `[]`, `should_break` and `should_skip` to `false`, and `timing.start_time`/`complete_time`/`execution_time_ms` to `null`. Called by `execute()` when there's no open session. Not called when resuming a paused workflow, which keeps its open session.
+
+---
+
+### `closeCurrentSession()`
+
+Snapshots `results`, `status`, and `timing` (plus a `closed_at` date) into `sessions[current_session_id]`, then sets `current_session_id` to `null`. Called by `markAsComplete()` and `markAsFailed()`. Does nothing if no session is open.
+
+---
+
 ### `deleteStep(stepId)`
 
 Removes the step with the given ID. Emits `WORKFLOW_STEP_REMOVED`.
@@ -226,7 +242,7 @@ Sets status to `'created'` and emits `WORKFLOW_CREATED`.
 
 ### `markAsPaused()`
 
-Sets status to `'paused'` and emits `WORKFLOW_PAUSED`.
+Sets status to `'paused'`, records `timing.pause_time`, and emits `WORKFLOW_PAUSED`. Called by `execute()` once a requested pause takes effect, after the current step finishes.
 
 ---
 
@@ -263,7 +279,7 @@ Parses a dot/bracket-notation path string into an array of string keys (e.g. `'u
 
 ### `pause()`
 
-Sets `should_pause = true`. The workflow will suspend execution after the currently running step completes.
+Sets `should_pause = true` and emits `WORKFLOW_PAUSE_REQUESTED`. The workflow will suspend execution after the currently running step completes; at that point `markAsPaused()` sets `timing.pause_time` and emits `WORKFLOW_PAUSED`. `pause()` itself does not emit `WORKFLOW_PAUSED` or set `pause_time`.
 
 ---
 
@@ -328,7 +344,7 @@ Builds a `{ message, data }` result entry for the step that just ran. Before pus
 | `message` | `string` | Descriptive message for the result entry. |
 | `data` | `any` | The step's return value, or `{ error }` when the step failed. |
 
-**Note:** Because the callback fires *before* this call's own entry is pushed, the snapshot's `results` array reflects every step before the one that just finished — not the one that triggered the callback. That step's own up-to-date state (status, result, timing, etc.) is still visible in the snapshot's `steps` array, since each step re-serializes itself live. On a failed step, `markAsFailed()` runs first, so the snapshot's `status` is already `'failed'`.
+**Note:** Because the callback fires *before* this call's own entry is pushed, the snapshot's `results` array reflects every step before the one that just finished — not the one that triggered the callback. That step's own up-to-date state (status, result, timing, etc.) is still visible in the snapshot's `steps` array, since each step re-serializes itself live. On a failed step with `exit_on_error: true`, `markAsFailed()` runs first, so the snapshot's `status` is already `'failed'`. With `exit_on_error: false`, the workflow isn't marked failed, so the snapshot's `status` stays `'running'`.
 
 **Example:**
 ```javascript
@@ -351,7 +367,7 @@ await workflow.execute();
 // not after the fact.
 ```
 
-**Note:** `result_per_step`/`result_per_step_function` are runtime-only — like `callable_registry`, they aren't part of `prepareForSerialization()`'s output and don't survive `hydrate()`/`hydrateSerialized()`. Reassign them on the hydrated workflow if you need the callback to keep firing after a reload.
+**Note:** `result_per_step` and `result_per_step_function` are both serialized. The function is stored as a registry reference (`{ type: 'function', value }`, keyed by `result_per_step_function_registry_key` or the function's name), so register it in the `CallableRegistry` you pass to `hydrate()`/`hydrateSerialized()` for the callback to keep firing after a reload. An anonymous function serializes as `null`, and a key that isn't in the registry logs a warning and hydrates as `null`.
 
 ---
 
@@ -359,7 +375,7 @@ await workflow.execute();
 
 Creates a plain object containing safely serializable properties of the workflow, including serialized representations of all steps (each via its own `prepareForSerialization()`, so subclass-specific fields and correct `class_name` are preserved for hydration).
 
-**Returns:** An object with `id`, `current_session_id`, `current_step`, `exit_on_error`, `name`, `sessions`, `status`, `steps`, `throw_on_empty`, `timing`, and `results`. `current_step` is what lets a hydrated, previously-paused workflow know where to resume from. This is also the shape returned by `execute()`/`resume()`:
+**Returns:** An object with `id`, `current_session_id`, `current_step`, `exit_on_error`, `name`, `result_per_step`, `result_per_step_function`, `sessions`, `status`, `steps`, `throw_on_empty`, `timing`, `results`, and `use_state_singleton`. `current_step` is what lets a hydrated, previously-paused workflow know where to resume from. This is also the shape returned by `execute()`/`resume()`:
 
 ```
 {
@@ -368,6 +384,8 @@ Creates a plain object containing safely serializable properties of the workflow
   current_step: string | null,
   exit_on_error: boolean,
   name: string,
+  result_per_step: boolean,
+  result_per_step_function: { type: 'function', value: string } | null, // registry reference; null for anonymous functions
   sessions: { [session_id]: { results: [...], status, timing, closed_at } },
   status: string,
   steps: [...],           // see Step § prepareForSerialization()
@@ -376,9 +394,12 @@ Creates a plain object containing safely serializable properties of the workflow
   results: [
     { message: string, data: any }, // data is a step's own result — see Step § prepareForSerialization()
     ...
-  ]
+  ],
+  use_state_singleton: boolean
 }
 ```
+
+Instance state (anything stored with `setState()`, and read with `getState()`) is deliberately **not** serialized. A hydrated workflow starts with fresh state containing only its own `workflow` key. Re-set any data your steps need after hydrating.
 
 ---
 
@@ -417,7 +438,7 @@ Deserializes a JSON string into a `Workflow` instance.
 
 ### `static hydrate(parsedWorkflow, callableRegistry?)` → `Workflow`
 
-Hydrates a parsed workflow object into a `Workflow` instance, including all of its steps — each rehydrated as the correct `Step` subclass via [`Step.hydrateAny()`](steps/step.md#static-hydrateanyparsed_step-callable_registry--step). The returned workflow is constructed with `callableRegistry` as its own `callable_registry`, so it can continue to resolve the same named callables after hydration (e.g. on subsequent `resume()` calls). Each step's `parent_workflow_id` is corrected to the restored `id` (not the fresh one generated during construction), so calls like `setParentWorkflowValue()` from inside a hydrated step's callable — including the `should_pause` pattern used to pause a workflow — resolve to the right workflow instance. `getState('workflow')` needs no such fixup: it's a live reference to the same workflow object, so it already reflects the corrected `id`.
+Hydrates a parsed workflow object into a `Workflow` instance, including all of its steps — each rehydrated as the correct `Step` subclass via [`Step.hydrateAny()`](steps/step.md#static-hydrateanyparsed_step-callable_registry--step). The returned workflow is constructed with `callableRegistry` as its own `callable_registry`, so it can continue to resolve the same named callables after hydration (e.g. on subsequent `resume()` calls). Each step's `parent_workflow_id` is corrected to the restored `id` (not the fresh one generated during construction), so calls like `setParentWorkflowValue()` from inside a hydrated step's callable — including the `should_pause` pattern used to pause a workflow — resolve to the right workflow instance. `getState('workflow')` needs no such fixup: it's a live reference to the same workflow object, so it already reflects the corrected `id`. `result_per_step` is restored as-is, and `result_per_step_function` is resolved from `callableRegistry` via [`Step.hydrateFunctionRef()`](steps/step.md#static-hydratefunctionrefdescriptor-callableregistry--functionnull), which warns and leaves it `null` if the key isn't registered. Instance state is not restored, since it was never serialized.
 
 **Parameters:**
 
@@ -446,10 +467,12 @@ All events are emitted on `State.get('events.workflow')`. See [`workflow_event_n
 | `WORKFLOW_RUNNING` | When `execute()` begins. |
 | `WORKFLOW_COMPLETE` | When all steps finish successfully. |
 | `WORKFLOW_FAILED` | When `exit_on_error` is true and a step fails. |
-| `WORKFLOW_PAUSED` | When execution is suspended via `pause()`. |
+| `WORKFLOW_ERRORED` | When `exit_on_error` is false and a step fails. Payload: `{ workflow, step, error }`. |
+| `WORKFLOW_PAUSE_REQUESTED` | When `pause()` is called. |
+| `WORKFLOW_PAUSED` | When a requested pause takes effect, after the current step finishes (`markAsPaused()`). |
 | `WORKFLOW_RESUMED` | When `resume()` is called. |
-| `WORKFLOW_BREAK_EXECUTED` | When a `FlowControlStep` triggers a break. |
-| `WORKFLOW_STEP_SKIPPED` | When a step is skipped due to `should_skip`. |
+| `WORKFLOW_BREAK_EXECUTED` | When a `FlowControlStep` triggers a break. Payload: `{ workflow, step }`, where `step` is the step the break stopped at. |
+| `WORKFLOW_STEP_SKIPPED` | When a step is skipped due to `should_skip`. Payload: `{ workflow, step }`, where `step` is the skipped step. |
 | `WORKFLOW_STEP_ADDED` | When `addStep()` / `addStepAtIndex()` is called. |
 | `WORKFLOW_STEPS_ADDED` | When `addSteps()` is called. |
 | `WORKFLOW_STEP_REMOVED` | When a step is deleted or popped. |
@@ -595,7 +618,7 @@ await wf.execute();
 
 ## Persistence
 
-A `Workflow` can be saved to storage (a database, file, queue message, etc.) and reconstructed later — in the same process or a different one — via `serialize()` / `Workflow.hydrateSerialized()`. This works for a workflow definition that hasn't run yet, and for one that's mid-flight (e.g. `paused`): every step's status, results, retry state, and timing round-trip along with it.
+A `Workflow` can be saved to storage (a database, file, queue message, etc.) and reconstructed later — in the same process or a different one — via `serialize()` / `Workflow.hydrateSerialized()`. This works for a workflow definition that hasn't run yet, and for one that's mid-flight (e.g. `paused`): every step's status, results, retry state, and timing round-trip along with it. Instance state set with `setState()` does not; see [`prepareForSerialization()`](#prepareforserialization--object).
 
 **Function callables require a `CallableRegistry`.** Functions can't be serialized to JSON. If any step's `callable` (or a `ConditionalStep`/`LoopStep`/`SwitchStep` branch, loop body, or default callable) is a plain function, it must be registered in a [`CallableRegistry`](callable_registry.md) — passed to the workflow via `callable_registry` — so hydration can look the function back up by name instead of trying to deserialize it. A `Step`/`Workflow` used directly as a callable doesn't need this — it's serialized and rehydrated recursively as its own object graph.
 

@@ -29,6 +29,10 @@ Creates a new ConditionalStep instance.
 | `options.conditional.value` | `any\|Function` | — | Value or function returning value to compare against. |
 | `options.true_callable` | `Function\|Step\|Workflow` | `async () => {}` | Executed when the condition is `true`. Functions are bound to `this`. A `Step`/`Workflow` inherits this step's `parent_workflow_id` and state (see below) right before it runs. |
 | `options.false_callable` | `Function\|Step\|Workflow` | `async () => {}` | Executed when the condition is `false`. Functions are bound to `this`. A `Step`/`Workflow` inherits this step's `parent_workflow_id` and state (see below) right before it runs. |
+| `options.true_callable_registry_key` | `string\|null` | `null` | Registry key to serialize `true_callable` under when it's a function, instead of the function's name. Resolved from the `CallableRegistry` passed to `hydrate()`, and restored onto the hydrated step. See [Persistence](step.md#persistence). |
+| `options.false_callable_registry_key` | `string\|null` | `null` | Registry key to serialize `false_callable` under when it's a function, instead of the function's name. Resolved from the `CallableRegistry` passed to `hydrate()`, and restored onto the hydrated step. See [Persistence](step.md#persistence). |
+| `options.max_retries` | `number` | `0` | Maximum number of additional attempts after a failure. See [Step](step.md#constructor). |
+| `options.max_timeout_ms` | `number\|null` | `30000` | Milliseconds before an attempt times out and is treated as a failure. Each retry gets the full budget. `null` (or `Infinity`) disables the timeout. |
 
 > A `true_callable`/`false_callable` that's a `Step`/`Workflow` isn't added to the parent workflow via `addStep()`, so it wouldn't otherwise share the workflow's state - `ConditionalStep` stamps it with this step's own `parent_workflow_id`, `use_state_singleton`, and `state` right before invoking it, so `this.getState()`/`this.setState()` inside it read and write the same state as every other step in the workflow.
 
@@ -38,6 +42,8 @@ Creates a new ConditionalStep instance.
 |----------|------|-------------|
 | `true_callable` | `Function` | The resolved internal callable for the true branch. |
 | `false_callable` | `Function` | The resolved internal callable for the false branch. |
+| `true_callable_registry_key` | `string\|null` | Registry key `true_callable` is serialized under when it's a function, instead of the function's name. |
+| `false_callable_registry_key` | `string\|null` | Registry key `false_callable` is serialized under when it's a function, instead of the function's name. |
 
 All properties from [LogicStep](logic_step.md) and [Step](step.md) are inherited.
 
@@ -53,7 +59,7 @@ Evaluates the condition and executes the appropriate branch. Internally delegate
 
 ### `async conditional()` → `Promise<{message: string, result: any}>`
 
-Core conditional logic. Calls `checkCondition()`, then executes either `true_callable` or `false_callable`.
+Core conditional logic. Calls `checkCondition()`, then executes either `true_callable` or `false_callable`. If the branch that ran is a `Step`/`Workflow` that ended up failed, [`Step.throwIfFailed()`](step.md#static-throwiffailedobj) rethrows its error, so this `ConditionalStep` fails too (and retries, if `max_retries` is set).
 
 **Returns:** `{ message: 'True branch executed' | 'False branch executed', result: <branch return value> }`
 

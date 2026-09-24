@@ -220,6 +220,8 @@ Save a `Workflow` or `Step` — before it runs, or mid-flight (e.g. paused) — 
 - Automatic dispatch to the correct `Step` subclass on hydration (`ConditionalStep`, `LoopStep`, `SwitchStep`, etc. all come back as themselves, not a plain `Step`)
 - [`CallableRegistry`](classes/callable_registry.md) to resolve function callables by name, since raw functions can't be serialized
 - `Step`/`Workflow` callables need no registry — they serialize and rehydrate recursively as their own object graph
+- Function-valued conditional subjects/values, `SwitchStep` subjects, `LoopStep` iterables, and `result_per_step_function` also resolve through the registry by name
+- Instance state (`setState()` data) is deliberately not serialized
 
 ## Common Patterns
 

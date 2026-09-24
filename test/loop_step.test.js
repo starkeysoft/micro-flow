@@ -636,6 +636,29 @@ describe('LoopStep', () => {
   });
 
   describe('hydrate / hydrateSerialized', () => {
+    it('should round-trip a function-valued iterable through the registry, even after running', async () => {
+      const registry = new CallableRegistry();
+      registry.register('getItems', function getItems() { return ['a', 'b']; });
+      registry.register('perItem', async function perItem() { return this.current_item; });
+
+      const original = new LoopStep({
+        loop_type: loop_types.FOR_EACH,
+        iterable: registry.get('getItems'),
+        callable: registry.get('perItem'),
+      });
+      await original.execute();
+
+      // Running the loop must not replace the function with its result
+      expect(original.iterable).toBe(registry.get('getItems'));
+
+      const serialized = JSON.parse(original.serialize());
+      expect(serialized.iterable).toBeNull();
+      expect(serialized.iterable_callable).toEqual({ type: 'function', value: 'getItems' });
+
+      const hydrated = LoopStep.hydrate(serialized, registry);
+      expect(hydrated.iterable).toBe(registry.get('getItems'));
+    });
+
     it('should round-trip a FOR loop, preserving iterations and results', async () => {
       const registry = new CallableRegistry();
       registry.register('perIteration', async function perIteration() { return 'iter'; });

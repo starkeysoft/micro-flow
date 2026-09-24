@@ -215,6 +215,31 @@ describe('Event', () => {
   });
 
   describe('emit()', () => {
+    it('should keep objects that are referenced more than once (not cycles)', () => {
+      const listener = vi.fn();
+      event.on('shared', listener);
+      const timing = { execution_time_ms: 5 };
+
+      event.emit('shared', { sessions: [{ timing }], steps: [{ timing }] });
+
+      expect(listener).toHaveBeenCalledWith({
+        sessions: [{ timing: { execution_time_ms: 5 } }],
+        steps: [{ timing: { execution_time_ms: 5 } }],
+      });
+    });
+
+    it('should drop true circular references', () => {
+      const listener = vi.fn();
+      event.on('cycle', listener);
+      const parent = { name: 'parent', child: { name: 'child' } };
+      parent.child.parent = parent;
+      parent.self = parent;
+
+      event.emit('cycle', parent);
+
+      expect(listener).toHaveBeenCalledWith({ name: 'parent', child: { name: 'child' } });
+    });
+
     it('should emit an event with data', () => {
       const handler = vi.fn();
       event.on('test', handler);

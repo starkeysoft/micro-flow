@@ -232,7 +232,7 @@ The `check-company-affiliation` step uses the `not_nullish` operator to test whe
 
 ### Structured Error Collection
 
-With `exit_on_error: false`, all steps run regardless of failures. After execution, you can inspect `result.results` for steps that returned errors or filter by `step.status === 'failed'`.
+With `exit_on_error: false`, all steps run regardless of failures, and the workflow still ends `'complete'`. Each failed step emits `WORKFLOW_ERRORED` (payload `{ workflow, step, error }`) and gets a `{ message: 'Step <name> - <id> failed', data: { error } }` entry in `results`. After execution, you can inspect `result.results` for those entries or filter steps by `step.status === 'failed'`.
 
 ## Related Examples
 

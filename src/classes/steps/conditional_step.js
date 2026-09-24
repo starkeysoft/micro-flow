@@ -21,8 +21,10 @@ export default class ConditionalStep extends LogicStep {
    * @param {*|Function} [options.conditional.value] - Value to compare against. Can be a function that returns the value.
    * @param {Function|Step|Workflow} [options.true_callable=async () => {}] - Callable to execute if condition is true.
    * @param {Function|Step|Workflow} [options.false_callable=async () => {}] - Callable to execute if condition is false.
-   * @param {string|null} [options.true_callable_registry_key=null] - Optional key to reference true_callable to be rehydrated after serialization.
-   * @param {string|null} [options.false_callable_registry_key=null] - Optional key to reference false_callable to be rehydrated after serialization.
+   * @param {string|null} [options.true_callable_registry_key=null] - Registry key to serialize `true_callable` under when it's a function (defaults to the function's name); it's resolved from the `CallableRegistry` passed to `hydrate()`.
+   * @param {string|null} [options.false_callable_registry_key=null] - Registry key to serialize `false_callable` under when it's a function (defaults to the function's name); it's resolved from the `CallableRegistry` passed to `hydrate()`.
+   * @param {number} [options.max_retries=0] - Maximum number of retries on failure.
+   * @param {number|null} [options.max_timeout_ms=30000] - Maximum execution time per attempt in milliseconds. `null` disables the timeout.
    */
   constructor({
     name,
@@ -35,10 +37,14 @@ export default class ConditionalStep extends LogicStep {
     false_callable = async () => {},
     true_callable_registry_key = null,
     false_callable_registry_key = null,
+    max_retries,
+    max_timeout_ms,
   }) {
     super({
       name,
-      conditional
+      conditional,
+      max_retries,
+      max_timeout_ms,
     });
 
     // Optional keys to reference true_callable/false_callable to be rehydrated after serialization.
@@ -71,9 +77,11 @@ export default class ConditionalStep extends LogicStep {
    * is a `Step`/`Workflow` (not a plain function), it is stamped with this step's own
    * `parent_workflow_id`/`use_state_singleton`/`state` first - true/false_callable are never
    * added to the parent workflow via `addStep()`, so this is the only way they end up sharing
-   * its state instead of their own, independent one.
+   * its state instead of their own, independent one. If that `Step`/`Workflow` branch ends up
+   * failed, its error is rethrown (see `Step.throwIfFailed()`), so this step fails too.
    * @async
    * @returns {Promise<*>} The result of the executed branch.
+   * @throws {Error} Throws if the executed `Step`/`Workflow` branch failed.
    */
   async conditional() {
     const true_callable = this.true_callable;
@@ -94,6 +102,7 @@ export default class ConditionalStep extends LogicStep {
         true_callable.use_state_singleton = this.use_state_singleton;
         true_callable.state = this.state;
         result = await true_callable.execute();
+        Step.throwIfFailed(true_callable);
       }
     } else {
       this.log(
@@ -108,6 +117,7 @@ export default class ConditionalStep extends LogicStep {
         false_callable.use_state_singleton = this.use_state_singleton;
         false_callable.state = this.state;
         result = await false_callable.execute();
+        Step.throwIfFailed(false_callable);
       }
     }
 

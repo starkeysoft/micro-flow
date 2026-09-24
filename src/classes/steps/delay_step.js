@@ -20,16 +20,24 @@ export default class DelayStep extends Step {
    * @param {Date|string} [options.absolute_timestamp=new Date()] - Absolute timestamp to delay until.
    * @param {number} [options.relative_delay_ms=0] - Relative delay in milliseconds.
    * @param {string} [options.delay_type=delay_types.RELATIVE] - Type of delay ('absolute' or 'relative').
+   * @param {number} [options.max_retries=0] - Maximum number of retries on failure.
+   * @param {number|null} [options.max_timeout_ms=null] - Maximum execution time per attempt in milliseconds.
+   * Defaults to `null` (no timeout), since waiting is this step's whole job - a timeout would otherwise
+   * cut any delay longer than it short.
    */
   constructor({
     name,
     absolute_timestamp = new Date(),
     relative_delay_ms = 0,
-    delay_type = delay_types.RELATIVE
+    delay_type = delay_types.RELATIVE,
+    max_retries,
+    max_timeout_ms = null,
   }) {
     super({
       name,
       step_type: step_types.DELAY,
+      max_retries,
+      max_timeout_ms,
     });
 
     this.delay_type = delay_type;

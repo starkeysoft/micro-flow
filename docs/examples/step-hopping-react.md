@@ -127,11 +127,10 @@ export default function WorkflowBuilder() {
       log(`Workflow complete (${data.timing?.execution_time_ms}ms)`);
     };
 
-    const onFailed = (data) => {
-      setStatus('failed');
-      runningRef.current = false;
-      setCurrentStep(null);
-      log(`Workflow failed`);
+    // exit_on_error is false, so a failing step doesn't fail the workflow - it emits
+    // WORKFLOW_ERRORED with { workflow, step, error } and keeps running to completion.
+    const onErrored = (data) => {
+      log(`Step ${data.step?.name} failed, continuing`);
     };
 
     const onPaused = (data) => {
@@ -175,7 +174,7 @@ export default function WorkflowBuilder() {
 
     wfEvents.on(workflow_event_names.WORKFLOW_RUNNING,      onRunning);
     wfEvents.on(workflow_event_names.WORKFLOW_COMPLETE,     onComplete);
-    wfEvents.on(workflow_event_names.WORKFLOW_FAILED,       onFailed);
+    wfEvents.on(workflow_event_names.WORKFLOW_ERRORED,      onErrored);
     wfEvents.on(workflow_event_names.WORKFLOW_PAUSED,       onPaused);
     wfEvents.on(workflow_event_names.WORKFLOW_RESUMED,      onResumed);
     wfEvents.on(workflow_event_names.WORKFLOW_STEP_ADDED,   onStepAdded);
@@ -188,7 +187,7 @@ export default function WorkflowBuilder() {
     return () => {
       wfEvents.off(workflow_event_names.WORKFLOW_RUNNING,      onRunning);
       wfEvents.off(workflow_event_names.WORKFLOW_COMPLETE,     onComplete);
-      wfEvents.off(workflow_event_names.WORKFLOW_FAILED,       onFailed);
+      wfEvents.off(workflow_event_names.WORKFLOW_ERRORED,      onErrored);
       wfEvents.off(workflow_event_names.WORKFLOW_PAUSED,       onPaused);
       wfEvents.off(workflow_event_names.WORKFLOW_RESUMED,      onResumed);
       wfEvents.off(workflow_event_names.WORKFLOW_STEP_ADDED,   onStepAdded);

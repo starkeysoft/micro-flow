@@ -171,9 +171,13 @@ Nothing about a JavaScript function — its closure, its source — survives `JS
 
 `flagForReview` calls `this.setParentWorkflowValue(this.parent_workflow_id, 'should_pause', true)` — the same mechanism `FlowControlStep` uses internally. Any callable, in any step type, can request a pause this way.
 
-### `State` doesn't persist — step results do
+### Function-valued conditional subjects need a registry entry too
 
-`order.lineTotals` is only read once, by `fraud-check`, before the workflow ever pauses — so it doesn't matter that `State` is an in-memory singleton that isn't part of `serialize()`'s output. In a real separate process, `State` would come back empty. Any data a *later* step needs after a reload has to come from an earlier step's own return value (which does round-trip, inside `result`/`results`), not from `State`.
+`fraud-check`'s `subject` is a function, so it's serialized as `null` in `conditional` with a registry reference in `conditional_callables`, keyed by the function's name. An inline arrow assigned to `subject` gets the inferred name `'subject'`, and nothing is registered under that name here, so `hydrateSerialized()` logs a `console.warn` and leaves the reloaded step's subject `null`. It doesn't throw, the way a missing primary `callable` would. That's harmless in this example because `fraud-check` already ran before the pause and doesn't run again. If a reloaded workflow still needs to evaluate a function subject, register the function in the `CallableRegistry` under its name (e.g. `registry.register('subject', ...)`, or use a named function and register it under that name).
+
+### State doesn't persist — step results do
+
+`order.lineTotals` is only read once, by `fraud-check`, before the workflow ever pauses — so it doesn't matter that state isn't part of `serialize()`'s output. Neither the workflow's own instance state (what `this.setState()`/`this.getState()` read and write) nor the deprecated `State` singleton is serialized; that's deliberate. In a real separate process, both would come back empty. Any data a *later* step needs after a reload has to come from an earlier step's own return value (which does round-trip, inside `result`/`results`), not from state.
 
 ## Related Examples
 
