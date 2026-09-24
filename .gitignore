@@ -22,3 +22,4 @@ dist
 
 /*.md
 !README.md
+!CLAUDE.md
