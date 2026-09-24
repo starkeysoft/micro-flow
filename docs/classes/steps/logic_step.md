@@ -23,7 +23,7 @@ Creates a new LogicStep instance.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `options.name` | `string` | `'step-<uuid>'` | Human-readable identifier. |
-| `options.callable` | `Function\|Step\|Workflow` | `async () => {}` | Work to execute when `execute()` is called. |
+| `options.callable` | `Function\|Step\|Workflow` | `Step.noop` | Work to execute when `execute()` is called. |
 | `options.callable_registry_key` | `string\|null` | `null` | Registry key to serialize `callable` under when it's a function, instead of the function's name. Resolved from the `CallableRegistry` passed to `hydrate()`, and restored onto the hydrated step. See [Persistence](step.md#persistence). |
 | `options.conditional` | `Object` | `{ subject: null, operator: null, value: null }` | Conditional configuration. |
 | `options.conditional.subject` | `any\|Function` | `null` | Value (or function returning value) to evaluate. Evaluated at check time if a function. |

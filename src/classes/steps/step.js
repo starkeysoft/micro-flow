@@ -22,10 +22,21 @@ export default class Step extends Base {
   }
 
   /**
+   * Shared no-op used as the default for every step's optional callables (`callable`,
+   * `true_callable`/`false_callable`, `default_callable`). Keeping it a single, identifiable
+   * function lets `serializeCallableField` store a default callable as `null` (so hydration falls
+   * back to the constructor default) rather than as a registry reference to an inline function's
+   * inferred name (e.g. "true_callable") that was never registered.
+   * @async
+   * @returns {Promise<void>}
+   */
+  static noop = async () => {};
+
+  /**
    * Creates a new Step instance.
    * @param {Object} options - Configuration options.
    * @param {string} [options.name] - Name of the step.
-   * @param {Function|Step|Workflow} [options.callable=async () => {}] - Function, Step, or Workflow to execute.
+   * @param {Function|Step|Workflow} [options.callable=Step.noop] - Function, Step, or Workflow to execute.
    * @param {string|null} [options.callable_registry_key=null] - Registry key to serialize `callable` under when it's a function (defaults to the function's name); it's resolved from the `CallableRegistry` passed to `hydrate()`.
    * @param {number} [options.max_retries=0] - Maximum number of retries on failure.
    * @param {number|null} [options.max_timeout_ms=30000] - Maximum execution time per attempt in milliseconds
@@ -35,7 +46,7 @@ export default class Step extends Base {
    */
   constructor({
     name,
-    callable = async () => {},
+    callable = Step.noop,
     callable_registry_key = null,
     max_retries = 0,
     max_timeout_ms = 30000,
@@ -258,10 +269,11 @@ export default class Step extends Base {
   /**
    * Serializes a callable-like value (function, Step, or Workflow) into a plain, JSON-safe descriptor.
    * @param {Function|Step|Workflow|null} callable - The callable to serialize.
-   * @returns {Object|null} A `{ type, value }` descriptor, or null if no callable was given.
+   * @returns {Object|null} A `{ type, value }` descriptor, or null if no callable was given or it's
+   * the default `Step.noop` (which the constructor restores on hydration).
    */
   static serializeCallableField(callable) {
-    if (callable === null || callable === undefined) {
+    if (callable === null || callable === undefined || callable === Step.noop) {
       return null;
     }
 

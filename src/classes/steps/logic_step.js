@@ -17,14 +17,14 @@ export default class LogicStep extends Step {
    * @param {*|Function} [options.conditional.subject] - Subject to evaluate. Can be a function that returns the value.
    * @param {conditional_step_comparators|string} [options.conditional.operator] - Comparison operator.
    * @param {*|Function, optional} [options.conditional.value] - Value to compare against. Can be a function that returns the value.
-   * @param {Function} [options.callable=async () => {}] - Function to execute.
+   * @param {Function} [options.callable=Step.noop] - Function to execute.
    * @param {string|null} [options.callable_registry_key=null] - Registry key to serialize `callable` under when it's a function (defaults to the function's name); it's resolved from the `CallableRegistry` passed to `hydrate()`.
    * @param {number} [options.max_retries=0] - Maximum number of retries on failure.
    * @param {number|null} [options.max_timeout_ms=30000] - Maximum execution time per attempt in milliseconds. `null` disables the timeout.
    */
   constructor({
     name,
-    callable = async () => {},
+    callable = Step.noop,
     callable_registry_key = null,
     conditional = {
       operator: null,

@@ -26,7 +26,7 @@ Creates a new LoopStep instance.
 | `options.name` | `string` | `'step-<uuid>'` | Human-readable identifier. |
 | `options.loop_type` | `string` | `loop_types.FOR_EACH` | One of `'for'`, `'for_each'`, `'while'`, `'generator'`. See [`loop_types`](../../../enums/loop_types.md). |
 | `options.iterable` | `Array\|Iterable\|Function` | — | Collection to iterate. Required for `for_each` and `generator` loops. Can be a function that returns the iterable (evaluated at execution time, on every run; the function itself stays in `iterable`). |
-| `options.callable` | `Function\|Step\|Workflow` | `async () => {}` | Body executed each iteration. Access `this.current_item` for the current element. A `Step`/`Workflow` inherits this loop step's `parent_workflow_id` and state (see below) before the loop runs. |
+| `options.callable` | `Function\|Step\|Workflow` | `Step.noop` | Body executed each iteration. Access `this.current_item` for the current element. A `Step`/`Workflow` inherits this loop step's `parent_workflow_id` and state (see below) before the loop runs. |
 | `options.loop_callable_registry_key` | `string\|null` | `null` | Registry key to serialize the per-iteration `callable` under when it's a function, instead of the function's name. Resolved from the `CallableRegistry` passed to `hydrate()`, and restored onto the hydrated step. See [Persistence](step.md#persistence). |
 | `options.conditional` | `Object` | — | `{ subject, operator, value }` — used by `while` loops to decide whether to continue. |
 | `options.iterations` | `number` | `0` | Number of iterations for `for` loops. Clamped to `max_iterations`. |

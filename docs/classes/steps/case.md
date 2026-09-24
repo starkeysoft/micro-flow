@@ -27,7 +27,7 @@ Creates a new Case instance.
 | `options.conditional.subject` | `any\|Function` | `null` | Subject to evaluate. Typically provided by the parent `SwitchStep`. If set here, it is used unless `force_subject_override` is `true`. |
 | `options.conditional.operator` | `string` | `null` | Comparison operator (see [`conditional_step_comparators`](../../../enums/conditional_step_comparators.md)). |
 | `options.conditional.value` | `any\|Function` | `null` | Value to compare against. |
-| `options.callable` | `Function\|Step\|Workflow` | `async () => {}` | Executed when the case matches. |
+| `options.callable` | `Function\|Step\|Workflow` | `Step.noop` | Executed when the case matches. |
 | `options.callable_registry_key` | `string\|null` | `null` | Registry key to serialize `callable` under when it's a function, instead of the function's name. Resolved from the `CallableRegistry` passed to `hydrate()`, and restored onto the hydrated step. See [Persistence](step.md#persistence). |
 | `options.force_subject_override` | `boolean` | `false` | When `true`, the subject injected by `SwitchStep` will override an existing `conditional.subject`. |
 | `options.max_retries` | `number` | `0` | Maximum number of additional attempts after a failure. See [Step](step.md#constructor). |

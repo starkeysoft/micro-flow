@@ -25,7 +25,7 @@ Creates a new SwitchStep instance.
 | `options.name` | `string` | `'step-<uuid>'` | Human-readable identifier. |
 | `options.subject` | `any\|Function` | `null` | Value (or function returning value) passed to each case as `switch_subject`. Evaluated when `switch()` runs. |
 | `options.cases` | `Array<Case\|LogicStep>` | `[]` | Ordered list of cases. `LogicStep` instances **must** have `conditional.subject` set explicitly. Each case inherits this step's `parent_workflow_id` and state (see below) before it's evaluated. |
-| `options.default_callable` | `Function\|Step\|Workflow` | `async () => {}` | Executed if no case matches. A `Step`/`Workflow` inherits this step's `parent_workflow_id` and state (see below) before it runs. |
+| `options.default_callable` | `Function\|Step\|Workflow` | `Step.noop` | Executed if no case matches. A `Step`/`Workflow` inherits this step's `parent_workflow_id` and state (see below) before it runs. |
 | `options.default_callable_registry_key` | `string\|null` | `null` | Registry key to serialize `default_callable` under when it's a function, instead of the function's name. Resolved from the `CallableRegistry` passed to `hydrate()`, and restored onto the hydrated step. See [Persistence](step.md#persistence). |
 | `options.max_retries` | `number` | `0` | Maximum number of additional attempts after a failure. See [Step](step.md#constructor). |
 | `options.max_timeout_ms` | `number\|null` | `30000` | Milliseconds before an attempt times out and is treated as a failure. Each retry gets the full budget. `null` (or `Infinity`) disables the timeout. |

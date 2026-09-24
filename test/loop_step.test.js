@@ -636,6 +636,18 @@ describe('LoopStep', () => {
   });
 
   describe('hydrate / hydrateSerialized', () => {
+    it('should round-trip the default per-iteration callable without a registry', async () => {
+      const original = new LoopStep({ loop_type: loop_types.FOR, iterations: 2 });
+
+      expect(JSON.parse(original.serialize()).callable).toBeNull();
+
+      const hydrated = Step.hydrateSerialized(original.serialize());
+
+      expect(hydrated).toBeInstanceOf(LoopStep);
+      await hydrated.execute();
+      expect(hydrated.status).toBe(Workflow.statuses.step.COMPLETE);
+    });
+
     it('should round-trip a function-valued iterable through the registry, even after running', async () => {
       const registry = new CallableRegistry();
       registry.register('getItems', function getItems() { return ['a', 'b']; });
