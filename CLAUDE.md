@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Micro-Flow (`@ronaldroe/micro-flow`) is a lightweight, isomorphic logic orchestration library that runs unmodified in Node.js (>=18) and modern browsers. It turns multi-step async processes into structured, observable, pauseable `Workflow` objects instead of ad-hoc chains of `await` calls.
+Micro-Flow (`@ronaldroe/micro-flow`) is a lightweight, isomorphic logic orchestration library that runs unmodified in Node.js (>=24) and modern browsers. It turns multi-step async processes into structured, observable, pauseable `Workflow` objects instead of ad-hoc chains of `await` calls.
 
 > **Terminology note:** When describing the project conceptually, use "logic flow" rather than "workflow" — "workflow" refers specifically to the `Workflow` class, which is only one part of the library.
 
@@ -84,7 +84,7 @@ Public surface: `index.js` → `src/index.js` → `src/classes/index.js` + `src/
 
 ### Build
 
-`build.js` uses esbuild to individually minify every file under `src/classes/`, `src/helpers/`, and `src/enums/`, plus the root `index.js` and `src/index.js`, into `dist/` — preserving directory structure and **without bundling** (each file stays a separate ESM module). Target is `node18`, format `esm`, with sourcemaps and `keepNames: true`.
+`build.js` uses esbuild to individually minify every file under `src/classes/`, `src/helpers/`, and `src/enums/`, plus the root `index.js` and `src/index.js`, into `dist/` — preserving directory structure and **without bundling** (each file stays a separate ESM module). Target is `node24`, format `esm`, with sourcemaps and `keepNames: true`.
 
 ## Conventions
 

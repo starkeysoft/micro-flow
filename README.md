@@ -1,6 +1,6 @@
 # Micro-Flow
 
-See Micro-Flow in action in the [demo repo](https://github.com/starkeysoft/micro-flow-demo).
+[See Micro-Flow in action](https://micro-flow.softshell-sailfin.ts.net).
 
 [Click Here](https://survey.alchemer.com/s3/8882776/Micro-Flow-User-Survey) to complete the Micro-Flow user survey. It will take less than 5 minutes of your time.
 

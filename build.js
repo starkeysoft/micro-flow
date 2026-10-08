@@ -45,7 +45,7 @@ await esbuild.build({
   bundle: false,
   minify: true,
   platform: 'node',
-  target: 'node18',
+  target: 'node24',
   format: 'esm',
   outdir: 'dist',
   outbase: '.',

@@ -310,7 +310,7 @@ Micro-flow works in all modern browsers that support:
 
 ## Node.js Compatibility
 
-Requires **Node.js 18+** for full ESM and native API support.
+Requires **Node.js 24+** for full ESM and native API support.
 
 ## License
 
