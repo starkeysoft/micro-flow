@@ -1,5 +1,7 @@
 # Micro-Flow
 
+Build logic flows visually with [Micro-Flow Editor](https://www.npmjs.com/package/@ronaldroe/micro-flow-editor) (`@ronaldroe/micro-flow-editor`), a drag-and-drop builder with a server for running flows and a runtime for running exported flows in your own app.
+
 [See Micro-Flow in action](https://micro-flow.softshell-sailfin.ts.net).
 
 [Click Here](https://survey.alchemer.com/s3/8882776/Micro-Flow-User-Survey) to complete the Micro-Flow user survey. It will take less than 5 minutes of your time.
